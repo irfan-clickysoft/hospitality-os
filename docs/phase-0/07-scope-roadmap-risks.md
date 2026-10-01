@@ -149,7 +149,7 @@ Parallel tracks: UX research/prototype validation with real front-desk staff (fr
 ## AV. Questions Requiring Stakeholder Decision
 
 ### Business & market
-1. **Is Rabia Sanctuary the first pilot property** (repository name suggests so)? What size/type, and does it use OTAs, corporate accounts, cash-heavy operations?
+1. **Sunset BnB is the pilot property** (confirmed by stakeholder). Please share: room count and types, number of properties/locations, whether it uses OTAs, corporate accounts, cash-heavy operations, its current tools (paper/Excel/other PMS), staff count, and who the front-desk/night-audit/housekeeping users are. This property will shape MVP priorities and the usability tests in M3.
 2. Target for first 12 months: number of properties/rooms, segments (guesthouses vs mid-size hotels), cities?
 3. Pricing philosophy: fixed per-room bands vs per-property vs commission; PKR price ceilings; annual prepay? Free tier/trial?
 4. Sales model: direct, resellers, hotel associations? White-label demand?

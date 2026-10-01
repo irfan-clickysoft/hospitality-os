@@ -73,7 +73,7 @@ Phase 0 is complete and **I have stopped here**. Before any Phase 1 implementati
 
 1. **Approve / amend** the ADRs in `08-decision-register.md` — especially D-06 (reservation model), D-12 (mobile), D-14 (channel sequencing), D-16 (AWS region), D-11 (identity build vs buy).
 2. **Approve / amend the MVP boundary** in `07 §AN–AO`, including whether any excluded item (e.g., a specific OTA, online gateway, official WhatsApp API) is a hard launch requirement.
-3. **Answer the 35 questions** in `07 §AV` — the highest-leverage ones: pilot property (Q1), OTA-in-MVP (Q9), payment gateway (Q10), tax/police-reporting confirmation (Q19–20), hosting region (Q21), team/timeline (Q6).
+3. **Answer the 35 questions** in `07 §AV` — the highest-leverage ones: Sunset BnB pilot profile (Q1), OTA-in-MVP (Q9), payment gateway (Q10), tax/police-reporting confirmation (Q19–20), hosting region (Q21), team/timeline (Q6).
 4. **Confirm engagement of Pakistani tax/legal advisors** to start immediately (parallel track).
 
 On approval, Phase 1 begins with **M0 Foundations** (monorepo, CI/CD, Terraform baseline, tenancy + RLS + isolation-test harness, identity/RBAC/audit/outbox) — see `07 §AR`.
