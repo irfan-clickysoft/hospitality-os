@@ -5,6 +5,7 @@ import { decide } from '@hos/auth';
 import type { DB } from '@hos/db';
 import { Money, addDays, nightsOf } from '@hos/domain-types';
 import { calendarNight, priceStay, type PriceBook, type RatePlanDef, type Restriction, type RoomTypeLimits } from '@hos/rates';
+import { CLOCK, type ClockLike } from '../common/clock.js';
 import { AuditService } from '../audit/audit.service.js';
 import { AuthorizationService } from '../authz/authorization.service.js';
 import { TenantDb } from '../db/tenant-db.js';
@@ -29,6 +30,7 @@ export class RatesService {
     @Inject(InventoryService) private readonly inv: InventoryService,
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
     @Inject(QuoteSigner) private readonly signer: QuoteSigner,
+    @Inject(CLOCK) private readonly clock: ClockLike,
   ) {}
 
   private async prop(trx: Trx, id: string) {
@@ -265,6 +267,22 @@ export class RatesService {
     return m;
   }
 
+  /** Prices one stay on one plan with the CURRENT rates. Used by reservations to re-verify a quote at booking/modification time. */
+  async priceOne(trx: Trx, propertyId: string, planId: string, r: { roomTypeId: string; arrival: string; departure: string; adults: number; children: number; extraBeds: number;
+    channel: string; residency: 'RESIDENT' | 'NON_RESIDENT'; companyId: string | null }) {
+    const p = await this.prop(trx, propertyId);
+    const row = await this.planRow(trx, propertyId, planId);
+    const baseId = row.kind === 'DERIVED' ? row.parent_rate_plan_id! : row.id;
+    const rt = await trx.selectFrom('room_type').selectAll().where('id', '=', r.roomTypeId).where('property_id', '=', propertyId).executeTakeFirst();
+    if (!rt) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room type not found' });
+    const [books, restr] = await Promise.all([this.loadBooks(trx, propertyId, [baseId]), this.loadRestrictions(trx, [planId], r.arrival, r.departure)]);
+    const quote = priceStay({ plan: this.toDef(row, p.currency), book: books.get(baseId)!, restrictions: restr.get(planId) ?? [],
+      limits: { maxAdults: rt.max_adults, maxChildren: rt.max_children, maxOccupancy: rt.max_occupancy, baseOccupancy: rt.base_occupancy },
+      req: { roomTypeId: r.roomTypeId, arrival: r.arrival, departure: r.departure, adults: r.adults, children: r.children, extraBeds: r.extraBeds, channel: r.channel as never, residency: r.residency,
+        companyId: r.companyId, today: p.business_date, weekendDays: p.weekend_days } });
+    return { quote, currency: p.currency, businessDate: p.business_date };
+  }
+
   // ───────── calendar ─────────
   async calendar(propertyId: string, planId: string, from: string, to: string) {
     return this.tdb.tx(async (trx) => {
@@ -338,7 +356,7 @@ export class RatesService {
             depositDue: fmt(q.depositDueMinor, cur), policy: q.policy,
             quoteToken: bookable ? this.signer.sign({ propertyId, planId: pr.id, roomTypeId: t.id, arrival: i.arrival, departure: i.departure, adults: i.adults, children: i.children, extraBeds: i.extraBeds,
               channel: i.channel, residency: i.residency, companyId: i.companyId ?? null, currency: cur, subtotalMinor: discounted.toString(), discountPct: i.discountPct, discountApproved: discount.effect === 'ALLOW',
-              depositDueMinor: q.depositDueMinor.toString(), nightsHash }) : null,
+              depositDueMinor: q.depositDueMinor.toString(), nightsHash }, 900, this.clock.now()) : null,
           });
         }
       }

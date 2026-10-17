@@ -126,3 +126,8 @@ function limitsNoMoreGenerous(want: Limits, own: Limits): boolean {
   }
   return true;
 }
+
+/** True if the user holds `permission` at ANY scope. For tenant-wide data (guest profiles) that property-scoped staff must reach. */
+export function holdsAnywhere(grants: readonly Grant[], permission: string, at: Date = new Date()): boolean {
+  return grants.some((g) => g.permission === permission && active(g, at));
+}

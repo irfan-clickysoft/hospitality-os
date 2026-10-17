@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { canAssignRole, decide, type AuthzRequest, type Decision, type Grant, type Limits, type ResourceScope, type RoleAssignmentRequest } from '@hos/auth';
+import { canAssignRole, decide, holdsAnywhere, type AuthzRequest, type Decision, type Grant, type Limits, type ResourceScope, type RoleAssignmentRequest } from '@hos/auth';
 import { TenantDb } from '../db/tenant-db.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,6 +30,10 @@ export class AuthorizationService {
       trx.selectFrom('property').select(['id', 'legal_entity_id']).where('id', '=', scope.propertyId!).executeTakeFirst());
     if (!row) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Resource not found' });
     return { ...scope, propertyId: row.id, legalEntityId: row.legal_entity_id };
+  }
+
+  async holdsAnywhere(userId: string, permission: string): Promise<boolean> {
+    return holdsAnywhere(await this.loadGrants(userId), permission);
   }
 
   async check(userId: string, req: AuthzRequest): Promise<Decision> {

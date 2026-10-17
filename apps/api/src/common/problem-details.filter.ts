@@ -13,17 +13,24 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const req = host.switchToHttp().getRequest();
     const correlationId = (reply.getHeader?.('x-correlation-id') as string | undefined) ?? req?.raw?.requestId;
     let status = 500, code = 'INTERNAL', detail = 'Unexpected error';
+    let extra: Record<string, unknown> = {};
     if (err instanceof HttpException) {
       status = err.getStatus();
       const body = err.getResponse() as string | { code?: string; message?: string | string[] };
+      if (typeof body === 'object' && body) {
+        const { code: _c, message: _m, statusCode: _s, error: _e, ...rest } = body as Record<string, unknown>;
+        extra = rest;
+      }
       code = (typeof body === 'object' && body.code) || CODES[status] || 'ERROR';
       const msg = typeof body === 'string' ? body : body.message;
       detail = Array.isArray(msg) ? msg.join('; ') : msg ?? err.message;
+    } else if (err instanceof RangeError) {
+      status = 400; code = 'VALIDATION_FAILED'; detail = err.message;
     } else {
       this.log.error(`${req?.method} ${req?.url}: ${(err as Error)?.stack ?? err}`);
     }
     reply.status(status).header('content-type', 'application/problem+json').send({
-      type: `https://docs.hospitality-os/errors/${code.toLowerCase()}`, title: code, status, code, detail, correlationId,
+      ...extra, type: `https://docs.hospitality-os/errors/${code.toLowerCase()}`, title: code, status, code, detail, correlationId,
     });
   }
 }

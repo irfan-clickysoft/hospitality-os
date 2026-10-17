@@ -9,8 +9,12 @@ import { createDb, type DB } from '@hos/db';
 import { AppModule } from '../src/app.module.js';
 import { DB_ADMIN } from '../src/db/db.module.js';
 import { ProvisioningService } from '../src/provisioning/provisioning.service.js';
+import { CLOCK } from '../src/common/clock.js';
 import { PRINCIPAL_RESOLVER, type PrincipalResolver } from '../src/tenancy/principal.js';
 import { URLS } from './env.js';
+
+/** Test clock: follows real time until `set()` freezes it at an exact instant (cancellation windows, option expiry, deposit deadlines). */
+export const testClock = { fixed: null as number | null, now() { return this.fixed ?? Date.now(); }, set(ms: number) { this.fixed = ms; }, reset() { this.fixed = null; } };
 
 /** TEST-ONLY principal resolver: trusts headers. Production uses the identity module; this never ships. */
 class HeaderPrincipalResolver implements PrincipalResolver {
@@ -18,7 +22,7 @@ class HeaderPrincipalResolver implements PrincipalResolver {
     const t = req.headers['x-test-tenant'], u = req.headers['x-test-user'];
     if (typeof t !== 'string' || typeof u !== 'string') return null;
     // x-test-mfa: 1 simulates a session whose second factor was verified just now (for sensitive-permission tests).
-    return { tenantId: t, userId: u, sessionState: 'ACTIVE' as const, mfaVerifiedAt: req.headers['x-test-mfa'] === '1' ? new Date() : null };
+    return { tenantId: t, userId: u, sessionState: 'ACTIVE' as const, mfaVerifiedAt: req.headers['x-test-mfa'] === '1' ? new Date(testClock.now()) : null };
   }
 }
 
@@ -30,7 +34,7 @@ export class UnprotectedController { @Get() get() { return { leaked: true }; } }
 export async function createTestApp(opts: { realAuth?: boolean } = {}): Promise<NestFastifyApplication> {
   let builder = Test.createTestingModule({ imports: [AppModule, DiscoveryModule], controllers: [UnprotectedController] });
   if (!opts.realAuth) builder = builder.overrideProvider(PRINCIPAL_RESOLVER).useClass(HeaderPrincipalResolver);
-  const mod = await builder.compile();
+  const mod = await builder.overrideProvider(CLOCK).useValue(testClock).compile();
   const app = mod.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
   await app.init();
   await app.getHttpAdapter().getInstance().ready();

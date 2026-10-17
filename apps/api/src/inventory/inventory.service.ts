@@ -27,7 +27,7 @@ export interface NightAvailability {
   date: string; physical: number; outOfOrder: number; outOfService: number; blocked: number; reserved: number; held: number;
   overbookLimit: number; sellable: number; available: number;
 }
-export interface InvariantIssue { kind: 'PHYSICAL_MISMATCH' | 'BLOCK_MISMATCH' | 'GAP' | 'OVERSOLD'; roomTypeId: string; date?: string; detail: string }
+export interface InvariantIssue { kind: 'PHYSICAL_MISMATCH' | 'BLOCK_MISMATCH' | 'GAP' | 'OVERSOLD' | 'RESERVED_MISMATCH' | 'HELD_MISMATCH' | 'ORPHAN_ASSIGNMENT'; roomTypeId: string; date?: string; detail: string }
 
 const AVAIL_EXPR = sql`(physical - out_of_order - out_of_service - blocked - reserved - held + overbook_limit)`;
 type Trx = Transaction<DB>;
@@ -134,6 +134,19 @@ export class InventoryService {
   }
 
   /**
+   * Locks the inventory rows of several room types over [from, to) in a fixed order (date, then room type). Multi-step changes
+   * (modify a stay, change room type) call this first so concurrent changes can never deadlock on each other.
+   */
+  async lockNights(trx: Trx, propertyId: string, roomTypeIds: string[], from: string, to: string): Promise<void> {
+    const t = this.ids();
+    await sql`
+      SELECT 1 FROM inventory_day
+      WHERE tenant_id = ${t} AND property_id = ${propertyId} AND room_type_id IN (${sql.join([...new Set(roomTypeIds)])})
+        AND business_date >= ${from}::date AND business_date < ${to}::date
+      ORDER BY business_date, room_type_id FOR UPDATE`.execute(trx);
+  }
+
+  /**
    * Applies +1 / −1 to the out-of-order or out-of-service counters for a room-type over [from, to).
    * Adding a block that would leave rooms sold beyond capacity is refused unless `allowOversell` (needs inventory.overbook, checked by the caller).
    */
@@ -232,6 +245,29 @@ export class InventoryService {
       SELECT room_type_id, business_date::text AS d, ${AVAIL_EXPR} AS avail FROM inventory_day
       WHERE tenant_id = ${t} AND property_id = ${propertyId} AND ${AVAIL_EXPR} < 0 AND (reserved + held) > 0 ORDER BY business_date LIMIT 100`.execute(trx);
     for (const r of over.rows) issues.push({ kind: 'OVERSOLD', roomTypeId: r.room_type_id, date: r.d, detail: `available=${r.avail}` });
+
+    // reserved / held counters must equal what the reservation lines say (the source of truth), night by night
+    const resv = await sql<{ room_type_id: string; d: string; col: string; have: number; want: number }>`
+      SELECT * FROM (
+        SELECT i.room_type_id, i.business_date::text AS d, 'reserved' AS col, i.reserved AS have,
+          (SELECT count(*)::int FROM reservation_room rr WHERE rr.tenant_id = i.tenant_id AND rr.room_type_id = i.room_type_id AND rr.status IN ('CONFIRMED','CHECKED_IN')
+             AND i.business_date >= rr.arrival AND i.business_date < rr.departure) AS want
+        FROM inventory_day i WHERE i.tenant_id = ${t} AND i.property_id = ${propertyId}
+        UNION ALL
+        SELECT i.room_type_id, i.business_date::text, 'held', i.held,
+          (SELECT count(*)::int FROM reservation_room rr WHERE rr.tenant_id = i.tenant_id AND rr.room_type_id = i.room_type_id AND rr.status = 'OPTION'
+             AND i.business_date >= rr.arrival AND i.business_date < rr.departure)
+        FROM inventory_day i WHERE i.tenant_id = ${t} AND i.property_id = ${propertyId}
+      ) x WHERE have <> want ORDER BY d LIMIT 100`.execute(trx);
+    for (const r of resv.rows) issues.push({ kind: r.col === 'reserved' ? 'RESERVED_MISMATCH' : 'HELD_MISMATCH', roomTypeId: r.room_type_id, date: r.d, detail: `${r.col} counter=${r.have}, reservation lines=${r.want}` });
+
+    // every live assignment must belong to a live reservation line of the same room type, and cover its exact dates
+    const orphans = await sql<{ id: string; room_type_id: string }>`
+      SELECT a.id, r.room_type_id FROM room_assignment a JOIN room r ON r.tenant_id = a.tenant_id AND r.id = a.room_id
+      WHERE a.tenant_id = ${t} AND a.property_id = ${propertyId} AND a.status IN ('ASSIGNED','IN_HOUSE')
+        AND NOT EXISTS (SELECT 1 FROM reservation_room rr WHERE rr.tenant_id = a.tenant_id AND rr.id = a.assignment_ref AND rr.status IN ('CONFIRMED','CHECKED_IN','OPTION')
+                        AND rr.room_type_id = r.room_type_id AND daterange(rr.arrival, rr.departure) = a.stay_range) LIMIT 100`.execute(trx);
+    for (const o of orphans.rows) issues.push({ kind: 'ORPHAN_ASSIGNMENT', roomTypeId: o.room_type_id, detail: `assignment ${o.id} has no matching live reservation line` });
     return issues;
   }
 

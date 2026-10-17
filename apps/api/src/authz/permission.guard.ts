@@ -49,6 +49,10 @@ export class PermissionGuard implements CanActivate {
       if (!fresh) throw new ForbiddenException({ code: 'MFA_REQUIRED', message: 'Verify your second factor (step-up) to perform this action' });
     }
 
+    if (meta.anyScope) {
+      if (await this.authz.holdsAnywhere(tenant.actorId, meta.permission)) return true;
+      throw new ForbiddenException({ code: 'PERMISSION_DENIED', message: 'You do not have permission to perform this action' });
+    }
     const decision = await this.authz.check(tenant.actorId, { permission: meta.permission, scope: meta.scope?.(req) });
     if (decision.effect === 'ALLOW') return true;
     if (decision.effect === 'APPROVAL_REQUIRED') throw new ForbiddenException({ code: 'APPROVAL_REQUIRED', message: decision.reason });

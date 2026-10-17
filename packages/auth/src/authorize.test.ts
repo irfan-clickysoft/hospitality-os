@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canAssignRole, decide, type Grant, type Limits, type ScopeType } from './authorize.js';
+import { canAssignRole, decide, holdsAnywhere, type Grant, type Limits, type ScopeType } from './authorize.js';
 import { ROLE_TEMPLATES, SENSITIVE_PERMISSIONS } from './roles.js';
 
 const LE1 = 'le-1', P1 = 'prop-1', P2 = 'prop-2', D1 = 'dept-1';
@@ -106,5 +106,13 @@ describe('role templates', () => {
     const r = ROLE_TEMPLATES.find((x) => x.key === 'gate_security')!;
     expect(r.permissions).not.toContain('reservation.view');
     expect(r.permissions).not.toContain('folio.view');
+  });
+});
+
+describe('holdsAnywhere', () => {
+  it('is true for any active grant at any scope, false otherwise', () => {
+    expect(holdsAnywhere([g('guest.view', 'PROPERTY', 'p1')], 'guest.view', NOW)).toBe(true);
+    expect(holdsAnywhere([g('guest.view', 'PROPERTY', 'p1')], 'guest.manage', NOW)).toBe(false);
+    expect(holdsAnywhere([g('guest.view', 'TENANT', null, {}, { validTo: new Date('2026-10-01') })], 'guest.view', NOW)).toBe(false);
   });
 });
