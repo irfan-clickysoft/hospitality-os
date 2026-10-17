@@ -17,6 +17,7 @@
 | `06-security-infra-ops.md` | Security & tenant isolation, AWS, DR, observability, i18n, offline, performance, testing | AJ–AM |
 | `07-scope-roadmap-risks.md` | MVP scope/exclusions, Phase 2/3, dev sequence, risks, **35 open questions** | AN–AV |
 | `08-decision-register.md` | 28 ADRs in RECOMMENDATION / WHY / ALTERNATIVES / TRADE-OFF / FUTURE IMPACT format | all |
+| `10-accounting-and-tax-architecture.md` | **Revision 2:** one integrated ledger, payment accounts, configurable tax codes, component allocation guardrails, tax reports, advisor checklist | `03` §R–T |
 | `09-stakeholder-decisions-and-scope-changes.md` | **Revision 1:** answers to Q1–Q35, new requirements (loyalty, self check-in, guest hub, Urdu, partner portal, roles), re-baselined plan for a 3–5-person team | — |
 
 ### Traceability to the 42-item Phase 0 list
