@@ -8,6 +8,7 @@ import { CLOCK, type ClockLike } from '../common/clock.js';
 import { SecretBox } from '../common/secret-box.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { residencyOf } from '../guests/schemas.js';
+import { FolioService, fmt } from '../folio/folio.service.js';
 import { IdempotencyService, hashRequest } from '../idempotency/idempotency.service.js';
 import { InventoryService } from '../inventory/inventory.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
@@ -29,6 +30,7 @@ export class FrontDeskService {
     @Inject(TenantDb) private readonly tdb: TenantDb,
     @Inject(ReservationsService) private readonly res: ReservationsService,
     @Inject(RatesService) private readonly rates: RatesService,
+    @Inject(FolioService) private readonly folios: FolioService,
     @Inject(InventoryService) private readonly inv: InventoryService,
     @Inject(IdempotencyService) private readonly idem: IdempotencyService,
     @Inject(AuditService) private readonly audit: AuditService,
@@ -119,6 +121,7 @@ export class FrontDeskService {
     await this.res.transition(trx, propertyId, id, 'CHECK_IN', { reason: 'Checked in', lineIds: [lineId], userId });
     const at = new Date(this.clock.now());
     await trx.updateTable('reservation_room').set({ checked_in_at: at, checked_in_business_date: bd }).where('id', '=', lineId).execute();
+    await this.folios.ensureGuestFolio(trx, propertyId, id);
     await trx.updateTable('room_assignment').set({ status: 'IN_HOUSE' }).where('assignment_ref', '=', lineId).where('status', '=', 'ASSIGNED').execute();
 
     const early = bd === line.arrival && hoursBeforeArrival(line.arrival, p.check_in_time, p.timezone, this.clock.now()) > 0;
@@ -173,6 +176,25 @@ export class FrontDeskService {
         await trx.updateTable('reservation_room').set({ departure: newDeparture, original_departure: line.departure, subtotal_minor: s.gross, discount_minor: s.disc, total_minor: s.total }).where('id', '=', lineId).execute();
       }
       await trx.updateTable('reservation_room').set({ checked_out_at: new Date(this.clock.now()), checked_out_business_date: bd }).where('id', '=', lineId).execute();
+      // bring the folio up to date, then the money must agree before the guest leaves
+      await this.folios.postRoomNights(trx, propertyId, { id: lineId, reservation_id: id }, addDays(newDeparture, -1), userId);
+      const after = await this.res.load(trx, propertyId, id);
+      const lastRoom = !after.lines.some((l) => l.id !== lineId && (l.status === 'CHECKED_IN'));
+      const folio = await this.folios.ensureGuestFolio(trx, propertyId, id);
+      let balance = BigInt((await this.folios.folioRow(trx, propertyId, folio.id)).balance_minor);
+      let settledWithBalance = false;
+      if (lastRoom && balance !== 0n) {
+        if (!i.balanceReason) throw fail(409, 'BALANCE_DUE', balance > 0n ? `The guest still owes ${fmt(balance, folio.currency).amount}. Take payment before check-out.` : `The folio is overpaid by ${fmt(-balance, folio.currency).amount}. Refund it before check-out.`,
+          { balance: fmt(balance, folio.currency) });
+        await this.res.requirePermission(userId, 'folio.checkout_with_balance', propertyId);
+        await this.res.requireFreshMfa();
+        settledWithBalance = true;
+        await this.audit.record(trx, { action: 'frontdesk.checkout_with_balance', resourceType: 'reservation', resourceId: id, propertyId, after: { balance: balance.toString() }, reasonCode: 'CHECKOUT_WITH_BALANCE', note: i.balanceReason });
+        await this.outbox.publish(trx, { aggregateType: 'folio', aggregateId: folio.id, eventType: 'CheckedOutWithBalance', propertyId, payload: { folioId: folio.id, reservationId: id, balanceMinor: balance.toString(), currency: folio.currency, reason: i.balanceReason } });
+      }
+      let folioClosed = false;
+      if (lastRoom && balance === 0n && !after.lines.some((l) => l.id !== lineId && (l.status === 'CONFIRMED' || l.status === 'OPTION'))) { await this.folios.closeIn(trx, propertyId, folio.id, userId); folioClosed = true; }
+      balance = BigInt((await this.folios.folioRow(trx, propertyId, folio.id)).balance_minor);
       if (assignment) {
         await trx.updateTable('room').set({ hk_status: 'DIRTY', hk_updated_at: new Date(this.clock.now()), version: sql`version + 1` as never }).where('id', '=', assignment.room_id).execute();
         await trx.updateTable('room_assignment').set({ end_reason: 'CHECK_OUT' }).where('id', '=', assignment.assignmentId).execute();
@@ -180,7 +202,7 @@ export class FrontDeskService {
       }
       await this.res.history(trx, propertyId, id, { lineId, action: 'CHECK_OUT_DETAILS', reason: i.reason, details: { room: assignment?.number ?? null, earlyDeparture: early, originalDeparture: early ? line.departure : null, overstayNights } });
       await this.audit.record(trx, { action: 'frontdesk.check_out', resourceType: 'reservation', resourceId: id, propertyId, after: { room: assignment?.number ?? null, earlyDeparture: early, overstayNights }, note: i.reason });
-      return { ...(await this.res.detail(trx, propertyId, id)), checkOut: { earlyDeparture: early, originalDeparture: early ? line.departure : null, overstayNights, roomMarkedDirty: !!assignment } };
+      return { ...(await this.res.detail(trx, propertyId, id)), checkOut: { earlyDeparture: early, originalDeparture: early ? line.departure : null, overstayNights, roomMarkedDirty: !!assignment, folio: { id: folio.id, balance: fmt(balance, folio.currency), closed: folioClosed, checkedOutWithBalance: settledWithBalance } } };
     });
   }
 

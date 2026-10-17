@@ -19,7 +19,11 @@ export const CheckIn = z.object({
   /** Put the guest in a room that is not marked clean. Needs the override permission and a fresh second factor. */
   allowNotReady: z.boolean().default(false),
 });
-export const CheckOut = z.object({ reason: z.string().min(3).max(300).optional() });
+export const CheckOut = z.object({
+  reason: z.string().min(3).max(300).optional(),
+  /** Let the guest leave with an unpaid or overpaid folio. Needs the checkout-with-balance permission and a fresh second factor. */
+  balanceReason: z.string().min(3).max(300).optional(),
+});
 export const UndoCheckIn = z.object({ reason: z.string().min(3).max(300) });
 export const MoveRoom = z.object({ roomId: uuid, reason: z.string().min(3).max(300), allowNotReady: z.boolean().default(false) });
 export const WalkIn = z.object({

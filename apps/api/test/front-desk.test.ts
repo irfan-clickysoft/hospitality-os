@@ -172,13 +172,13 @@ describe('check-out', () => {
   it('checks out on the departure day: stay closes, room becomes dirty, assignment is kept as history', async () => {
     const w = await sunset(); const b = await book(w); await setBd(w, '2026-11-05'); await ok(checkIn(w, b, '101'));
     await setBd(w, '2026-11-07');
-    const r = await ok(call('POST', url(w, b.id, b.line, 'check-out'), O, {}));
+    const r = await ok(call('POST', url(w, b.id, b.line, 'check-out'), OM, { balanceReason: 'test: settled elsewhere' }));
     expect(r.status).toBe('CHECKED_OUT'); expect(r.checkOut).toMatchObject({ earlyDeparture: false, overstayNights: 0, roomMarkedDirty: true });
     const room = await adminDb.selectFrom('room').select('hk_status').where('id', '=', w.room['101']).executeTakeFirstOrThrow();
     expect(room.hk_status).toBe('DIRTY');
     const a = await adminDb.selectFrom('room_assignment').select(['status', 'end_reason']).where('assignment_ref', '=', b.line).executeTakeFirstOrThrow();
     expect(a).toEqual({ status: 'ENDED', end_reason: 'CHECK_OUT' });
-    await code(call('POST', url(w, b.id, b.line, 'check-out'), O, {}), 409, 'INVALID_STATE_TRANSITION');
+    await code(call('POST', url(w, b.id, b.line, 'check-out'), OM, { balanceReason: 'test: settled elsewhere' }), 409, 'INVALID_STATE_TRANSITION');
     const ev = (await adminDb.selectFrom('outbox_event').select('event_type').where('tenant_id', '=', T.tenantId).where('aggregate_id', 'in', [b.id, w.room['101']]).execute()).map((e) => e.event_type);
     expect(ev).toEqual(expect.arrayContaining(['GuestCheckedOut', 'RoomStatusChanged']));
     expect(await issues(w)).toEqual([]);
@@ -187,8 +187,8 @@ describe('check-out', () => {
   it('early departure needs a reason, cuts the stay and the bill to the nights actually stayed, and frees the room for sale', async () => {
     const w = await sunset(); const b = await book(w, { departure: '2026-11-08' }); await setBd(w, '2026-11-05'); await ok(checkIn(w, b, '101'));
     await setBd(w, '2026-11-06');
-    await code(call('POST', url(w, b.id, b.line, 'check-out'), O, {}), 422, 'REASON_REQUIRED');
-    const r = await ok(call('POST', url(w, b.id, b.line, 'check-out'), O, { reason: 'Family emergency' }));
+    await code(call('POST', url(w, b.id, b.line, 'check-out'), OM, { balanceReason: 'test: settled elsewhere' }), 422, 'REASON_REQUIRED');
+    const r = await ok(call('POST', url(w, b.id, b.line, 'check-out'), OM, { reason: 'Family emergency', balanceReason: 'test: settled elsewhere' }));
     expect(r.checkOut).toMatchObject({ earlyDeparture: true, originalDeparture: '2026-11-08' });
     expect(r.lines[0]).toMatchObject({ departure: '2026-11-06', nights: 1, total: { amount: '12000.00' } });
     expect(r.lines[0].nightPrices).toHaveLength(1);
@@ -201,11 +201,11 @@ describe('check-out', () => {
 
   it('leaving on the arrival day still bills one night; an overstay is flagged', async () => {
     const w = await sunset(); const b = await book(w, { departure: '2026-11-08' }); await setBd(w, '2026-11-05'); await ok(checkIn(w, b, '101'));
-    const r = await ok(call('POST', url(w, b.id, b.line, 'check-out'), O, { reason: 'Changed plans' }));
+    const r = await ok(call('POST', url(w, b.id, b.line, 'check-out'), OM, { reason: 'Changed plans', balanceReason: 'test: settled elsewhere' }));
     expect(r.lines[0]).toMatchObject({ departure: '2026-11-06', nights: 1 });
     const c = await book(w, { departure: '2026-11-06' }); await ok(checkIn(w, c, '102'));
     await setBd(w, '2026-11-08');
-    const s = await ok(call('POST', url(w, c.id, c.line, 'check-out'), O, {}));
+    const s = await ok(call('POST', url(w, c.id, c.line, 'check-out'), OM, { balanceReason: 'test: settled elsewhere' }));
     expect(s.checkOut.overstayNights).toBe(2);
   });
 
@@ -296,7 +296,7 @@ describe('room rack', () => {
     expect(rack.summary).toMatchObject({ arrivals: { pending: 1, checkedIn: 1 }, inHouse: 1, rooms: { total: 5, occupied: 1, outOfOrder: 1 } });
     expect(rack.roomTypes.find((t: any) => t.code === 'STD').availability).toHaveLength(5);
     // departed guests stay visible as history on the chart
-    await setBd(w, '2026-11-08'); await ok(call('POST', url(w, a.id, a.line, 'check-out'), O, {}));
+    await setBd(w, '2026-11-08'); await ok(call('POST', url(w, a.id, a.line, 'check-out'), OM, { balanceReason: 'test: settled elsewhere' }));
     const after = await ok(call('GET', `/v1/properties/${w.pid}/rack?from=2026-11-05&days=5`, O));
     const a101 = after.rooms.find((r: any) => r.number === '101');
     expect(a101.stays.some((s: any) => s.status === 'DEPARTED')).toBe(true);

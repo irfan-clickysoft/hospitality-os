@@ -2,7 +2,7 @@ import { HttpException } from '@nestjs/common';
 
 /** Maps PostgreSQL integrity errors to stable API errors without leaking SQL details. */
 export function mapDbError(err: unknown): HttpException | null {
-  const e = err as { code?: string; constraint?: string };
+  const e = err as { code?: string; constraint?: string; hint?: string };
   if (!e || typeof e.code !== 'string' || e.code.length !== 5) return null;
   const c = e.constraint ? ` (${e.constraint})` : '';
   switch (e.code) {
@@ -11,6 +11,10 @@ export function mapDbError(err: unknown): HttpException | null {
     case '23503': return new HttpException({ code: 'REFERENCE_INVALID', message: `A referenced record does not exist or belongs elsewhere${c}` }, 422);
     case '23514': return new HttpException({ code: 'CONSTRAINT_FAILED', message: `A value is outside the allowed range${c}` }, 422);
     case '22P02': case '22007': case '22008': return new HttpException({ code: 'INVALID_INPUT', message: 'A value has an invalid format' }, 400);
+    case 'P0001':
+      if (e.hint === 'FOLIO_NOT_OPEN') return new HttpException({ code: 'FOLIO_NOT_OPEN', message: 'This folio is closed' }, 409);
+      if (e.hint === 'BUSINESS_DATE_CLOSED') return new HttpException({ code: 'BUSINESS_DATE_CLOSED', message: 'That business date is already closed. Post it on the current date instead.' }, 409);
+      return null;
     default: return null;
   }
 }

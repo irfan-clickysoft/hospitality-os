@@ -8,6 +8,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { AuthorizationService } from '../authz/authorization.service.js';
 import { CLOCK, type ClockLike } from '../common/clock.js';
 import { TenantDb } from '../db/tenant-db.js';
+import { FolioService } from '../folio/folio.service.js';
 import { GuestsService } from '../guests/guests.service.js';
 import { residencyOf } from '../guests/schemas.js';
 import { IdempotencyService, hashRequest } from '../idempotency/idempotency.service.js';
@@ -32,6 +33,7 @@ export class ReservationsService {
     @Inject(RatesService) private readonly rates: RatesService,
     @Inject(QuoteSigner) private readonly signer: QuoteSigner,
     @Inject(GuestsService) private readonly guests: GuestsService,
+    @Inject(FolioService) private readonly folios: FolioService,
     @Inject(IdempotencyService) private readonly idem: IdempotencyService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
@@ -307,6 +309,10 @@ export class ReservationsService {
       if (!remaining.length) { set.penalty_minor = '0'; set.penalty_reason = null; set.penalty_waived = false; set.cancelled_at = null; set.cancel_reason = null; }
     }
     if (Object.keys(set).length) await trx.updateTable('reservation').set(set as never).where('id', '=', id).execute();
+    if ((action === 'CANCEL' || action === 'NO_SHOW') && penalty > 0n && !o.waive) {
+      await this.folios.postPenalty(trx, propertyId, id, action === 'NO_SHOW' ? 'NOSHOW_FEE' : 'CANCEL_FEE', penalty, BigInt(res.penalty_minor) + penalty, o.userId);   // the fee becomes a charge on the guest folio (a deposit already held offsets it)
+    }
+    if (action === 'REINSTATE' && set.penalty_minor === '0') await this.folios.reversePenalties(trx, propertyId, id, o.userId, o.reason);
     const eventType = { CONFIRM: 'ReservationConfirmed', EXPIRE: 'OptionExpired', CANCEL: 'ReservationCancelled', NO_SHOW: 'ReservationNoShow', REINSTATE: 'ReservationReinstated', CHECK_IN: 'GuestCheckedIn', CHECK_OUT: 'GuestCheckedOut', UNDO_CHECK_IN: 'CheckInUndone', REOPEN: 'StayReopened' }[action];
     await this.outbox.publish(trx, { aggregateType: 'reservation', aggregateId: id, eventType, propertyId, businessDate: p.business_date, payload: { reservationId: id, confirmationNo: res.confirmation_no, reason: o.reason,
       penaltyMinor: penalty.toString(), penaltyWaived: !!o.waive, depositPaidMinor: res.deposit_paid_minor, currency: res.currency, lines: targets.map((l) => l.id) } });
