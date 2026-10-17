@@ -35,6 +35,9 @@ importers:
       '@hos/domain-types':
         specifier: workspace:*
         version: link:../../packages/domain-types
+      '@hos/rates':
+        specifier: workspace:*
+        version: link:../../packages/rates
       '@nestjs/common':
         specifier: ^11.0.0
         version: 11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -83,6 +86,12 @@ importers:
         version: 8.23.1
 
   packages/domain-types: {}
+
+  packages/rates:
+    dependencies:
+      '@hos/domain-types':
+        specifier: workspace:*
+        version: link:../domain-types
 
 packages:
 

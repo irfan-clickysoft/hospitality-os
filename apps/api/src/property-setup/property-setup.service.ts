@@ -32,7 +32,7 @@ export class PropertySetupService {
     return p;
   }
   private propDto(p: Awaited<ReturnType<PropertySetupService['prop']>>) {
-    return { id: p.id, code: p.code, name: p.name, legalEntityId: p.legal_entity_id, brandId: p.brand_id, timezone: p.timezone, currency: p.currency, businessDate: p.business_date, status: p.status, version: p.version };
+    return { id: p.id, code: p.code, name: p.name, legalEntityId: p.legal_entity_id, brandId: p.brand_id, timezone: p.timezone, currency: p.currency, businessDate: p.business_date, weekendDays: p.weekend_days, status: p.status, version: p.version };
   }
 
   /** Properties the current user may view (property-scoped users see only theirs). */
@@ -66,6 +66,7 @@ export class PropertySetupService {
       if (i.name !== undefined) set.name = i.name;
       if (i.timezone !== undefined) set.timezone = i.timezone;
       if (i.brandId !== undefined) set.brand_id = i.brandId;
+      if (i.weekendDays !== undefined) set.weekend_days = [...new Set(i.weekendDays)].sort();
       const after = await trx.updateTable('property').set(set as never).where('id', '=', id).where('version', '=', i.version).returningAll().executeTakeFirst();
       if (!after) throw stale();
       await this.audit.record(trx, { action: 'property.update', resourceType: 'property', resourceId: id, propertyId: id, before: this.propDto(before), after: this.propDto(after) });

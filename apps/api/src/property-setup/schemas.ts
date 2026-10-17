@@ -9,7 +9,7 @@ export const CreateProperty = z.object({
   legalEntityId: uuid, brandId: uuid.nullish(), code: z.string().regex(/^[A-Za-z0-9_-]{2,20}$/), name: z.string().min(2).max(120),
   timezone: tz.default('Asia/Karachi'), currency: z.string().regex(/^[A-Z]{3}$/).default('PKR'), openingBusinessDate: businessDate.optional(),
 });
-export const UpdateProperty = z.object({ name: z.string().min(2).max(120).optional(), timezone: tz.optional(), brandId: uuid.nullish(), version: z.number().int() });
+export const UpdateProperty = z.object({ name: z.string().min(2).max(120).optional(), timezone: tz.optional(), brandId: uuid.nullish(), weekendDays: z.array(z.number().int().min(1).max(7)).max(7).optional(), version: z.number().int() });
 export const GoLive = z.object({ openingBusinessDate: businessDate.optional() });
 
 export const CreateBuilding = z.object({ name: z.string().min(1).max(80) });

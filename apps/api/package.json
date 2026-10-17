@@ -15,6 +15,7 @@
     "@hos/auth": "workspace:*",
     "@hos/db": "workspace:*",
     "@hos/domain-types": "workspace:*",
+    "@hos/rates": "workspace:*",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-fastify": "^11.0.0",
