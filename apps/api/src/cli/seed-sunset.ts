@@ -14,7 +14,7 @@ const OWNER_EMAIL = process.env.SEED_OWNER_EMAIL ?? 'owner@sunset.local';
 const SLUG = process.env.SEED_TENANT_SLUG ?? 'sunset';
 
 const PROPERTIES = [
-  { code: 'BLVD', name: 'Sunset BnB Boulevard', city: 'Karachi', tz: 'Asia/Karachi', rooms: { STD: 3, DLX: 3, EXE: 3 }, firstRoom: 101 },
+  { code: 'BLVD', name: 'Sunset BnB Boulevard', city: 'Karachi', tz: 'Asia/Karachi', rooms: { EXE: 4, DLX: 3, STD: 2 }, firstRoom: 101 },
   { code: 'CREEK', name: 'Sunset BnB Creek', city: 'Karachi', tz: 'Asia/Karachi', rooms: { STD: 4, DLX: 3, EXE: 3 }, firstRoom: 101 },
   { code: 'RAMNA', name: 'Sunset BnB Ramna', city: 'Islamabad', tz: 'Asia/Karachi', rooms: { STD: 3, DLX: 3, EXE: 2 }, firstRoom: 101 },
 ] as const;

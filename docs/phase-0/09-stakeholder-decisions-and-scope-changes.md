@@ -341,3 +341,12 @@ See `08` amendments: **D-11** (identity — revised), **D-12** (mobile — manag
 | Centralised bookings manager | 1 | `central_bookings_manager` | whole tenant | Rates and reservations across properties |
 | Booking resources | 2 | `reservation_agent` | whole tenant | Create/modify reservations only |
 | Owner (Irfan A Rehman) | 1 | `group_owner` | whole tenant | MFA required |
+
+
+## 12. Boulevard room split, floor plan and setup ownership (answered in session)
+| Question | Answer | Effect |
+|---|---|---|
+| Boulevard room types | **4 Executive · 3 Deluxe · 2 Standard** (9 rooms) | Seed updated. Which room number is which type is still to be confirmed at the observation week; the seed numbers them in blocks (Executive first). |
+| Visual floor plan | **Ideally yes, but optional for small properties** | Room list is the default. A drag-and-drop floor plan is a later, per-property option (R1b+); the rack already groups rooms by type and floor. |
+| Who does setup | **Super admin does the initial setup; admins then make the system work day to day** | New `property_admin` role: operations, rates, blocks, staff invites, front desk, housekeeping — but not property structure (`property.manage`), tenant settings or tax. Group owner / GM keep structure rights as the super admins. |
+

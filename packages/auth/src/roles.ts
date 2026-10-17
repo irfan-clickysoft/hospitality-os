@@ -31,6 +31,11 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
     'property.manage', 'property.view', 'user.manage', 'role.manage', 'audit.view', 'reservation.view', 'reservation.create',
     'reservation.modify', 'reservation.cancel', 'reservation.waive_fee', 'guest.view', 'guest.manage', 'rate.manage', 'folio.view', 'folio.adjust', 'payment.refund', 'report.view',
     'housekeeping.view', 'fnb.manage', 'frontdesk.view_id'] },
+  // Day-to-day administrator: runs the system after the super admin has done the initial setup (structure, tenant settings, tax). Cannot change property structure.
+  { key: 'property_admin', name: 'Property Admin', permissions: [
+    'property.view', 'user.manage', 'reservation.view', 'reservation.create', 'reservation.modify', 'reservation.cancel', 'reservation.waive_fee', 'guest.view', 'guest.manage',
+    'rate.manage', 'inventory.block', 'folio.view', 'folio.post', 'payment.take', 'cashier.operate', 'report.view',
+    'frontdesk.check_in', 'frontdesk.check_out', 'frontdesk.override_room', 'frontdesk.view_id', 'housekeeping.view', 'housekeeping.update', 'housekeeping.assign'] },
   { key: 'central_bookings_manager', name: 'Central Bookings Manager', permissions: [
     'property.view', 'reservation.view', 'reservation.create', 'reservation.modify', 'reservation.cancel', 'guest.view', 'guest.manage', 'rate.manage', 'report.view'] },
   { key: 'reservation_agent', name: 'Reservation Agent', permissions: ['property.view', 'reservation.view', 'reservation.create', 'reservation.modify', 'guest.view', 'guest.manage'] },
