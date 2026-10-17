@@ -12,7 +12,8 @@ Architecture and product decisions: [`docs/phase-0/00-index.md`](docs/phase-0/00
 - Tenant provisioning (roles seeded per tenant, owner, audit + `TenantCreated` event)
 **Slice 3 (identity):** invitation → password (Argon2id, length-first policy), login with lockout and non-enumerating errors, server-side sessions (hashed opaque tokens in `__Host-` cookies, idle + absolute expiry), CSRF token + Origin allow-list, TOTP two-factor (RFC 6238, encrypted seeds, replay protection, recovery codes), **step-up MFA for sensitive permissions**, password change with session revocation, staff language preference (English / Urdu), audit-log read endpoint.
 **Slice 4 (property setup + availability):** property wizard backend (properties, buildings/floors, room types, rooms with bulk generator and connecting rooms, tenant amenity catalogue, setup status, go-live), the **availability engine** (per room-type/night counters mutated only by conditional atomic updates with date-ordered locking; physical-room assignment and block overlap prevented by database exclusion constraints; overbooking limits per date; out-of-order/out-of-service blocks with oversell protection and explicit acknowledgement; invariant checker), optimistic locking, business dates as plain calendar dates in the property's time zone, audit + `InventoryChanged` events.
-Not yet: rates, reservations, rack, front desk, folio, payments, night audit, observability, Terraform (AWS comes after everything runs locally), i18n scaffolding.
+**Slice 5 (rate engine):** `@hos/rates` pure pricing engine (override > season > weekend/weekday; derived plans for local/international and corporate; extra adult/child/bed/meal; restrictions; deposit; 72-hour cancellation and no-show fees from a policy snapshot), rate plans/seasons/overrides/restrictions API with dry-run and >30% guard rail, rate calendar, quote search with signed 15-minute tokens.
+Not yet: reservations, rack, front desk, folio, payments, tax engine, night audit, observability, Terraform (AWS comes after everything runs locally), i18n scaffolding.
 
 ## Run it on your Mac (no cloud needed)
 Requires Node 22, pnpm 10 (`corepack enable`), and Docker Desktop (or a local PostgreSQL 16).
@@ -23,6 +24,7 @@ PGSUPERUSER_URL=postgres://postgres:postgres@localhost:5432/postgres bash script
 cp .env.example .env                                                           # then set APP_ENCRYPTION_KEY (command in the file)
 pnpm db:migrate                                                                # applies SQL migrations to hos_dev
 pnpm --filter @hos/api seed:sunset                                             # Sunset: Boulevard 9, Creek 10, Ramna 8 rooms; prints the owner invite token
+pnpm --filter @hos/api seed:sunset-rates                                       # PLACEHOLDER rate plans (BAR + International +25%) for the three properties
 pnpm --filter @hos/api dev                                                     # API on http://localhost:3000
 ```
 Then set the owner's password with the `curl` command the seed prints, log in at `POST /v1/auth/login`, and call `GET /v1/properties`.

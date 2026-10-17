@@ -9,7 +9,8 @@
     "start": "node dist/main.js",
     "dev": "tsx watch --env-file=../../.env src/main.ts",
     "test": "vitest run",
-    "seed:sunset": "tsx --env-file=../../.env src/cli/seed-sunset.ts"
+    "seed:sunset": "tsx --env-file=../../.env src/cli/seed-sunset.ts",
+    "seed:sunset-rates": "tsx --env-file=../../.env src/cli/seed-sunset-rates.ts"
   },
   "dependencies": {
     "@hos/auth": "workspace:*",
