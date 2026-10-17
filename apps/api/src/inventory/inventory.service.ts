@@ -261,12 +261,14 @@ export class InventoryService {
       ) x WHERE have <> want ORDER BY d LIMIT 100`.execute(trx);
     for (const r of resv.rows) issues.push({ kind: r.col === 'reserved' ? 'RESERVED_MISMATCH' : 'HELD_MISMATCH', roomTypeId: r.room_type_id, date: r.d, detail: `${r.col} counter=${r.have}, reservation lines=${r.want}` });
 
-    // every live assignment must belong to a live reservation line of the same room type, and cover its exact dates
+    // every live assignment must belong to a live reservation line of the same room type, and cover its dates (an in-house guest who moved rooms holds the new room only for the rest of the stay)
     const orphans = await sql<{ id: string; room_type_id: string }>`
       SELECT a.id, r.room_type_id FROM room_assignment a JOIN room r ON r.tenant_id = a.tenant_id AND r.id = a.room_id
       WHERE a.tenant_id = ${t} AND a.property_id = ${propertyId} AND a.status IN ('ASSIGNED','IN_HOUSE')
         AND NOT EXISTS (SELECT 1 FROM reservation_room rr WHERE rr.tenant_id = a.tenant_id AND rr.id = a.assignment_ref AND rr.status IN ('CONFIRMED','CHECKED_IN','OPTION')
-                        AND rr.room_type_id = r.room_type_id AND daterange(rr.arrival, rr.departure) = a.stay_range) LIMIT 100`.execute(trx);
+                        AND rr.room_type_id = r.room_type_id
+                        AND ((a.status = 'ASSIGNED' AND daterange(rr.arrival, rr.departure) = a.stay_range)
+                          OR (a.status = 'IN_HOUSE' AND upper(a.stay_range) = rr.departure AND a.stay_range <@ daterange(rr.arrival, rr.departure)))) LIMIT 100`.execute(trx);
     for (const o of orphans.rows) issues.push({ kind: 'ORPHAN_ASSIGNMENT', roomTypeId: o.room_type_id, detail: `assignment ${o.id} has no matching live reservation line` });
     return issues;
   }

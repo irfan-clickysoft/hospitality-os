@@ -10,6 +10,8 @@ import { InventoryModule } from './inventory/inventory.module.js';
 import { HealthController } from './health/health.controller.js';
 import { GuestsController } from './guests/guests.controller.js';
 import { GuestsService } from './guests/guests.service.js';
+import { FrontDeskController } from './front-desk/front-desk.controller.js';
+import { FrontDeskService } from './front-desk/front-desk.service.js';
 import { ReservationsController } from './reservations/reservations.controller.js';
 import { ReservationsService } from './reservations/reservations.service.js';
 import { RatesController } from './rates/rates.controller.js';
@@ -21,8 +23,8 @@ import { TenantMiddleware } from './tenancy/tenant.middleware.js';
 
 @Module({
   imports: [DbModule, CoreServicesModule, IdentityModule, AuthzModule, InventoryModule],
-  controllers: [HealthController, PropertySetupController, RatesController, GuestsController, ReservationsController, AuditController],
-  providers: [TenantMiddleware, PropertySetupService, RatesService, QuoteSigner, GuestsService, ReservationsService, { provide: APP_FILTER, useClass: ProblemDetailsFilter }],
+  controllers: [HealthController, PropertySetupController, RatesController, GuestsController, ReservationsController, FrontDeskController, AuditController],
+  providers: [TenantMiddleware, PropertySetupService, RatesService, QuoteSigner, GuestsService, ReservationsService, FrontDeskService, { provide: APP_FILTER, useClass: ProblemDetailsFilter }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void { consumer.apply(TenantMiddleware).forRoutes('*'); }

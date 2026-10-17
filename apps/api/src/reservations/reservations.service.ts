@@ -40,12 +40,12 @@ export class ReservationsService {
   ) {}
 
   // ───────────── helpers ─────────────
-  private async prop(trx: Trx, id: string) {
+  async prop(trx: Trx, id: string) {
     const p = await trx.selectFrom('property').select(['id', 'code', 'currency', 'business_date', 'timezone', 'check_in_time', 'status']).where('id', '=', id).executeTakeFirst();
     if (!p) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Property not found' });
     return p;
   }
-  private async load(trx: Trx, propertyId: string, id: string, lock = false) {
+  async load(trx: Trx, propertyId: string, id: string, lock = false) {
     let q = trx.selectFrom('reservation').selectAll().where('id', '=', id).where('property_id', '=', propertyId);
     if (lock) q = q.forUpdate();
     const res = await q.executeTakeFirst();
@@ -54,24 +54,24 @@ export class ReservationsService {
     if (lock) lq = lq.forUpdate();
     return { res, lines: await lq.execute() };
   }
-  private async requireFreshMfa(): Promise<void> {
+  async requireFreshMfa(): Promise<void> {
     const m = currentTenant().mfaVerifiedAt;
     if (!m || this.clock.now() - m.getTime() > FRESH_MFA_MS) throw new ForbiddenException({ code: 'MFA_REQUIRED', message: 'Verify your second factor (step-up) to perform this action' });
   }
-  private async requirePermission(userId: string, permission: string, propertyId: string) {
+  async requirePermission(userId: string, permission: string, propertyId: string) {
     if ((await this.authz.check(userId, { permission, scope: { propertyId } })).effect !== 'ALLOW') throw new ForbiddenException({ code: 'PERMISSION_DENIED', message: `This action needs the "${permission}" permission` });
   }
-  private async history(trx: Trx, propertyId: string, reservationId: string, e: { lineId?: string | null; action: string; from?: string | null; to?: string | null; reason?: string | null; details?: unknown }) {
+  async history(trx: Trx, propertyId: string, reservationId: string, e: { lineId?: string | null; action: string; from?: string | null; to?: string | null; reason?: string | null; details?: unknown }) {
     await trx.insertInto('reservation_history').values({ tenant_id: currentTenant().tenantId, property_id: propertyId, reservation_id: reservationId, reservation_room_id: e.lineId ?? null, action: e.action,
       from_status: e.from ?? null, to_status: e.to ?? null, actor_id: currentTenant().actorId ?? null, reason: e.reason ?? null, details: e.details === undefined ? null : JSON.stringify(e.details) }).execute();
   }
-  private async syncHeader(trx: Trx, reservationId: string) {
+  async syncHeader(trx: Trx, reservationId: string) {
     const lines = await trx.selectFrom('reservation_room').select(['status', 'deposit_due_minor']).where('reservation_id', '=', reservationId).execute();
     const status = deriveStatus(lines.map((l) => l.status));
     await trx.updateTable('reservation').set({ status, version: sql`version + 1` as never, ...(status !== 'OPTION' ? { option_expires_at: null } : {}) }).where('id', '=', reservationId).execute();
     return status;
   }
-  private async endAssignment(trx: Trx, lineId: string, reason: string) {
+  async endAssignment(trx: Trx, lineId: string, reason: string) {
     await trx.updateTable('room_assignment').set({ status: 'ENDED', ended_at: sql`now()` as never, end_reason: reason }).where('assignment_ref', '=', lineId).where('status', 'in', ['ASSIGNED', 'IN_HOUSE']).execute();
   }
   private invArgs(propertyId: string, l: { room_type_id: string; arrival: string; departure: string }) { return { propertyId, roomTypeId: l.room_type_id, arrival: l.arrival, departure: l.departure }; }
@@ -94,7 +94,7 @@ export class ReservationsService {
     });
   }
 
-  private async createIn(trx: Trx, propertyId: string, userId: string, i: z.infer<typeof S.CreateReservation>) {
+  async createIn(trx: Trx, propertyId: string, userId: string, i: z.infer<typeof S.CreateReservation>) {
     const p = await this.prop(trx, propertyId);
     if (p.status !== 'LIVE') throw new UnprocessableEntityException({ code: 'PROPERTY_NOT_LIVE', message: 'This property is not live yet' });
     const now = this.clock.now();
@@ -270,7 +270,7 @@ export class ReservationsService {
 
   // ───────────── lifecycle ─────────────
   /** Applies a state-machine action to the given lines (all active lines by default), moving inventory accordingly. */
-  private async transition(trx: Trx, propertyId: string, id: string, action: ResAction, o: { reason: string; lineIds?: string[]; waive?: boolean; userId: string }) {
+  async transition(trx: Trx, propertyId: string, id: string, action: ResAction, o: { reason: string; lineIds?: string[]; waive?: boolean; userId: string }) {
     const p = await this.prop(trx, propertyId);
     const { res, lines } = await this.load(trx, propertyId, id, true);
     const targets = o.lineIds ? lines.filter((l) => o.lineIds!.includes(l.id)) : lines.filter((l) => (action === 'REINSTATE' ? l.status === 'CANCELLED' || l.status === 'NO_SHOW' : isActive(l.status)));
@@ -435,7 +435,7 @@ export class ReservationsService {
   }
 
   // ───────────── room assignment ─────────────
-  private async assignIn(trx: Trx, propertyId: string, line: { id: string; room_type_id: string; arrival: string; departure: string }, roomId: string, reason: string) {
+  async assignIn(trx: Trx, propertyId: string, line: { id: string; room_type_id: string; arrival: string; departure: string }, roomId: string, reason: string) {
     const room = await trx.selectFrom('room').select(['id', 'room_type_id', 'status', 'number']).where('id', '=', roomId).where('property_id', '=', propertyId).executeTakeFirst();
     if (!room) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room not found' });
     if (room.status !== 'ACTIVE') throw new UnprocessableEntityException({ code: 'ROOM_INACTIVE', message: 'This room is retired' });

@@ -283,6 +283,16 @@ export class RatesService {
     return { quote, currency: p.currency, businessDate: p.business_date };
   }
 
+  /** A signed quote for exactly one room/plan with no discount — used by flows that price and book in one step (walk-ins). */
+  async issueQuoteToken(trx: Trx, propertyId: string, planId: string, r: Parameters<RatesService['priceOne']>[3]): Promise<string> {
+    const { quote, currency } = await this.priceOne(trx, propertyId, planId, r);
+    if (!quote.sellable) throw new HttpException({ code: 'NOT_SELLABLE', message: 'This rate is not available for these dates', reasons: quote.reasons }, 409);
+    const nightsHash = Buffer.from(quote.nights.map((n) => `${n.date}:${n.totalMinor}`).join('|')).toString('base64url').slice(0, 64);
+    return this.signer.sign({ propertyId, planId, roomTypeId: r.roomTypeId, arrival: r.arrival, departure: r.departure, adults: r.adults, children: r.children, extraBeds: r.extraBeds,
+      channel: r.channel, residency: r.residency, companyId: r.companyId, currency, subtotalMinor: quote.subtotalMinor.toString(), discountPct: 0, discountApproved: true,
+      depositDueMinor: quote.depositDueMinor.toString(), nightsHash }, 900, this.clock.now());
+  }
+
   // ───────── calendar ─────────
   async calendar(propertyId: string, planId: string, from: string, to: string) {
     return this.tdb.tx(async (trx) => {
