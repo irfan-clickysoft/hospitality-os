@@ -1,5 +1,7 @@
 # Hospitality Operating System — Phase 0: Discovery & Product Architecture
 
+> **Revision 1 (2026-10-17):** stakeholder answers and new requirements are recorded in [`09-stakeholder-decisions-and-scope-changes.md`](09-stakeholder-decisions-and-scope-changes.md). Where this file conflicts with `09`, `09` wins.
+
 **Status:** DRAFT FOR STAKEHOLDER APPROVAL · **No application code exists or will be written until approval.**
 **Scope of this package:** architecture, product definition, and decisions only.
 
@@ -14,7 +16,8 @@
 | `05-technical-architecture.md` | System/domain architecture, **ERD**, API, events/jobs, integrations | AD–AI |
 | `06-security-infra-ops.md` | Security & tenant isolation, AWS, DR, observability, i18n, offline, performance, testing | AJ–AM |
 | `07-scope-roadmap-risks.md` | MVP scope/exclusions, Phase 2/3, dev sequence, risks, **35 open questions** | AN–AV |
-| `08-decision-register.md` | 23 ADRs in RECOMMENDATION / WHY / ALTERNATIVES / TRADE-OFF / FUTURE IMPACT format | all |
+| `08-decision-register.md` | 28 ADRs in RECOMMENDATION / WHY / ALTERNATIVES / TRADE-OFF / FUTURE IMPACT format | all |
+| `09-stakeholder-decisions-and-scope-changes.md` | **Revision 1:** answers to Q1–Q35, new requirements (loyalty, self check-in, guest hub, Urdu, partner portal, roles), re-baselined plan for a 3–5-person team | — |
 
 ### Traceability to the 42-item Phase 0 list
 1 Executive definition → 01 §A.1 · 2 Business model → 01 §B · 3 Tenant model → 01 §C · 4 Hierarchy → 01 §C · 5 Personas → 01 §D · 6 Roles → 01 §E.2 · 7 RBAC matrix → 01 §E.3–E.6 · 8 Feature inventory → 01 §F · 9 Property setup → 02 §G · 10 Reservation lifecycle → 02 §H + 03 state machine · 11 Check-in → 02 §L · 12 Checkout → 02 §O · 13 Guest lifecycle → 02 §M · 14 Corporate lifecycle → 02 §J + 03 §V · 15 Housekeeping → 02 §P · 16 Maintenance → 02 §Q · 17 Service request → 02 §N · 18 Folio → 03 §R · 19 Payment → 03 §S · 20 Cashier → 03 §T · 21 Night audit → 03 §U · 22 OTA/Channel → 04 §X · 23 Subscription → 01 §B.4 · 24 System architecture → 05 §AD · 25 Domains → 05 §AE · 26 ERD → 05 §AF · 27 API → 05 §AG · 28 Events → 05 §AH · 29 Integrations → 05 §AI · 30 Security → 06 §AJ · 31 AWS → 06 §AK · 32 Mobile → 04 §Z–AA + D-12 · 33 Web → 05 §AD.3 · 34 Back-office → 04 §AB · 35 Reporting → 04 §AC · 36 MVP → 07 §AN · 37 Phase 2 → 07 §AP · 38 Phase 3 → 07 §AQ · 39 Technical risks → 07 §AS · 40 Operational risks → 07 §AT · 41 Regulatory/data risks → 07 §AU · 42 Open questions → 07 §AV.
@@ -26,6 +29,8 @@
 **What we're building.** A multi-tenant hospitality SaaS whose core is a PMS with integrity guarantees hotels can trust: concurrency-safe inventory, immutable folio ledger, idempotent night audit, and hard tenant isolation. It starts with independent Pakistani hotels/B&Bs (cash-heavy, corporate-credit-heavy, WhatsApp-native, connectivity-challenged) and is architected so the same product scales to multi-property groups.
 
 **How we're building it.** TypeScript monorepo (pnpm/Turborepo); NestJS **modular monolith** with enforced module boundaries; PostgreSQL as the system of record with RLS, exclusion constraints, and append-only ledgers; transactional outbox → BullMQ for everything reactive; Next.js web apps; Expo mobile; AWS on ECS Fargate/RDS/ElastiCache/S3 via Terraform. Every third party (payments, OTAs, messaging, locks, ERP) sits behind a port/adapter so hotels never depend on any provider being online.
+
+**Revision 1 note:** the pilot is **Sunset BnB** (Boulevard, Creek, Ramna) and the team is 3–5 people, so the plan is now delivered as releases (R1a Boulevard go-live → R1b all three properties → R2 guest/partners → R3 distribution) — see `09` §6. The month 7–8 / 10–12 estimates below assumed a 10–12-person team and are superseded.
 
 **The MVP** is the *operational core*: setup wizard → inventory/rates/availability → reservations + rack → front desk/check-in/out → folio/payments/cashier → housekeeping/maintenance → night audit/reports → corporate accounts (AR + basic portal) → RBAC/audit → minimal back office. **Distribution (channel manager, booking engine, OTAs), guest automation (pre-check-in, WhatsApp API, digital keys), AI and revenue management are Phase 2/3.** Estimated pilot-ready ≈ month 7–8 and GA ≈ month 10–12 with a ~10–12 person team (planning-grade estimate).
 
@@ -71,9 +76,9 @@ Bank-transfer proof verification · WHT-aware receivables · guest/authority reg
 
 Phase 0 is complete and **I have stopped here**. Before any Phase 1 implementation I need:
 
-1. **Approve / amend** the ADRs in `08-decision-register.md` — especially D-06 (reservation model), D-12 (mobile), D-14 (channel sequencing), D-16 (AWS region), D-11 (identity build vs buy).
-2. **Approve / amend the MVP boundary** in `07 §AN–AO`, including whether any excluded item (e.g., a specific OTA, online gateway, official WhatsApp API) is a hard launch requirement.
-3. **Answer the 35 questions** in `07 §AV` — the highest-leverage ones: Sunset BnB pilot profile (Q1), OTA-in-MVP (Q9), payment gateway (Q10), tax/police-reporting confirmation (Q19–20), hosting region (Q21), team/timeline (Q6).
+1. **Approve / amend** the ADRs in `08-decision-register.md`. Already decided by you: D-06 (reservation model), D-12 (two apps + management module), D-14 (channel manager in later phase). Still open: D-11 (identity, revised), D-16 (hosting, revised), D-28 (release plan).
+2. **Approve the revised MVP boundary and release plan** (`09` §5–6, which supersede `07` §AN–AO and §AR).
+3. **Provide the remaining inputs** listed in `09` §10 (tax worksheets, Creek/Ramna details, hosting decision, PayFast onboarding, SLA approval). Q1–Q35 are answered in `09` §2.
 4. **Confirm engagement of Pakistani tax/legal advisors** to start immediately (parallel track).
 
 On approval, Phase 1 begins with **M0 Foundations** (monorepo, CI/CD, Terraform baseline, tenancy + RLS + isolation-test harness, identity/RBAC/audit/outbox) — see `07 §AR`.

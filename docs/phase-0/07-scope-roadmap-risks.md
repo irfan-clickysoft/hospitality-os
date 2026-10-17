@@ -1,4 +1,6 @@
 # 07 — MVP Scope, Roadmap, Development Sequence, Risks, Stakeholder Questions
+
+> **Revision 1 (2026-10-17):** stakeholder answers and new requirements are recorded in [`09-stakeholder-decisions-and-scope-changes.md`](09-stakeholder-decisions-and-scope-changes.md). Where this file conflicts with `09`, `09` wins.
 Covers **AN–AV** (checklist items 36–42).
 
 ---
@@ -42,13 +44,15 @@ Covers **AN–AV** (checklist items 36–42).
 | Basic subscription enforcement | Otherwise no business |
 
 ## AO. Explicitly Excluded from MVP
-Full Channel Manager & OTA adapters (Booking.com, Agoda, Airbnb, Expedia) · Direct booking engine/widget · CRS agent workspace · Automated pre-check-in & smart check-in · Digital keys/locks · Guest native app & guest portal · Online payment gateways (JazzCash/Easypaisa/cards) and pre-auth/capture · SMS/WhatsApp Business API automation · Push notifications · Corporate approval workflows and self-service corporate booking · Groups (blocks, cut-offs, rooming lists, master folios) beyond multi-room · Sales pipeline · Travel-agent commissions · Service-request fulfilment, airport transfer workflow, F&B/POS APIs · Meeting/event management · OTA reconciliation · ERP integrations · Revenue management & AI · Multi-currency · Urdu/Arabic UI · Offline check-in · SSO · Automated subscription billing · Public API/webhooks · Warehouse/BI · Loyalty · Per-bed (dorm) sales.
+Full Channel Manager & OTA adapters (Booking.com, Agoda, Airbnb, Expedia) · Direct booking engine/widget · CRS agent workspace · Automated pre-check-in & smart check-in · Digital keys/locks · Guest native app & guest portal · Online payment gateways other than PayFast (JazzCash/Easypaisa/cards) and pre-auth/capture · SMS/WhatsApp Business API automation · Push notifications · Corporate approval workflows and self-service corporate booking · Groups (blocks, cut-offs, rooming lists, master folios) beyond multi-room · Sales pipeline · Travel-agent commissions · Service-request fulfilment, airport transfer workflow, F&B/POS APIs · Meeting/event management · OTA reconciliation · ERP integrations · Revenue management & AI · Multi-currency · Arabic UI · Offline check-in · SSO · Automated subscription billing · Public API/webhooks · Warehouse/BI · Loyalty · Per-bed (dorm) sales.
 
 ---
 
+> Phase 2/3 contents here are re-sequenced into releases R2–R4 in `09` §5–6 (loyalty, self check-in, partner portal move up; channel manager moves to R3).
+
 ## AP. Phase 2 Roadmap (target: 6–9 months after MVP GA)
 **P2.0 Money in:** first online payment gateway + wallets (hosted pages), payment links (WhatsApp), pre-auth/capture, settlement import & reconciliation basics, subscription auto-billing.
-**P2.1 Guest journey:** WhatsApp Business API (official) + SMS, automated pre-check-in (guest-web PWA), express checkout, room-ready notices, Urdu UI, guest web portal.
+**P2.1 Guest journey:** WhatsApp Business API (official) + SMS, automated pre-check-in (guest-web PWA), express checkout, room-ready notices, guest web portal (staff Urdu UI already ships in R1).
 **P2.2 Distribution:** direct booking engine + widget, promo/packages/add-ons, CRS multi-property search, iCal bridge, **first OTA adapter** then second (certified), channel mapping UI + monitoring, oversold/walk workflow.
 **P2.3 Corporate & sales:** corporate self-service booking with approvals/cost centres/spend reports, groups (blocks/cut-off/rooming list/master folio), travel-agent commissions, light sales pipeline.
 **P2.4 Operations:** service catalogue requests + tasks, airport transfer, minibar/lost & found, F&B posting API, staff app expansion (front-desk tablet), preventive checklists, auto night-audit, scheduled reports, group dashboards, public API + webhooks, custom roles.
@@ -60,7 +64,7 @@ Revenue management (forecasting, pace, recommendations w/ approval), AI assistan
 
 ## AR. Development Sequence (MVP)
 
-Assumptions: cross-functional team ≈ 10–12 (1 architect/lead, 4–5 backend, 3 frontend, 1 mobile, 1 QA/SDET, 0.5–1 DevOps, 1 product/UX designer). *Estimates are planning-grade only and must be re-baselined after approval.*
+**Superseded by `09` §6 (team of 3–5, release plan).** Original assumptions: cross-functional team ≈ 10–12 (1 architect/lead, 4–5 backend, 3 frontend, 1 mobile, 1 QA/SDET, 0.5–1 DevOps, 1 product/UX designer). *Estimates are planning-grade only and must be re-baselined after approval.*
 
 | Milestone | Scope | Exit criteria | Est. |
 |---|---|---|---|
@@ -146,47 +150,6 @@ Parallel tracks: UX research/prototype validation with real front-desk staff (fr
 
 ---
 
-## AV. Questions Requiring Stakeholder Decision
+## AV. Questions Requiring Stakeholder Decision — ANSWERED (Revision 1)
 
-### Business & market
-1. **Sunset BnB is the pilot property** (confirmed by stakeholder). Please share: room count and types, number of properties/locations, whether it uses OTAs, corporate accounts, cash-heavy operations, its current tools (paper/Excel/other PMS), staff count, and who the front-desk/night-audit/housekeeping users are. This property will shape MVP priorities and the usability tests in M3.
-2. Target for first 12 months: number of properties/rooms, segments (guesthouses vs mid-size hotels), cities?
-3. Pricing philosophy: fixed per-room bands vs per-property vs commission; PKR price ceilings; annual prepay? Free tier/trial?
-4. Sales model: direct, resellers, hotel associations? White-label demand?
-5. Competitor set to benchmark (local Pakistani PMSs and international) — any incumbent migrations needed?
-6. Team size, budget, and target dates? (drives sequencing)
-
-### Product
-7. Approve the **reservation state model** (GUARANTEED as attribute; INQUIRY as quote/lead)?
-8. Approve **two mobile apps** decision (staff native in MVP; guest PWA first)?
-9. Is **channel manager in MVP** a hard sales requirement for the pilot hotels? If yes, which single OTA and are we prepared for certification lead-times / aggregator route?
-10. Must MVP include an **online payment gateway**? Which one(s) does the pilot use?
-11. Is **WhatsApp click-to-chat** sufficient for MVP, or is official API automation mandatory at launch (requires Meta verification/BSP)?
-12. Overbooking: default 0 (recommended)? Which properties need it and how do they handle "walking" guests?
-13. Rate model specifics: dual pricing for local vs foreign guests? Weekend definition? Extra-person pricing norms? Tax-inclusive vs exclusive quoting convention in the market?
-14. Cancellation/no-show norms and deposit rules to ship as templates?
-15. Must MVP handle **hourly/day-use** stays and **per-bed** (dorm/hostel) sales?
-16. Services: which operations (restaurant/laundry/transport) run *inside* PMS vs external POS in the pilot?
-17. Preferred languages for staff UI at launch (English only vs Urdu)? Guest documents in Urdu?
-18. Reporting: which management reports do owners actually look at today (share examples)? Any statutory reports?
-
-### Legal/regulatory/finance
-19. Confirm applicable **tax regimes** per pilot city/province, invoice formats, and any fiscal-integration mandate (engage tax advisor now).
-20. Confirm **police/authority guest reporting** requirements and formats (per province), plus foreign guest forms.
-21. Data protection posture: is a DPO/legal counsel engaged? Acceptable cross-border hosting? **AWS region choice** (UAE/Bahrain vs Mumbai; any customer constraints?).
-22. Will the company handle funds (settlement to hotels) or only connect hotels' own merchant accounts? (Strongly recommend the latter.)
-23. Corporate customers: standard payment terms, WHT handling expectations, credit-limit governance?
-
-### Technical/organisational
-24. Approve **identity build-vs-buy** (in-house behind interface vs managed IdP)?
-25. Approve stack versions policy and **ORM choice** (Kysely/SQL-first)?
-26. Data migration: which legacy systems/formats must be imported at pilots?
-27. SLA promises for pilot (uptime, support hours, response times) and support staffing (Urdu/English)?
-28. Will the platform provide hardware guidance/resale (tablets, signature pads, ID scanners, printers, UPS)?
-29. Are there existing integrations/vendors mandated (POS, accounting like QuickBooks, SMS aggregator, lock vendor)?
-30. Branding, domain names, and legal entity that will contract with customers?
-31. Who owns product decisions day-to-day (single accountable product owner)?
-32. Data retention defaults (ID images, guest profiles) you want to set as product defaults?
-33. Which hotels will let us observe front-desk/night-audit/housekeeping operations for a week before UI freeze?
-34. Appetite for early external security review/pen test and certification (ISO 27001/SOC 2) timelines for enterprise groups?
-35. Success metrics for MVP (e.g., pilot NPS, time-to-first-booking, reduction in cash variance, audit completion time)?
+All 35 questions were answered by the product owner (Irfan A Rehman). Answers and their design impact are logged in [`09`](09-stakeholder-decisions-and-scope-changes.md) §2; remaining inputs are in `09` §10. Highlights: pilot = Sunset BnB (Boulevard, Creek, Ramna); channel manager deferred; PayFast as first gateway; WhatsApp click-to-chat first; Urdu + English staff UI; dual pricing; hotel-owned merchant accounts; hosting outside India, ideally in Pakistan; team of 3–5.

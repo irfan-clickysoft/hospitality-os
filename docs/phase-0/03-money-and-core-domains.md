@@ -1,4 +1,6 @@
 # 03 — Money & Mission-Critical Domains
+
+> **Revision 1 (2026-10-17):** stakeholder answers and new requirements are recorded in [`09-stakeholder-decisions-and-scope-changes.md`](09-stakeholder-decisions-and-scope-changes.md). Where this file conflicts with `09`, `09` wins.
 Covers **R** Folio & Billing · **S** Payments · **T** Cashier · **U** Night Audit · **V** Corporate Accounts, plus the **state machines** (checklist items 18–23 and the state-machine section). SQL blocks are *illustrative design sketches*, not migrations.
 
 ---

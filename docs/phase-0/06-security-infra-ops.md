@@ -1,4 +1,6 @@
 # 06 — Security, Tenant Isolation, AWS, DR, Observability, Cross-cutting Concerns
+
+> **Revision 1 (2026-10-17):** stakeholder answers and new requirements are recorded in [`09-stakeholder-decisions-and-scope-changes.md`](09-stakeholder-decisions-and-scope-changes.md). Where this file conflicts with `09`, `09` wins.
 Covers **AJ–AM** (checklist items 30, 31) plus i18n, offline, performance and test strategy.
 
 ---

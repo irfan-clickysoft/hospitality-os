@@ -1,4 +1,6 @@
 # 05 — Technical Architecture, Domains, ERD, API, Events, Integrations
+
+> **Revision 1 (2026-10-17):** stakeholder answers and new requirements are recorded in [`09-stakeholder-decisions-and-scope-changes.md`](09-stakeholder-decisions-and-scope-changes.md). Where this file conflicts with `09`, `09` wins.
 Covers **AD–AI** (checklist items 24–29, 33–34 and the ERD).
 
 ---

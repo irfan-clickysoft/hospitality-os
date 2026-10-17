@@ -1,4 +1,6 @@
 # 04 — Inventory Engine, Rates, CRS, Channels, Booking Engine, Apps, Back Office, Reporting
+
+> **Revision 1 (2026-10-17):** stakeholder answers and new requirements are recorded in [`09-stakeholder-decisions-and-scope-changes.md`](09-stakeholder-decisions-and-scope-changes.md). Where this file conflicts with `09`, `09` wins.
 Covers **W–AC** plus the availability and rate engine designs they depend on (checklist items 24 partial, 32–35).
 
 ---

@@ -1,5 +1,7 @@
 # 08 — Decision Register (ADR-style)
 
+> **Revision 1 (2026-10-17):** amended and extended per stakeholder answers — see [`09`](09-stakeholder-decisions-and-scope-changes.md). Amendments are marked **[REV1]** below.
+
 Every significant technical recommendation in Phase 0, in the required format:
 **RECOMMENDATION · WHY · ALTERNATIVES · TRADE-OFF · FUTURE IMPACT.**
 IDs (D-01…) are referenced from other documents.
@@ -91,6 +93,8 @@ IDs (D-01…) are referenced from other documents.
 
 ## D-11 Identity: build in-house Identity module behind an interface (Cognito/WorkOS remain fallbacks)
 
+**[REV1] Revised recommendation.** With a 3–5-person team, on-prem and Pakistan-hosting requirements, a managed IdP (Cognito/Auth0/Clerk) is a poor fit (cloud lock-in, cost, residency). Hand-rolling auth primitives is also wrong. **Use a vetted open-source auth library/framework inside the NestJS codebase** (Argon2id, TOTP/WebAuthn, session + refresh handling from maintained libraries), behind the `Identity` interface; run a 1-week evaluation spike in M0 comparing library-based auth vs self-hosted Keycloak (heavier; consider only if enterprise SSO arrives early). Realms (staff, corporate, partner, guest) and scoped RBAC remain our code. Pen-test before external customers.
+
 - **RECOMMENDATION.** In-house: Argon2id, TOTP + WebAuthn (passkeys), server-side sessions (web, httpOnly/SameSite cookies) and short-lived access + rotating refresh tokens (mobile). Separate identity *realms*: `platform`, `tenant_staff`, `corporate`, `guest`. Authorization always server-side via RBAC with scoped role assignments.
 - **WHY.** Our authz model (scope = tenant/legal entity/property/department; limits like max discount) is domain-specific; the auth *primitives* are the easy part. Also avoids per-MAU pricing on a low-ARPU market.
 - **ALTERNATIVES.** AWS Cognito (cheap, awkward customization/migration), Auth0/Clerk/WorkOS (fast, costly at scale, data residency questions).
@@ -98,6 +102,8 @@ IDs (D-01…) are referenced from other documents.
 - **FUTURE IMPACT.** OIDC/SAML SSO for enterprise tenants added in Phase 2/3 through the same interface.
 
 ## D-12 Mobile: two apps, one Expo monorepo with shared packages; staff app in MVP, guest native app in Phase 2
+
+**[REV1]** Stakeholder confirmed two apps (staff native, guest PWA first) and asked for a management app. **Decision:** the *Management* experience is a **role-based module inside the staff app** plus a responsive web dashboard — not a third binary. Staff app UI is bilingual (English/Urdu) from R1; the guest PWA is per-tenant branded (R2).
 
 - **RECOMMENDATION.** `apps/mobile-staff` (housekeeping, maintenance, later transfers/F&B) and `apps/mobile-guest` (Phase 2) as **separate Expo apps** sharing `packages/ui-native`, `api-client`, `domain-types`, `i18n`. MVP guest experience = mobile-first **web/PWA** (`guest-web`) reached via WhatsApp/SMS/email links.
 - **WHY / trade-off matrix.**
@@ -139,6 +145,8 @@ IDs (D-01…) are referenced from other documents.
 - **FUTURE IMPACT.** Swappable to SQS with the outbox relay as the seam.
 
 ## D-16 AWS region: prefer UAE (`me-central-1`) or Bahrain (`me-south-1`) over Mumbai, pending stakeholder/legal input
+
+**[REV1]** India is excluded; the owner prefers a Pakistan-based provider; no counsel engaged. **Recommendation:** build cloud-portable (containers, PostgreSQL, Redis, S3-compatible storage; IaC with no proprietary-only services in the core path) and pilot on a managed Middle-East AWS region (UAE/Bahrain) *or* a Pakistani provider that demonstrably offers managed PostgreSQL, backups, monitoring and an SLA; migrate to Pakistan hosting when counsel and an ops partner are in place. Trade-off: speed and low ops burden (AWS) vs sovereignty (local). The same portability enables the later on-prem edition. Decision pending (`09` §10).
 
 - **RECOMMENDATION.** Deploy primary in a Middle-East region if required services are available; Mumbai as latency-friendly fallback. Confirm current service availability and data-localisation obligations before choosing.
 - **WHY.** No AWS region in Pakistan. Latency from Karachi/Lahore to Gulf and Mumbai is comparable; Pakistani customers and regulators may be uncomfortable with Indian-hosted guest data given political sensitivities; a draft data-protection regime (status to be verified) may restrict cross-border transfer of some categories.
@@ -201,3 +209,45 @@ IDs (D-01…) are referenced from other documents.
 - **ALTERNATIVES.** Nx; polyrepo.
 - **TRADE-OFF.** Remote-cache setup needed for CI speed.
 - **FUTURE IMPACT.** Clear seams for extracting services later.
+
+---
+
+## D-24 Travel agents/partners: platform-level partner identity with per-tenant connections; no cross-tenant joins
+
+- **RECOMMENDATION.** `partner_identity` (platform realm) + `partner_connection` (per tenant, contract: properties, rates, commission, credit). Within a tenant (R2), agents are `company(type=TRAVEL_AGENT)` users of the partner portal. Cross-tenant ("one login for hotels from several operators") is **R3**: the portal fans out to each connected tenant under that tenant's context and merges only the contracted view; bookings are created inside each tenant; no shared tables.
+- **WHY.** Preserves tenant isolation (the non-negotiable) while meeting the agent use case; commercial/legal consent between hotel operators is needed before it can exist.
+- **ALTERNATIVES.** One global agent table with cross-tenant reads (rejected: isolation risk); each agent has separate logins per tenant (works day one, poor UX).
+- **TRADE-OFF.** Fan-out latency and partial results; duplicated agent profiles across tenants until federation ships.
+- **FUTURE IMPACT.** Becomes the foundation of a marketplace channel and reseller network.
+
+## D-25 Loyalty as an immutable points ledger with rule-driven earn/redeem/tier
+
+- **RECOMMENDATION.** `loyalty_ledger` is append-only with reversals, like folio postings; tiers/earn/redeem/benefits are configuration; accounts can belong to guests or companies; earning occurs from settled, eligible postings at night audit/checkout.
+- **WHY.** Points are a liability and a fraud target; the same integrity model as money prevents drift and abuse.
+- **ALTERNATIVES.** Mutable balance counter; third-party loyalty SaaS.
+- **TRADE-OFF.** More tables and reconciliation jobs; fully controllable and tenant-isolated.
+- **FUTURE IMPACT.** Supports brand-level programmes for groups, partner earn/burn later.
+
+## D-26 Payments: PayFast as the first gateway adapter, hotel-owned merchant accounts only
+
+- **RECOMMENDATION.** Implement `PaymentProvider` for PayFast first (payment links and hosted checkout), keep cash/bank-transfer/manual card as always-available fallbacks; platform never holds or routes funds. Verify PayFast merchant onboarding, API/webhook signing, refund/void support and settlement reports before design freeze of the adapter.
+- **WHY.** Matches the pilot; limits regulatory exposure (no payment-intermediary role).
+- **ALTERNATIVES.** Multiple gateways at once; platform-level merchant of record.
+- **TRADE-OFF.** One provider's reliability and documentation quality dictate early online-payment UX.
+- **FUTURE IMPACT.** Additional adapters (JazzCash, Easypaisa, cards) slot in without core changes.
+
+## D-27 Compliance and security-advisory rules as a configurable, audited rule engine
+
+- **RECOMMENDATION.** `compliance_rule` with conditions (nationality, residency, city/property, dates, party size) and actions (info, warn, approval, task, block, require document, notify), evaluated at quote, booking, pre-check-in, check-in; authority-report templates per jurisdiction; all hits/overrides audited; editable by authorised managers without a release.
+- **WHY.** Requirements vary by region and over time (e.g., Karachi vs Islamabad) and cannot be hard-coded.
+- **ALTERNATIVES.** Hard-coded country lists; manual staff memory.
+- **TRADE-OFF.** Misconfigured rules could wrongly block or wrongly pass guests ⇒ preview/test mode and versioning.
+- **FUTURE IMPACT.** Reusable for other markets via jurisdiction packs.
+
+## D-28 Delivery in releases with phased pilot go-live, sized for a 3–5-person team
+
+- **RECOMMENDATION.** R1a (Boulevard go-live) → R1b (all three Sunset properties; pilot clock) → R2 (guest/partners) → R3 (distribution) → R4 (enterprise/on-prem); buy/embed commodity capabilities; strict R1 gate = what Sunset needs in the first 90 days.
+- **WHY.** The original plan assumed a 10–12-person team; shipping a thin, trusted core to one property first reduces risk and generates real feedback.
+- **ALTERNATIVES.** Single big-bang MVP; reduce quality bars (rejected for money/inventory/isolation).
+- **TRADE-OFF.** Some pilot staff run parallel paper/Excel for a while; features like guest app and channel manager arrive later.
+- **FUTURE IMPACT.** Product is proven in production before it is sold to other hotels after the 90-day pilot.

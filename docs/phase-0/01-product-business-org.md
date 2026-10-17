@@ -1,4 +1,6 @@
 # 01 — Product, Business Model, Hierarchy, Personas, RBAC, Module Map
+
+> **Revision 1 (2026-10-17):** stakeholder answers and new requirements are recorded in [`09-stakeholder-decisions-and-scope-changes.md`](09-stakeholder-decisions-and-scope-changes.md). Where this file conflicts with `09`, `09` wins.
 Covers deliverables **A–F** (checklist items 1–8).
 
 ---
@@ -166,6 +168,8 @@ flowchart TD
 - Enforcement: NestJS guard → `AuthorizationService.can(actor, permission, resource{tenant, property, department})` on **every** endpoint (deny by default). Frontend uses permission list only for UI hints.
 
 ### E.2 Role catalogue
+**Revision 1 additions (see `09` §4.3):** Admin, Management/Executive, Finance Officer, Accounts Officer, Internal Auditor, Marketing, Sales, HR, Kitchen/Chef, Gate Security, Concierge, Transport/Driver; Travel Agent/Partner users (see `09` §4.5).
+
 **Platform:** Super Admin, Sales, Customer Success, Support, Finance, Technical Support, Implementation Specialist, Read-only Auditor.
 **Tenant/Group:** Group Owner, Group Administrator, Regional Manager, Finance Controller, Revenue Manager, Central Reservation Agent, Group Auditor.
 **Property:** General Manager, Front Office Manager, Front Desk Agent, Reservation Agent, Night Auditor, Accountant, Cashier, Housekeeping Manager, Housekeeper, Maintenance Manager, Maintenance Staff, F&B Manager, Restaurant Cashier, Sales Manager, Corporate Sales, Concierge, Security, Read-only.
@@ -279,7 +283,7 @@ Guest: manage own profile, reservations, pre-check-in, folio (own), payments, re
 | WhatsApp Business API templates | P2 | needs BSP/Meta verification |
 | Push notifications | P2 | |
 | i18n framework (RTL-ready) | M | English UI only |
-| Urdu UI (staff + guest) | P2 | |
+| Urdu UI (staff; user-selectable en/ur) | **M** | Revision 1; guest documents stay English |
 | Arabic | P3 | |
 | Public API + webhooks (outbound) | P2 | |
 | SSO (OIDC/SAML) | P3 | |
@@ -315,9 +319,9 @@ Guest: manage own profile, reservations, pre-check-in, folio (own), payments, re
 | Promo codes | P2 |
 | Travel-agent rates/commission | P2 |
 | Bulk rate/restriction editor + rate calendar UI | M |
-| Nationality/residency-based rate eligibility | P2 |
+| Nationality/residency-based (dual) rate eligibility | **M** |
 | Rate audit/versioning | M |
-| Day-use / hourly stays | P2 |
+| Day-use / hourly stays | Dropped (stakeholder: not needed) |
 | Revenue recommendations | P3 |
 
 ### F.4 Reservations
@@ -358,7 +362,7 @@ Guest: manage own profile, reservations, pre-check-in, folio (own), payments, re
 | Consent & communication preferences | M |
 | Blacklist / do-not-rent (property/tenant) | M |
 | Companies link | M |
-| Loyalty | P3 |
+| Loyalty programme (digital card, Silver/Gold/Platinum, individual + corporate) | **P2 (R2)**; ledger model reserved in R1 |
 | Guest merge/unmerge | P2 |
 | Marketing segments/campaigns | P3 |
 
@@ -369,7 +373,7 @@ Guest: manage own profile, reservations, pre-check-in, folio (own), payments, re
 | Check-in (ID capture, room assign, deposit, key note, vehicle, companions) | M |
 | Walk-in fast path | M |
 | Digital registration card + signature + PDF | M |
-| Pre-check-in link (web form) | P2 |
+| Pre-check-in link + repeat-guest self check-in + guest hub | P2 (R2); staff ID capture + OCR assist M/R1 |
 | Smart/express check-in with room-ready notice | P2 |
 | Digital keys/lock adapters | P3 (first adapter P2 optional) |
 | Guest messages/notes/wake-up calls, lost & found (front desk) | P2 |
@@ -385,7 +389,7 @@ Guest: manage own profile, reservations, pre-check-in, folio (own), payments, re
 | Invoices (gapless per series), credit notes, PDF | M |
 | Payment methods: cash, bank transfer (+proof/verify), manual card/POS slip, corporate credit | M |
 | `PaymentProvider` abstraction | M |
-| First online gateway (hosted page), JazzCash/Easypaisa | P2 |
+| First online gateway (PayFast, hosted page) | **R1-late**; JazzCash/Easypaisa P2 |
 | Pre-auth/capture | P2 |
 | Refund (full/partial), reversal | M (manual) / P2 (gateway) |
 | Cashier sessions, float, cash drops, variance, manager review | M |
@@ -402,7 +406,7 @@ Guest: manage own profile, reservations, pre-check-in, folio (own), payments, re
 | Basic corporate portal (view reservations, invoices, statements, submit booking request) | M |
 | Corporate direct booking + approvals + cost centers + spend analytics | P2 |
 | Sales pipeline (lead→won) light | P2 |
-| Travel agents, commissions | P2 |
+| Travel agents, commissions, partner portal | P2 (R2); staff-entered agent bookings M |
 | Groups & events | P2 |
 
 ### F.10 Operations
