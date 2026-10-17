@@ -128,7 +128,7 @@ describe('check-in', () => {
 
   it('will not put a guest into a dirty room without the override (permission + fresh second factor), nor into an occupied or blocked one', async () => {
     const w = await sunset();
-    await ok(call('PUT', `/v1/properties/${w.pid}/rooms/${w.room['101']}/housekeeping-status`, O, { status: 'DIRTY' }));
+    await ok(call('PUT', `/v1/properties/${w.pid}/housekeeping/rooms/${w.room['101']}/status`, O, { status: 'DIRTY' }));
     const b = await book(w); await setBd(w, '2026-11-05');
     await code(checkIn(w, b, '101'), 409, 'ROOM_NOT_READY');
     await code(checkIn(w, b, '101', { allowNotReady: true }, O), 403, 'MFA_REQUIRED');
@@ -222,7 +222,7 @@ describe('room move', () => {
     const w = await sunset(); const b = await book(w, { departure: '2026-11-08' }); await setBd(w, '2026-11-05'); await ok(checkIn(w, b, '101'));
     await setBd(w, '2026-11-06');
     await code(call('POST', url(w, b.id, b.line, 'move'), O, { roomId: w.room['201'], reason: 'AC noisy' }), 422, 'WRONG_ROOM_TYPE');
-    await ok(call('PUT', `/v1/properties/${w.pid}/rooms/${w.room['102']}/housekeeping-status`, O, { status: 'DIRTY' }));
+    await ok(call('PUT', `/v1/properties/${w.pid}/housekeeping/rooms/${w.room['102']}/status`, O, { status: 'DIRTY' }));
     await code(call('POST', url(w, b.id, b.line, 'move'), O, { roomId: w.room['102'], reason: 'AC noisy' }), 409, 'ROOM_NOT_READY');
     const r = await ok(call('POST', url(w, b.id, b.line, 'move'), O, { roomId: w.room['103'], reason: 'AC noisy' }));
     expect(r.lines[0].assignedRoom.number).toBe('103');
@@ -234,7 +234,7 @@ describe('room move', () => {
     // a room that someone else has booked later in the stay cannot be taken
     const later = await book(w, { arrival: '2026-11-07', departure: '2026-11-08' });
     await ok(call('PUT', `/v1/properties/${w.pid}/reservations/${later.id}/rooms/${later.line}/assignment`, O, { roomId: w.room['101'] }));
-    await ok(call('PUT', `/v1/properties/${w.pid}/rooms/${w.room['101']}/housekeeping-status`, O, { status: 'CLEAN' }));
+    await ok(call('PUT', `/v1/properties/${w.pid}/housekeeping/rooms/${w.room['101']}/status`, O, { status: 'CLEAN' }));
     await code(call('POST', url(w, b.id, b.line, 'move'), O, { roomId: w.room['101'], reason: 'Back again' }), 409, 'ROOM_NOT_FREE');
   });
 });
@@ -315,16 +315,18 @@ describe('room rack', () => {
 });
 
 describe('housekeeping status', () => {
-  it('housekeepers can update their property’s rooms (audited, evented); nobody else’s', async () => {
+  it('a supervisor can override a room’s state (audited); nobody else’s, and attendants cannot', async () => {
     const w = await sunset(); const other = await sunset();
-    const hk = await addUser(T.tenantId, `hk${++n}@fd.test`); await assignRole(T.tenantId, hk, 'housekeeper', 'PROPERTY', w.pid);
+    const hk = await addUser(T.tenantId, `hk${++n}@fd.test`); await assignRole(T.tenantId, hk, 'housekeeping_supervisor', 'PROPERTY', w.pid);
     const H = as(T.tenantId, hk);
-    await ok(call('PUT', `/v1/properties/${w.pid}/rooms/${w.room['101']}/housekeeping-status`, H, { status: 'DIRTY' }));
-    const r = await ok(call('PUT', `/v1/properties/${w.pid}/rooms/${w.room['101']}/housekeeping-status`, H, { status: 'INSPECTED' }));
+    const att = await addUser(T.tenantId, `att${++n}@fd.test`); await assignRole(T.tenantId, att, 'housekeeper', 'PROPERTY', w.pid);
+    expect((await call('PUT', `/v1/properties/${w.pid}/housekeeping/rooms/${w.room['101']}/status`, as(T.tenantId, att), { status: 'CLEAN' })).statusCode).toBe(403);   // attendants work through tasks, not by editing room state
+    await ok(call('PUT', `/v1/properties/${w.pid}/housekeeping/rooms/${w.room['101']}/status`, H, { status: 'DIRTY' }));
+    const r = await ok(call('PUT', `/v1/properties/${w.pid}/housekeeping/rooms/${w.room['101']}/status`, H, { status: 'INSPECTED' }));
     expect(r).toMatchObject({ number: '101', hkStatus: 'INSPECTED' });
-    expect((await call('PUT', `/v1/properties/${other.pid}/rooms/${other.room['101']}/housekeeping-status`, H, { status: 'CLEAN' })).statusCode).toBe(403);
-    expect((await call('PUT', `/v1/properties/${w.pid}/rooms/${other.room['101']}/housekeeping-status`, H, { status: 'CLEAN' })).statusCode).toBe(404);
-    expect((await call('PUT', `/v1/properties/${w.pid}/rooms/${w.room['101']}/housekeeping-status`, H, { status: 'SPARKLING' })).statusCode).toBe(400);
+    expect((await call('PUT', `/v1/properties/${other.pid}/housekeeping/rooms/${other.room['101']}/status`, H, { status: 'CLEAN' })).statusCode).toBe(403);
+    expect((await call('PUT', `/v1/properties/${w.pid}/housekeeping/rooms/${other.room['101']}/status`, H, { status: 'CLEAN' })).statusCode).toBe(404);
+    expect((await call('PUT', `/v1/properties/${w.pid}/housekeeping/rooms/${w.room['101']}/status`, H, { status: 'SPARKLING' })).statusCode).toBe(400);
     expect(await adminDb.selectFrom('audit_log').select('id').where('tenant_id', '=', T.tenantId).where('action', '=', 'housekeeping.status').where('resource_id', '=', w.room['101']).execute()).toHaveLength(2);
   });
 });

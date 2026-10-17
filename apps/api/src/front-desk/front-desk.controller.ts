@@ -38,6 +38,4 @@ export class FrontDeskController {
     return r.body;
   }
 
-  @Put('rooms/:roomId/housekeeping-status') @RequirePermission('housekeeping.update', P)
-  hk(@Param('propertyId', uuid()) pid: string, @Param('roomId', uuid()) roomId: string, @Body() body: unknown) { return this.svc.setHousekeepingStatus(pid, roomId, parse(S.HousekeepingStatus, body).status); }
 }

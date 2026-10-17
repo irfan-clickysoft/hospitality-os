@@ -9,6 +9,7 @@ import { SecretBox } from '../common/secret-box.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { residencyOf } from '../guests/schemas.js';
 import { FolioService, fmt } from '../folio/folio.service.js';
+import { HousekeepingService } from '../housekeeping/housekeeping.service.js';
 import { IdempotencyService, hashRequest } from '../idempotency/idempotency.service.js';
 import { InventoryService } from '../inventory/inventory.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
@@ -31,6 +32,7 @@ export class FrontDeskService {
     @Inject(ReservationsService) private readonly res: ReservationsService,
     @Inject(RatesService) private readonly rates: RatesService,
     @Inject(FolioService) private readonly folios: FolioService,
+    @Inject(HousekeepingService) private readonly hk: HousekeepingService,
     @Inject(InventoryService) private readonly inv: InventoryService,
     @Inject(IdempotencyService) private readonly idem: IdempotencyService,
     @Inject(AuditService) private readonly audit: AuditService,
@@ -75,7 +77,7 @@ export class FrontDeskService {
     if (blocked) throw fail(409, 'ROOM_BLOCKED', `Room ${room.number} is out of order / out of service during this stay`);
     const occupied = await trx.selectFrom('room_assignment').select('id').where('room_id', '=', roomId).where('status', '=', 'IN_HOUSE').where('assignment_ref', '<>', lineId).executeTakeFirst();
     if (occupied) throw fail(409, 'ROOM_OCCUPIED', `Room ${room.number} still has a guest in it. Check that guest out first.`);
-    if (room.hk_status === 'DIRTY') {
+    if (room.hk_status === 'DIRTY' || room.hk_status === 'CLEANING') {
       if (!allowNotReady) throw fail(409, 'ROOM_NOT_READY', `Room ${room.number} has not been cleaned yet`, { roomId, hkStatus: room.hk_status });
       await this.needOverride(userId, propertyId);
     }
@@ -196,9 +198,8 @@ export class FrontDeskService {
       if (lastRoom && balance === 0n && !after.lines.some((l) => l.id !== lineId && (l.status === 'CONFIRMED' || l.status === 'OPTION'))) { await this.folios.closeIn(trx, propertyId, folio.id, userId); folioClosed = true; }
       balance = BigInt((await this.folios.folioRow(trx, propertyId, folio.id)).balance_minor);
       if (assignment) {
-        await trx.updateTable('room').set({ hk_status: 'DIRTY', hk_updated_at: new Date(this.clock.now()), version: sql`version + 1` as never }).where('id', '=', assignment.room_id).execute();
         await trx.updateTable('room_assignment').set({ end_reason: 'CHECK_OUT' }).where('id', '=', assignment.assignmentId).execute();
-        await this.outbox.publish(trx, { aggregateType: 'room', aggregateId: assignment.room_id, eventType: 'RoomStatusChanged', propertyId, payload: { roomId: assignment.room_id, number: assignment.number, hkStatus: 'DIRTY', reason: 'CHECK_OUT' } });
+        await this.hk.onRoomVacated(trx, propertyId, assignment.room_id, lineId, 'CHECK_OUT', userId);
       }
       await this.res.history(trx, propertyId, id, { lineId, action: 'CHECK_OUT_DETAILS', reason: i.reason, details: { room: assignment?.number ?? null, earlyDeparture: early, originalDeparture: early ? line.departure : null, overstayNights } });
       await this.audit.record(trx, { action: 'frontdesk.check_out', resourceType: 'reservation', resourceId: id, propertyId, after: { room: assignment?.number ?? null, earlyDeparture: early, overstayNights }, note: i.reason });
@@ -231,11 +232,10 @@ export class FrontDeskService {
         if ((e as { code?: string }).code === '23P01') throw fail(409, 'ROOM_NOT_FREE', `Room ${target.number} is booked by someone else during this stay`);
         throw e;
       }
-      await trx.updateTable('room').set({ hk_status: 'DIRTY', hk_updated_at: new Date(this.clock.now()), version: sql`version + 1` as never }).where('id', '=', cur.room_id).execute();
+      await this.hk.onRoomVacated(trx, propertyId, cur.room_id, lineId, 'ROOM_MOVE', userId);
       await this.res.history(trx, propertyId, id, { lineId, action: 'ROOM_MOVED', reason: i.reason, details: { from: cur.number, to: target.number } });
       await this.audit.record(trx, { action: 'frontdesk.room_move', resourceType: 'reservation', resourceId: id, propertyId, before: { room: cur.number }, after: { room: target.number }, note: i.reason });
       await this.outbox.publish(trx, { aggregateType: 'reservation', aggregateId: id, eventType: 'RoomChanged', propertyId, payload: { reservationId: id, lineId, roomId: i.roomId, roomNumber: target.number, previousRoomNumber: cur.number, inHouse: true } });
-      await this.outbox.publish(trx, { aggregateType: 'room', aggregateId: cur.room_id, eventType: 'RoomStatusChanged', propertyId, payload: { roomId: cur.room_id, number: cur.number, hkStatus: 'DIRTY', reason: 'ROOM_MOVE' } });
       return this.res.detail(trx, propertyId, id);
     });
   }
@@ -288,21 +288,6 @@ export class FrontDeskService {
       if (reveal) await this.audit.record(trx, { action: 'frontdesk.view_id', resourceType: 'reservation', resourceId: id, propertyId, note: `${rows.length} document(s) revealed` });
       return { items: rows.map((r) => ({ id: r.id, fullName: r.full_name, isPrimary: r.is_primary, ageGroup: r.age_group, idType: r.id_type, idNumber: reveal ? this.box.open(r.id_number_sealed, this.aad(lineId)) : maskId(r.id_type as IdType, r.id_last4),
         nationality: r.nationality, idExpiry: r.id_expiry })) };
-    });
-  }
-
-  // ───────────── housekeeping status (minimal; the housekeeping module builds on this) ─────────────
-  async setHousekeepingStatus(propertyId: string, roomId: string, status: 'CLEAN' | 'DIRTY' | 'INSPECTED') {
-    return this.tdb.tx(async (trx) => {
-      await this.res.prop(trx, propertyId);
-      const room = await trx.selectFrom('room').select(['id', 'number', 'hk_status']).where('id', '=', roomId).where('property_id', '=', propertyId).forUpdate().executeTakeFirst();
-      if (!room) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room not found' });
-      if (room.hk_status !== status) {
-        await trx.updateTable('room').set({ hk_status: status, hk_updated_at: new Date(this.clock.now()), version: sql`version + 1` as never }).where('id', '=', roomId).execute();
-        await this.audit.record(trx, { action: 'housekeeping.status', resourceType: 'room', resourceId: roomId, propertyId, before: { status: room.hk_status }, after: { status } });
-        await this.outbox.publish(trx, { aggregateType: 'room', aggregateId: roomId, eventType: 'RoomStatusChanged', propertyId, payload: { roomId, number: room.number, hkStatus: status, reason: 'MANUAL' } });
-      }
-      return { id: roomId, number: room.number, hkStatus: status };
     });
   }
 
