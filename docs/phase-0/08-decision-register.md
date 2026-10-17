@@ -146,6 +146,8 @@ IDs (D-01…) are referenced from other documents.
 
 ## D-16 AWS region: prefer UAE (`me-central-1`) or Bahrain (`me-south-1`) over Mumbai, pending stakeholder/legal input
 
+**[REV2] DECIDED: AWS** (Middle-East region chosen at M0 subject to service availability; fixed NAT egress IPs for PayFast allow-listing; portable build retained for later Pakistan/on-prem options).
+
 **[REV1]** India is excluded; the owner prefers a Pakistan-based provider; no counsel engaged. **Recommendation:** build cloud-portable (containers, PostgreSQL, Redis, S3-compatible storage; IaC with no proprietary-only services in the core path) and pilot on a managed Middle-East AWS region (UAE/Bahrain) *or* a Pakistani provider that demonstrably offers managed PostgreSQL, backups, monitoring and an SLA; migrate to Pakistan hosting when counsel and an ops partner are in place. Trade-off: speed and low ops burden (AWS) vs sovereignty (local). The same portability enables the later on-prem edition. Decision pending (`09` §10).
 
 - **RECOMMENDATION.** Deploy primary in a Middle-East region if required services are available; Mumbai as latency-friendly fallback. Confirm current service availability and data-localisation obligations before choosing.
@@ -230,6 +232,7 @@ IDs (D-01…) are referenced from other documents.
 
 ## D-26 Payments: PayFast as the first gateway adapter, hotel-owned merchant accounts only
 
+- **[REV2]** Extended use: payment links for **guarantee-by-deposit on OTA bookings** (`09` §4.18). Portal access is already obtained.
 - **RECOMMENDATION.** Implement `PaymentProvider` for PayFast first (payment links and hosted checkout), keep cash/bank-transfer/manual card as always-available fallbacks; platform never holds or routes funds. Verify PayFast merchant onboarding, API/webhook signing, refund/void support and settlement reports before design freeze of the adapter.
 - **WHY.** Matches the pilot; limits regulatory exposure (no payment-intermediary role).
 - **ALTERNATIVES.** Multiple gateways at once; platform-level merchant of record.

@@ -12,7 +12,7 @@
 
 | Item | Detail |
 |---|---|
-| Properties | **Boulevard** (Karachi): 9 rooms + 1 meeting room · **Creek** (Karachi) · **Ramna** (Islamabad) — room counts for Creek/Ramna still to be provided |
+| Properties | **Boulevard** (Karachi): 9 rooms + 1 conference/meeting room (sold **hourly or full-day**) · **Creek** (Karachi): 10 rooms · **Ramna** (Islamabad): 8 rooms — **27 rooms in total** |
 | Tenancy | One tenant (Sunset), three properties, **two tax jurisdictions** (Sindh, Islamabad) ⇒ tax configuration per property is mandatory |
 | Guests | Mostly **corporate** across all three properties; OTA bookings (notably Booking.com, with frequent unpaid cancellations); individuals |
 | Operations | Corporate accounts on credit; **cash-heavy**; some payments to bank accounts (see §4.15) |
@@ -36,9 +36,9 @@
 | 7 | Reservation state model approved | D-06 final |
 | 8 | Two apps approved + a **management app** | §4.6 (management module in staff app + responsive dashboard) |
 | 9 | Channel manager = Phase 2, after PMS runs in the properties | Confirms D-14 |
-| 10 | Gateway = **PayFast** | First `PaymentProvider` adapter (§4.12 / ADR D-26); API terms to verify |
+| 10 | Gateway = **PayFast** (portal access obtained; IP allow-listing available) | First `PaymentProvider` adapter (§4.12 / ADR D-26); API terms to verify |
 | 11 | WhatsApp click-to-chat first, API later | Confirms plan |
-| 12 | Many unpaid OTA cancellations; sell to walk-ins and reconfirm with the other guest | §4.8 reconfirmation & at-risk inventory |
+| 12 | Many unpaid OTA cancellations; sell to walk-ins and reconfirm with the other guest. Booking.com offers no prepaid option for Pakistani hotels | §4.8 reconfirmation & at-risk inventory; **§4.18 guarantee-by-deposit via PayFast** |
 | 13 | Dual pricing local/foreign (+discounts), weekend & seasonal, extra-person/breakfast/extra-bed pricing; quotes **exclude tax**, tax added at end; invoice tax differs by line type and city | §4.7; **tax inputs pending from stakeholder** |
 | 14 | No-show/cancellation charges stated in quote, settled per property; OTAs may not pay | §4.9 OTA fee receivable, per-property policy templates |
 | 15 | No hostel/per-bed/hourly | Removed from roadmap (per-bed P3 and day-use P2 dropped) |
@@ -154,12 +154,23 @@ Departments are first-class (`department` table) and are the unit for task routi
 - **Quote rule:** quotes show rates **excluding tax**, then a final "taxes" line and grand total; the folio/invoice then applies the **jurisdiction's actual tax rules per line type**.
 - **Line-type taxation:** room, F&B, laundry and other services carry different tax treatments (rates differ by line type and by province/Islamabad). Each hotel can define its tax rules (`tax_rule` per property, effective-dated). **Rate-component allocation ("package allocation")**: when a rate bundles breakfast with the room, the system can split the charged price into *room* and *breakfast* components using configured standalone prices/allocation percentages so each component takes its own tax treatment. Guardrails: allocations must reflect configured, published component values (not arbitrary), are versioned and audited, and are shown in invoice detail. **The tax advisor must confirm the allowed allocation method per jurisdiction before Sunset's go-live.**
 - **Pending from stakeholder:** the detailed tax calculation worksheet(s) for Sindh and Islamabad (and Punjab for future customers); invoice format samples. They become golden test fixtures.
-- **Meeting room (Boulevard):** R1 — sold as a service-catalogue item posted to folios (charge per half/full day); R2 — bookable *space* resource with time-slot calendar (distinct from rooms; no hourly room sales).
+- **Conference room (Boulevard):** sold **hourly or full-day**, so a bookable *space* resource with a time-slot calendar (separate from room inventory; no hourly *room* sales) moves up to **R1b**: hourly/half-day/full-day pricing, conflict-free slot booking (exclusion constraint on time ranges), setup/changeover buffer, add-ons (catering via service catalogue), posting to a guest folio or a company/event folio, and a Spaces calendar next to the rack.
 
 ### 4.8 OTA No-Show Risk, Reconfirmation & Walk-in Handling — **MVP (manual OTA entry); automation with Channel Manager (R3)**
 - **Overbooking default = 0.** Instead of blanket overbooking, add **"at-risk" reservations**: OTA/unguaranteed bookings flagged `payment_status = UNPAID` and `confirmation_status = UNRECONFIRMED`. A **reconfirmation workflow** creates a task N days/hours before arrival (WhatsApp click-to-chat template: "Please confirm your arrival"). Outcomes: reconfirmed (clears risk), no response by a configurable deadline (reservation becomes **releasable**), or guest cancels.
 - **Sell-through of at-risk inventory:** the walk-in screen shows when the only available units are tied to *at-risk* reservations and offers: (a) quote walk-in while attempting reconfirmation, (b) hold walk-in as an `OPTION` linked to the at-risk reservation ("takes the room if the OTA guest doesn't arrive by T"), (c) release the at-risk reservation as `NO_SHOW` early (per OTA rules) when approved. This gives hotels the benefit of controlled overselling **without ever silently double-selling a physical room** — the physical-room constraint still holds; conflicts are resolved by explicit staff action recorded in audit.
 - Optional `overbook_limit` per room type/date (default 0) remains available for properties that want it; the **walk (relocation) workflow** is R3.
+
+### 4.18 Guarantee-by-Deposit for OTA Bookings (revenue protection) — **R1b**
+**Problem (stakeholder):** Booking.com does not offer prepaid options for Pakistani hotels, so OTA bookings carry no guarantee; no-shows and late cancellations lose revenue.
+**Workflow (PMS-side, using PayFast, hotel's own merchant account):**
+1. OTA reservation arrives (manually entered in R1; imported when the channel manager ships) flagged `UNGUARANTEED / AT_RISK`.
+2. Staff (or an automatic rule per rate plan) opens **Request Guarantee**: system computes the deposit from the property's guarantee policy (first night, a percentage, or fixed amount) and creates a **PayFast payment link** plus a **deposit invoice/proforma** (not a tax invoice until settled, per advisor rules); sent by WhatsApp click-to-chat or email with a payment deadline.
+3. States: `GUARANTEE_REQUESTED → GUARANTEED (paid) | EXPIRED (not paid by deadline) | CANCELLED`. A paid deposit sets `guarantee_type=DEPOSIT`, lifts the at-risk flag, and posts to the **guest-advance liability** (`10` §5). Partial payment is supported (deposit now, balance at stay).
+4. **Cancellation/no-show handling from the snapshot policy** (e.g., free until 72 hours before arrival; later cancellation or no-show = forfeit deposit/charge first night): the system proposes the fee, applies it against the deposit (forfeiture posting with reason), refunds any excess through PayFast or bank transfer, and records an OTA claim in `ota_receivable` where the OTA is liable instead (`4.9`).
+5. If the deposit is not paid by the deadline, the booking stays at-risk and follows the reconfirmation/release rules (`4.8`); the hotel decides.
+6. **Dashboard "Revenue protection":** guaranteed vs unguaranteed OTA bookings, deposit conversion rate, no-show and late-cancellation revenue recovered, revenue lost, at-risk revenue next 14 days, receivables from OTAs.
+**Policy and platform rules to verify before launch (do not assume):** (a) Booking.com's partner terms and the cancellation policy shown to the guest at booking — fees beyond that policy, or soliciting off-platform payments, may breach the OTA contract or be disputable by the guest; (b) restrictions on how hotels may contact OTA guests and use masked contact details; (c) whether card-on-file / tokenised charges are available through PayFast (otherwise the model is deposit-first, which this design already is); (d) consumer-protection and refund rules, and the tax treatment of forfeited deposits and cancellation fees (`10` §9). Policy wording, guest consent text and template messages are tenant-configurable, English.
 
 ### 4.9 Cancellation / No-Show Fees & OTA Receivables — **MVP**
 - Cancellation/no-show charge rules per property and per rate plan (windows, % or nights, caps), **printed in the quote and snapshotted on the booking** (D-06/H.5). Owner-configurable per property; templates provided.
@@ -251,7 +262,7 @@ Guidance (and optional resale): front-desk PC/tablet, **signature pad or tablet*
 | Local guide / city & activity content | — | **R2** |
 | Marketing role/campaigns | P3 | Role in R1; campaigns P3 |
 | Hourly / day-use stays; per-bed (dorm) | P2 / P3 | **Dropped** (not needed) |
-| Meeting room | P2 (definition) / P3 | Service item R1; bookable resource R2 |
+| Meeting/conference room | P2 (definition) / P3 | **Bookable space (hourly/full-day) in R1b** |
 | Channel manager | P2 | R3 (after R1 + R2 are stable at Sunset) |
 | On-premises edition | — | R4 |
 
@@ -264,7 +275,7 @@ My earlier timeline (pilot-ready ≈ month 7–8) assumed 10–12 people and **n
 | Release | Content | Target |
 |---|---|---|
 | **R1a — "Boulevard walking skeleton"** | Tenancy/RBAC/audit; property setup; rooms/types; rates (incl. dual pricing, corporate); availability; reservations + rack; guests + Excel import; check-in/out + registration card; folio, taxes, invoices, cash/bank payments, cashier; HK board + Urdu/English staff app (housekeeping, security); basic reports | **Month 6–8** — go live at **Boulevard (9 rooms)** with parallel paper/Excel run |
-| **R1b — Sunset complete** | Night audit full; corporate accounts + AR + aging; Creek (Karachi) and Ramna (Islamabad) with their own tax rules; OTA reconfirmation/receivables; compliance rules; management KPI module; kitchen/service posting; PayFast payment links; maintenance + OOO | **Month 9–11** — all 3 properties; 90-day pilot clock starts |
+| **R1b — Sunset complete** | Night audit full; **conference-room (hourly/full-day) booking; guarantee-by-deposit for OTA bookings (§4.18);** corporate accounts + AR + aging; Creek (Karachi) and Ramna (Islamabad) with their own tax rules; OTA reconfirmation/receivables; compliance rules; management KPI module; kitchen/service posting; PayFast payment links; maintenance + OOO | **Month 9–11** — all 3 properties; 90-day pilot clock starts |
 | **R2 — Guest & partners** | Guest PWA hub (self check-in, services, local guide, complaints/reviews, folio/pay), loyalty, travel-agent portal + commissions, corporate portal, WhatsApp API, SMS OTP, bookable spaces, white-label guest/booking domains, booking engine | **Month 12–17** (during/after pilot; overlaps marketing to other small hotels) |
 | **R3 — Distribution & scale** | Channel manager (first OTA, then others), CRS, groups, cross-tenant agent federation, revenue tools, reconciliation, ERP connectors | Month 18+ |
 | **R4 — Enterprise** | On-prem edition, SSO, smart-lock adapters, native white-label apps, AI | Later |
@@ -295,12 +306,12 @@ See `08` amendments: **D-11** (identity — revised), **D-12** (mobile — manag
 
 ## 10. Items needed from the product owner
 1. **Tax worksheets** (Sindh, Islamabad) and sample invoice formats; how breakfast/room allocation is currently done, and confirmation with the tax advisor.
-2. Room counts/types for **Creek** and **Ramna**; staff counts by department; current Excel structures (guests, corporates, rates).
-3. **Hosting decision:** AWS Middle East (recommended for speed, portable build) vs a named Pakistani provider — and whether a local provider offers managed PostgreSQL, backups and an SLA.
+2. ~~Room counts~~ (received: Boulevard 9, Creek 10, Ramna 8). Still needed: room **types** per property, staff counts by department, current Excel structures (guests, corporates, rates), conference-room pricing (hourly/half/full day).
+3. ~~Hosting decision~~ — **decided: AWS** (portable build retained). Remaining: choose region at M0 (UAE `me-central-1` or Bahrain `me-south-1`, subject to service availability), and legal review of residency once counsel is engaged.
 4. **Identity:** confirm the revised recommendation (D-11): library-based auth inside our codebase, no managed IdP.
-5. **PayFast:** start merchant onboarding and obtain API documentation/sandbox.
+5. ~~PayFast~~ — **portal access obtained**; IP allow-listing possible. Next: share API/webhook documentation and sandbox credentials with the dev team (never in chat or the repo — use Secrets Manager); confirm refund/void, card-on-file and settlement-report support.
 6. Confirm the **marketing budget currency** and whether the 3–5-person team is fixed; who the engineers are (skills drive the stack choices).
 7. Approve the **pilot SLA** (§4.16) and the **release plan** (§6).
 8. Confirm the **cash/payment-account position** (§4.15).
 9. Engage a **tax advisor and data-protection counsel** (independent of the pilot).
-10. Nominate a **Sunset Boulevard** front-desk/night-audit/housekeeping lead for the observation week and UAT.
+10. ~~Observation-week staff~~ — **confirmed**. Next: agree the week's dates and a named contact per function (front desk, night audit, housekeeping, gate security, kitchen).

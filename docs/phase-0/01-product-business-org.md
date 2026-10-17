@@ -301,7 +301,8 @@ Guest: manage own profile, reservations, pre-check-in, folio (own), payments, re
 | Tax & fee configuration engine | M | + PK config pack |
 | Policies (cancellation, no-show, child, pets…) | M | machine-readable cancellation/no-show |
 | Property images/media | M | |
-| Meeting/event spaces (definition) | P2 | |
+| Meeting/conference room booking (hourly / half-day / full-day) | **M (R1b)** | Bookable space resource with time slots; Sunset Boulevard |
+| Guarantee-by-deposit for OTA bookings via PayFast, 72-hour cancellation rule | **M (R1b)** | `09` §4.18 |
 | Configuration cloning (property→property, brand templates) | P2 | |
 
 ### F.3 Inventory, rates, availability
