@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@hos/auth": "workspace:*",
     "@hos/db": "workspace:*",
     "@hos/domain-types": "workspace:*",
     "@nestjs/common": "^11.0.0",

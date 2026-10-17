@@ -44,3 +44,13 @@ export async function migrate(ownerUrl: string, dir = MIGRATIONS_DIR): Promise<s
   }
   return applied;
 }
+
+/** TEST ONLY: drops everything owned by the migration role and re-applies all migrations. Refuses to touch non-test databases. */
+export async function resetDatabaseForTests(ownerUrl: string): Promise<void> {
+  const dbName = new URL(ownerUrl).pathname.replace(/^\//, '');
+  if (!/_test$/.test(dbName)) throw new Error(`Refusing to reset "${dbName}": database name must end with _test`);
+  const c = new pg.Client({ connectionString: ownerUrl });
+  await c.connect();
+  try { await c.query('DROP OWNED BY hos_owner CASCADE'); } finally { await c.end(); }
+  await migrate(ownerUrl);
+}

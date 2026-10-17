@@ -26,6 +26,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@hos/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@hos/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -57,6 +60,8 @@ importers:
       '@nestjs/testing':
         specifier: ^11.2.7
         version: 11.2.7(@nestjs/common@11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7(@nestjs/common@11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2)(rxjs@7.8.2))
+
+  packages/auth: {}
 
   packages/db:
     dependencies:

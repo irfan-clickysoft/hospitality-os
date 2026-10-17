@@ -1,20 +1,10 @@
-import 'reflect-metadata';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { Test } from '@nestjs/testing';
-import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-
-process.env.DATABASE_URL_APP ??= 'postgres://hos_app:dev@localhost:5432/hos_test';
-
-import { AppModule } from '../src/app.module.js';
-import { runWithTenant, currentTenant } from '../src/tenancy/tenant-context.js';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { currentTenant, runWithTenant } from '../src/tenancy/tenant-context.js';
+import { createTestApp } from './harness.js';
 
 let app: NestFastifyApplication;
-beforeAll(async () => {
-  const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  app = mod.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
-  await app.init();
-  await app.getHttpAdapter().getInstance().ready();
-});
+beforeAll(async () => { app = await createTestApp(); });
 afterAll(async () => { await app.close(); });
 
 describe('health', () => {
@@ -31,9 +21,7 @@ describe('health', () => {
 });
 
 describe('tenant context', () => {
-  it('is unavailable outside an authenticated scope', () => {
-    expect(() => currentTenant()).toThrow(/No tenant context/);
-  });
+  it('is unavailable outside an authenticated scope', () => { expect(() => currentTenant()).toThrow(/No tenant context/); });
   it('is isolated per async scope', async () => {
     const [a, b] = await Promise.all([
       Promise.resolve().then(() => runWithTenant({ tenantId: 'A' }, async () => { await new Promise((r) => setTimeout(r, 5)); return currentTenant().tenantId; })),

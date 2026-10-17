@@ -3,13 +3,14 @@
 Cloud hospitality operating system (PMS core; CRS, booking engine, channel manager, portals and apps to follow).
 Architecture and product decisions: [`docs/phase-0/00-index.md`](docs/phase-0/00-index.md). Pilot: Sunset BnB (Boulevard, Creek, Ramna).
 
-## Status — Phase 1, milestone M0 (foundations), slice 1
-- Monorepo (pnpm + Turborepo, TypeScript strict)
-- `@hos/db`: SQL-first migrations, PostgreSQL row-level security on every tenant table, runtime role without `BYPASSRLS`,
-  append-only audit log, transactional outbox / inbox / idempotency tables, `withTenant()` transaction helper
-- **Tenant-isolation test suite** (schema lint + behavioural RLS tests) — a CI gate
-- `@hos/domain-types`: `Money` (bigint minor units, exact rounding/allocation; no floats)
-- `@hos/api`: NestJS (Fastify) skeleton, health/readiness, tenant context
+## Status — Phase 1, milestone M0 (foundations)
+**Slice 1:** monorepo; `@hos/db` (SQL migrations, forced RLS on every tenant table, `withTenant()`); tenant-isolation suite (schema lint + RLS tests, CI gate); `@hos/domain-types` `Money`; API skeleton.
+**Slice 2 (this):**
+- `@hos/auth`: pure authorization engine — scoped grants (tenant / legal entity / property / department), validity windows, limits (discount, refund, adjustment) that yield *approval required*, and **privilege-escalation guards** for role assignment; system role templates
+- API: global permission guard (**deny by default**; every route must declare a permission or be explicitly `@Public`, enforced by a contract test), tenant middleware + correlation ids, RFC 9457 problem+json errors, 404-not-403 for foreign resources
+- Audit service (same-transaction, redacting), **transactional outbox** + relay (ordered per aggregate, retry, dead-letter, safe with concurrent relays), idempotent inbox, **idempotency keys** (exactly-once under concurrency)
+- Tenant provisioning (roles seeded per tenant, owner, audit + `TenantCreated` event)
+Not yet: login/sessions/MFA (identity decision D-11 pending), observability, Terraform, i18n scaffolding.
 
 ## Local setup
 Requires Node 22, pnpm 10, PostgreSQL 16 with `btree_gist`, `pgcrypto`, `pg_trgm`, `citext`.

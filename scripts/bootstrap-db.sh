@@ -3,7 +3,7 @@
 # hos_owner: owns schema, runs migrations. hos_app: runtime, RLS ENFORCED (no BYPASSRLS).
 # hos_admin: provisioning/support jobs only (BYPASSRLS). Passwords here are dev-only.
 set -euo pipefail
-DBS="${HOS_DATABASES:-hos_dev hos_test}"
+DBS="${HOS_DATABASES:-hos_dev hos_test hos_api_test}"
 psql_stdin() {
   if [ -n "${PGSUPERUSER_URL:-}" ]; then psql "$PGSUPERUSER_URL" -v ON_ERROR_STOP=1 -qAt
   else su postgres -c "psql -v ON_ERROR_STOP=1 -qAt"; fi

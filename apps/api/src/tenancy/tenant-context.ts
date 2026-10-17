@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-export interface TenantContext { tenantId: string; actorId?: string; requestId?: string }
+export interface TenantContext { tenantId: string; actorId?: string; requestId?: string; ip?: string; userAgent?: string }
 
 const storage = new AsyncLocalStorage<TenantContext>();
 
@@ -12,3 +12,5 @@ export function currentTenant(): TenantContext {
   if (!ctx) throw new Error('No tenant context: tenant-scoped data access outside an authenticated request');
   return ctx;
 }
+
+export function tryCurrentTenant(): TenantContext | undefined { return storage.getStore(); }

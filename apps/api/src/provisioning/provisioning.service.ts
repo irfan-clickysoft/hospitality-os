@@ -1,0 +1,52 @@
+import { Inject, Injectable } from '@nestjs/common';
+import type { Kysely } from 'kysely';
+import { ROLE_TEMPLATES } from '@hos/auth';
+import type { DB } from '@hos/db';
+import { DB_ADMIN } from '../db/db.module.js';
+
+export interface CreateTenantInput {
+  name: string; slug: string; ownerEmail: string; ownerName: string;
+  legalEntityName?: string; referredBy?: string; platformActorId?: string;
+}
+export interface CreatedTenant { tenantId: string; legalEntityId: string; ownerUserId: string }
+
+/** Platform-realm operation (BYPASSRLS connection): creates a tenant with its legal entity, system roles and owner. */
+@Injectable()
+export class ProvisioningService {
+  constructor(@Inject(DB_ADMIN) private readonly admin: Kysely<DB> | null) {}
+
+  async createTenant(input: CreateTenantInput): Promise<CreatedTenant> {
+    if (!this.admin) throw new Error('Provisioning requires DATABASE_URL_ADMIN');
+    return this.admin.transaction().execute(async (trx) => {
+      const tenant = await trx.insertInto('tenant').values({ name: input.name, slug: input.slug, status: 'TRIALING', referred_by: input.referredBy ?? null })
+        .returning('id').executeTakeFirstOrThrow();
+      const tenantId = tenant.id;
+      const le = await trx.insertInto('legal_entity').values({ tenant_id: tenantId, name: input.legalEntityName ?? input.name, ntn: null, strn: null, address: null })
+        .returning('id').executeTakeFirstOrThrow();
+
+      const roleIds = new Map<string, string>();
+      for (const t of ROLE_TEMPLATES) {
+        const r = await trx.insertInto('role').values({ tenant_id: tenantId, key: t.key, name: t.name, is_system: true }).returning('id').executeTakeFirstOrThrow();
+        roleIds.set(t.key, r.id);
+        await trx.insertInto('role_permission').values(t.permissions.map((p) => ({ tenant_id: tenantId, role_id: r.id, permission_key: p }))).execute();
+      }
+      const owner = await trx.insertInto('staff_user').values({
+        tenant_id: tenantId, email: input.ownerEmail, full_name: input.ownerName, password_hash: null, status: 'INVITED',
+      }).returning('id').executeTakeFirstOrThrow();
+      await trx.insertInto('role_assignment').values({
+        tenant_id: tenantId, user_id: owner.id, role_id: roleIds.get('group_owner')!, scope_type: 'TENANT', scope_id: null, valid_to: null,
+      }).execute();
+
+      await trx.insertInto('audit_log').values({
+        tenant_id: tenantId, actor_type: input.platformActorId ? 'PLATFORM_USER' : 'SYSTEM', actor_id: input.platformActorId ?? null, on_behalf_of: null,
+        action: 'tenant.create', resource_type: 'tenant', resource_id: tenantId, property_id: null,
+        before: null, after: JSON.stringify({ name: input.name, slug: input.slug }), reason_code: null, note: null, request_id: null, ip: null, user_agent: null,
+      }).execute();
+      await trx.insertInto('outbox_event').values({
+        tenant_id: tenantId, aggregate_type: 'tenant', aggregate_id: tenantId, event_type: 'TenantCreated', event_version: 1,
+        property_id: null, business_date: null, payload: JSON.stringify({ tenantId, slug: input.slug }), published_at: null,
+      }).execute();
+      return { tenantId, legalEntityId: le.id, ownerUserId: owner.id };
+    });
+  }
+}

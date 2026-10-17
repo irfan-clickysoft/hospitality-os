@@ -1,8 +1,10 @@
 import { Controller, Get, Inject } from '@nestjs/common';
+import { Public } from '../authz/decorators.js';
 import { sql, type Kysely } from 'kysely';
 import type { DB } from '@hos/db';
 import { DB_APP } from '../db/db.module.js';
 
+@Public()
 @Controller()
 export class HealthController {
   constructor(@Inject(DB_APP) private readonly db: Kysely<DB>) {}
