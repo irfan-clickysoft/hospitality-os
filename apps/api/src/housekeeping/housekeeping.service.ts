@@ -279,10 +279,10 @@ export class HousekeepingService {
       const p = await this.prop(trx, propertyId);
       const statuses = includeDone ? ['PENDING', 'IN_PROGRESS', 'DONE', 'SKIPPED'] as const : ['PENDING', 'IN_PROGRESS'] as const;
       const rows = await trx.selectFrom('housekeeping_task as t').innerJoin('room as r', 'r.id', 't.room_id').leftJoin('floor as f', 'f.id', 'r.floor_id')
-        .select(['t.id', 'r.number', 'f.name as floor', 'r.dnd', 't.task_type', 't.priority', 't.status', 't.notes', 't.inspection', 't.inspection_note', 't.rework_count', 't.credit', 't.started_at', 't.finished_at'])
+        .select(['t.id', 'r.id as room_id', 'r.number', 'f.name as floor', 'r.dnd', 't.task_type', 't.priority', 't.status', 't.notes', 't.inspection', 't.inspection_note', 't.rework_count', 't.credit', 't.started_at', 't.finished_at'])
         .where('t.property_id', '=', propertyId).where('t.assigned_to', '=', userId).where('t.status', 'in', [...statuses])
         .$call((q) => (includeDone ? q.where('t.business_date', '=', p.business_date) : q)).orderBy('t.priority').orderBy('r.number').execute();
-      return { businessDate: p.business_date, items: rows.map((t) => ({ id: t.id, roomNumber: t.number, floor: t.floor, dnd: t.dnd, type: t.task_type, priority: t.priority, status: t.status, notes: t.notes, inspection: t.inspection,
+      return { businessDate: p.business_date, items: rows.map((t) => ({ id: t.id, roomId: t.room_id, roomNumber: t.number, floor: t.floor, dnd: t.dnd, type: t.task_type, priority: t.priority, status: t.status, notes: t.notes, inspection: t.inspection,
         inspectionNote: t.inspection_note, reworkCount: t.rework_count, credit: Number(t.credit), startedAt: t.started_at, finishedAt: t.finished_at })) };
     });
   }

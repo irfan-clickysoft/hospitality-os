@@ -13,6 +13,9 @@ export class PropertySetupController {
   constructor(@Inject(PropertySetupService) private readonly svc: PropertySetupService) {}
 
   // properties
+  @Get('me/properties') @Authenticated()
+  mine() { return this.svc.myProperties(currentTenant().actorId!).then((items) => ({ items })); }
+
   @Get('properties') @Authenticated()
   list() { return this.svc.listProperties(currentTenant().actorId!).then((items) => ({ items })); }
 

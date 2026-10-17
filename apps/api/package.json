@@ -10,7 +10,8 @@
     "dev": "tsx watch --env-file=../../.env src/main.ts",
     "test": "vitest run",
     "seed:sunset": "tsx --env-file=../../.env src/cli/seed-sunset.ts",
-    "seed:sunset-rates": "tsx --env-file=../../.env src/cli/seed-sunset-rates.ts"
+    "seed:sunset-rates": "tsx --env-file=../../.env src/cli/seed-sunset-rates.ts",
+    "seed:demo-staff": "tsx --env-file=../../.env src/cli/seed-demo-staff.ts"
   },
   "dependencies": {
     "@hos/auth": "workspace:*",

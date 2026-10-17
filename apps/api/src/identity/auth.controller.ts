@@ -63,6 +63,7 @@ export class AuthController {
     return {
       user: { id: profile.id, email: profile.email, fullName: profile.full_name, locale: profile.preferred_locale, mfaEnabled: profile.mfa_enabled },
       session: { state: c.sessionState, mfaVerifiedAt: c.mfaVerifiedAt ?? null },
+      csrfToken: c.csrfToken ?? null,          // lets a reloaded app resume with the same session; the cookie itself stays HttpOnly
       // UI hints only — the server re-checks every request.
       grants: grants.map((g) => ({ permission: g.permission, scopeType: g.scopeType, scopeId: g.scopeId })),
     };

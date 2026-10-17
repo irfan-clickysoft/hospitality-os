@@ -43,6 +43,15 @@ export class PropertySetupService {
     return rows.filter((p) => decide(grants, { permission: 'property.view', scope: { propertyId: p.id, legalEntityId: p.legal_entity_id } }).effect === 'ALLOW').map((p) => this.propDto(p));
   }
 
+  /** Properties where this user holds any permission — what the staff app offers in its property switcher. */
+  async myProperties(userId: string) {
+    const grants = await this.authz.loadGrants(userId);
+    const rows = await this.tdb.tx((trx) => trx.selectFrom('property').selectAll().where('status', '<>', 'ARCHIVED' as never).orderBy('name').execute());
+    const { decide } = await import('@hos/auth');
+    return rows.filter((p) => grants.some((g) => decide([g], { permission: g.permission, scope: { propertyId: p.id, legalEntityId: p.legal_entity_id } }).effect === 'ALLOW'))
+      .map((p) => ({ id: p.id, code: p.code, name: p.name, businessDate: p.business_date, timezone: p.timezone, status: p.status }));
+  }
+
   async createProperty(i: z.infer<typeof S.CreateProperty>) {
     return this.tdb.tx(async (trx) => {
       const businessDate = i.openingBusinessDate ?? todayIn(i.timezone);

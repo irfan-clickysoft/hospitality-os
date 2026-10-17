@@ -252,6 +252,17 @@ describe('issues and lost & found', () => {
   });
 });
 
+describe('the staff app’s property list', () => {
+  it('offers only properties where the person holds some permission', async () => {
+    const w = await sunset(); const other = await sunset(); const a1 = await staff(w, 'housekeeper');
+    const mine = (await ok(call('GET', '/v1/me/properties', a1.h))).items as Array<{ id: string; name: string; businessDate: string }>;
+    expect(mine.map((p) => p.id)).toEqual([w.pid]);
+    expect(mine[0]).toMatchObject({ businessDate: OPEN });
+    const all = (await ok(call('GET', '/v1/me/properties', O))).items.map((p: any) => p.id);
+    expect(all).toEqual(expect.arrayContaining([w.pid, other.pid]));
+  });
+});
+
 describe('access', () => {
   it('is limited to the property’s own staff, and attendants cannot supervise', async () => {
     const w = await sunset(); const other = await sunset(); const a1 = await staff(w, 'housekeeper'); const sup = await staff(w, 'housekeeping_supervisor');

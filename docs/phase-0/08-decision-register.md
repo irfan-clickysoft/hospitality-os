@@ -254,3 +254,7 @@ IDs (D-01…) are referenced from other documents.
 - **ALTERNATIVES.** Single big-bang MVP; reduce quality bars (rejected for money/inventory/isolation).
 - **TRADE-OFF.** Some pilot staff run parallel paper/Excel for a while; features like guest app and channel manager arrive later.
 - **FUTURE IMPACT.** Product is proven in production before it is sold to other hotels after the 90-day pilot.
+
+## D-12 amendment (Phase 1, housekeeping slice) — staff app ships as an installable web app first
+**Decision.** The R1a staff app is a mobile-first **PWA** (`apps/staff-web`, React + Vite) instead of an Expo native app. **Why:** it runs on the pilot's existing phones with nothing to install from a store, can be tried on the product owner's Mac and phones today, shares the API and i18n with the web back office, and the offline queue (true timestamps, idempotent replays) and Urdu/RTL are the same work either way. **Trade-offs:** no background push on iOS beyond web-push limits and no native camera/scanner integration yet. **Future:** wrap or rebuild in Expo when push reliability, document scanning or store presence justify it; the API contracts, queue and translation files carry over unchanged.
+
