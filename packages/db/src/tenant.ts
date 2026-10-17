@@ -2,6 +2,9 @@ import { Kysely, PostgresDialect, sql, type Transaction } from 'kysely';
 import pg from 'pg';
 import type { DB } from './types.js';
 
+// Calendar dates must stay strings (YYYY-MM-DD): a JS Date would shift days with the server time zone.
+pg.types.setTypeParser(1082, (v: string) => v);
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function createDb(connectionString: string, max = 10): Kysely<DB> {

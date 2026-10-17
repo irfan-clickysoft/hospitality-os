@@ -8,18 +8,18 @@ const READ = ['property.view', 'reservation.view', 'folio.view', 'report.view'] 
  * Holders must enrol in MFA; sessions without a fresh MFA verification are refused with MFA_REQUIRED.
  */
 export const SENSITIVE_PERMISSIONS: ReadonlySet<string> = new Set([
-  'tenant.manage', 'user.manage', 'role.manage', 'tax.configure', 'tax.approve', 'payment.refund', 'folio.adjust', 'audit.view',
+  'tenant.manage', 'user.manage', 'role.manage', 'tax.configure', 'tax.approve', 'payment.refund', 'folio.adjust', 'audit.view', 'inventory.overbook',
 ]);
 
 export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
   { key: 'group_owner', name: 'Group Owner', permissions: [
     'tenant.manage', 'property.manage', 'property.view', 'user.manage', 'role.manage', 'audit.view', 'reservation.view', 'reservation.create',
     'reservation.modify', 'reservation.cancel', 'rate.manage', 'folio.view', 'folio.post', 'folio.adjust', 'payment.take',
-    'payment.refund', 'cashier.operate', 'nightaudit.run', 'report.view', 'tax.configure', 'tax.approve'] },
+    'payment.refund', 'cashier.operate', 'nightaudit.run', 'report.view', 'tax.configure', 'tax.approve', 'inventory.block', 'inventory.overbook'] },
   { key: 'general_manager', name: 'General Manager', permissions: [
     'property.manage', 'property.view', 'user.manage', 'role.manage', 'audit.view', 'reservation.view', 'reservation.create', 'reservation.modify',
     'reservation.cancel', 'rate.manage', 'folio.view', 'folio.post', 'folio.adjust', 'payment.take', 'payment.refund',
-    'cashier.operate', 'nightaudit.run', 'report.view'] },
+    'cashier.operate', 'nightaudit.run', 'report.view', 'inventory.block', 'inventory.overbook'] },
   { key: 'front_desk_agent', name: 'Front Desk Agent', permissions: [
     'property.view', 'reservation.view', 'reservation.create', 'reservation.modify', 'folio.view', 'folio.post', 'payment.take', 'cashier.operate', 'report.view'] },
   { key: 'cashier', name: 'Cashier', permissions: ['property.view', 'folio.view', 'folio.post', 'payment.take', 'cashier.operate'] },

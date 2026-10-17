@@ -7,8 +7,9 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/main.js",
-    "dev": "tsx watch src/main.ts",
-    "test": "vitest run"
+    "dev": "tsx watch --env-file=../../.env src/main.ts",
+    "test": "vitest run",
+    "seed:sunset": "tsx --env-file=../../.env src/cli/seed-sunset.ts"
   },
   "dependencies": {
     "@hos/auth": "workspace:*",

@@ -1,4 +1,5 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, Logger } from '@nestjs/common';
+import { mapDbError } from './db-errors.js';
 
 const CODES: Record<number, string> = { 400: 'BAD_REQUEST', 401: 'UNAUTHENTICATED', 403: 'PERMISSION_DENIED', 404: 'NOT_FOUND', 409: 'CONFLICT', 412: 'PRECONDITION_FAILED', 422: 'UNPROCESSABLE', 429: 'RATE_LIMITED' };
 
@@ -6,7 +7,8 @@ const CODES: Record<number, string> = { 400: 'BAD_REQUEST', 401: 'UNAUTHENTICATE
 @Catch()
 export class ProblemDetailsFilter implements ExceptionFilter {
   private readonly log = new Logger('Problem');
-  catch(err: unknown, host: ArgumentsHost): void {
+  catch(raw: unknown, host: ArgumentsHost): void {
+    const err = raw instanceof HttpException ? raw : mapDbError(raw) ?? raw;
     const reply = host.switchToHttp().getResponse();
     const req = host.switchToHttp().getRequest();
     const correlationId = (reply.getHeader?.('x-correlation-id') as string | undefined) ?? req?.raw?.requestId;

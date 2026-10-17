@@ -11,18 +11,24 @@ Architecture and product decisions: [`docs/phase-0/00-index.md`](docs/phase-0/00
 - Audit service (same-transaction, redacting), **transactional outbox** + relay (ordered per aggregate, retry, dead-letter, safe with concurrent relays), idempotent inbox, **idempotency keys** (exactly-once under concurrency)
 - Tenant provisioning (roles seeded per tenant, owner, audit + `TenantCreated` event)
 **Slice 3 (identity):** invitation → password (Argon2id, length-first policy), login with lockout and non-enumerating errors, server-side sessions (hashed opaque tokens in `__Host-` cookies, idle + absolute expiry), CSRF token + Origin allow-list, TOTP two-factor (RFC 6238, encrypted seeds, replay protection, recovery codes), **step-up MFA for sensitive permissions**, password change with session revocation, staff language preference (English / Urdu), audit-log read endpoint.
-Not yet: observability, Terraform, i18n scaffolding, first business modules (rooms, rates, availability).
+**Slice 4 (property setup + availability):** property wizard backend (properties, buildings/floors, room types, rooms with bulk generator and connecting rooms, tenant amenity catalogue, setup status, go-live), the **availability engine** (per room-type/night counters mutated only by conditional atomic updates with date-ordered locking; physical-room assignment and block overlap prevented by database exclusion constraints; overbooking limits per date; out-of-order/out-of-service blocks with oversell protection and explicit acknowledgement; invariant checker), optimistic locking, business dates as plain calendar dates in the property's time zone, audit + `InventoryChanged` events.
+Not yet: rates, reservations, rack, front desk, folio, payments, night audit, observability, Terraform (AWS comes after everything runs locally), i18n scaffolding.
 
-## Local setup
-Requires Node 22, pnpm 10, PostgreSQL 16 with `btree_gist`, `pgcrypto`, `pg_trgm`, `citext`.
+## Run it on your Mac (no cloud needed)
+Requires Node 22, pnpm 10 (`corepack enable`), and Docker Desktop (or a local PostgreSQL 16).
 ```bash
 pnpm install
-bash scripts/bootstrap-db.sh        # roles hos_owner / hos_app / hos_admin + databases (dev passwords only)
-cp .env.example .env
-pnpm db:migrate                      # uses DATABASE_URL_OWNER
-pnpm typecheck && pnpm test
+docker compose up -d db                                                        # PostgreSQL 16 on localhost:5432
+PGSUPERUSER_URL=postgres://postgres:postgres@localhost:5432/postgres bash scripts/bootstrap-db.sh
+cp .env.example .env                                                           # then set APP_ENCRYPTION_KEY (command in the file)
+pnpm db:migrate                                                                # applies SQL migrations to hos_dev
+pnpm --filter @hos/api seed:sunset                                             # Sunset: Boulevard 9, Creek 10, Ramna 8 rooms; prints the owner invite token
+pnpm --filter @hos/api dev                                                     # API on http://localhost:3000
 ```
-Set `PGSUPERUSER_URL` if you are not using a local `postgres` OS user.
+Then set the owner's password with the `curl` command the seed prints, log in at `POST /v1/auth/login`, and call `GET /v1/properties`.
+Tests: `pnpm typecheck && pnpm test` (uses the `hos_test` and `hos_api_test` databases created by the bootstrap script).
+If you use a local PostgreSQL without Docker, install the contrib extensions (`btree_gist`, `pgcrypto`, `pg_trgm`, `citext`) and run the bootstrap with a superuser URL.
+The per-type room split in the Sunset seed is a placeholder — correct it after the observation week.
 
 ## Rules that are enforced in code review and CI
 1. Every tenant-owned table has `tenant_id`, forced RLS and a policy; the lint in `packages/db/test/schema-lint.test.ts` fails otherwise.

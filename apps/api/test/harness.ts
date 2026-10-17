@@ -16,7 +16,9 @@ import { URLS } from './env.js';
 class HeaderPrincipalResolver implements PrincipalResolver {
   async resolve(req: IncomingMessage) {
     const t = req.headers['x-test-tenant'], u = req.headers['x-test-user'];
-    return typeof t === 'string' && typeof u === 'string' ? { tenantId: t, userId: u } : null;
+    if (typeof t !== 'string' || typeof u !== 'string') return null;
+    // x-test-mfa: 1 simulates a session whose second factor was verified just now (for sensitive-permission tests).
+    return { tenantId: t, userId: u, sessionState: 'ACTIVE' as const, mfaVerifiedAt: req.headers['x-test-mfa'] === '1' ? new Date() : null };
   }
 }
 
@@ -62,4 +64,4 @@ export async function assignRole(tenantId: string, userId: string, roleKey: stri
   }).execute();
 }
 
-export const as = (tenantId: string, userId: string) => ({ 'x-test-tenant': tenantId, 'x-test-user': userId });
+export const as = (tenantId: string, userId: string, o: { mfa?: boolean } = {}) => ({ 'x-test-tenant': tenantId, 'x-test-user': userId, ...(o.mfa ? { 'x-test-mfa': '1' } : {}) });

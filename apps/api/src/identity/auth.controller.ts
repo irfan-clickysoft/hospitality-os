@@ -1,6 +1,7 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Inject, Post, Req, Res, UnauthorizedException, HttpException } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res, UnauthorizedException, HttpException } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { z, type ZodType } from 'zod';
+import { z } from 'zod';
+import { parse } from '../common/validate.js';
 import { AllowPendingMfa, Authenticated, Public } from '../authz/decorators.js';
 import { AuthorizationService } from '../authz/authorization.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
@@ -8,11 +9,6 @@ import { IdentityService, type ClientMeta } from './identity.service.js';
 import { loadIdentityConfig } from './identity.config.js';
 import { RateLimiter } from './rate-limiter.js';
 
-function parse<T>(schema: ZodType<T>, body: unknown): T {
-  const r = schema.safeParse(body);
-  if (!r.success) throw new BadRequestException({ code: 'VALIDATION_FAILED', message: r.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; ') });
-  return r.data;
-}
 const Login = z.object({ tenant: z.string().min(2).max(63), email: z.string().email().max(254), password: z.string().min(1).max(256) });
 const AcceptInvite = z.object({ tenant: z.string().min(2).max(63), token: z.string().min(40).max(200), password: z.string().min(1).max(256) });
 const Code = z.object({ code: z.string().min(6).max(20) });

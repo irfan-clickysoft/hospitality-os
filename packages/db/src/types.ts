@@ -23,7 +23,19 @@ export interface UserMfaTotpTable { tenant_id: string; user_id: string; secret_e
 export interface UserRecoveryCodeTable { tenant_id: string; id: Generated<string>; user_id: string; code_hash: Buffer; used_at: TsNull }
 export interface UserTokenTable { tenant_id: string; id: Generated<string>; user_id: string; purpose: 'INVITE' | 'PASSWORD_RESET'; token_hash: Buffer; expires_at: Date | string; used_at: TsNull; created_at: TsGen }
 
+export interface BuildingTable { tenant_id: string; id: Generated<string>; property_id: string; name: string }
+export interface FloorTable { tenant_id: string; id: Generated<string>; property_id: string; building_id: string | null; name: string; sort_order: Generated<number> }
+export interface RoomTypeTable { tenant_id: string; id: Generated<string>; property_id: string; code: string; name: string; description: string | null; max_adults: number; max_children: Generated<number>; max_occupancy: number; base_occupancy: Generated<number>; bed_config: string | null; size_sqm: string | null; default_overbook_limit: Generated<number>; status: Generated<'ACTIVE' | 'ARCHIVED'>; sort_order: Generated<number>; version: Generated<number>; created_at: TsGen }
+export interface RoomTable { tenant_id: string; id: Generated<string>; property_id: string; room_type_id: string; floor_id: string | null; number: string; capacity_override: number | null; bed_config: string | null; smoking: Generated<boolean>; accessible: Generated<boolean>; connecting_room_id: string | null; status: Generated<'ACTIVE' | 'INACTIVE'>; notes: string | null; version: Generated<number>; created_at: TsGen }
+export interface AmenityTable { tenant_id: string; id: Generated<string>; code: string; name_en: string; name_ur: string | null; category: Generated<string> }
+export interface RoomTypeAmenityTable { tenant_id: string; room_type_id: string; amenity_id: string }
+export interface RoomBlockTable { tenant_id: string; id: Generated<string>; property_id: string; room_id: string; block_type: 'OUT_OF_ORDER' | 'OUT_OF_SERVICE'; start_date: D; end_date: D; reason: string; ticket_ref: string | null; created_by: string | null; created_at: TsGen; cancelled_at: TsNull }
+export interface InventoryDayTable { tenant_id: string; property_id: string; room_type_id: string; business_date: D; physical: number; out_of_order: Generated<number>; out_of_service: Generated<number>; blocked: Generated<number>; reserved: Generated<number>; held: Generated<number>; overbook_limit: Generated<number>; version: Generated<number> }
+export interface RoomAssignmentTable { tenant_id: string; id: Generated<string>; property_id: string; room_id: string; assignment_ref: string; stay_range: string; status: 'ASSIGNED' | 'IN_HOUSE' | 'ENDED'; created_at: TsGen }
+
 export interface DB {
+  building: BuildingTable; floor: FloorTable; room_type: RoomTypeTable; room: RoomTable; amenity: AmenityTable; room_type_amenity: RoomTypeAmenityTable;
+  room_block: RoomBlockTable; inventory_day: InventoryDayTable; room_assignment: RoomAssignmentTable;
   user_session: UserSessionTable; user_mfa_totp: UserMfaTotpTable; user_recovery_code: UserRecoveryCodeTable; user_token: UserTokenTable;
   tenant: TenantTable; legal_entity: LegalEntityTable; brand: BrandTable; property: PropertyTable; staff_user: StaffUserTable;
   permission: PermissionTable; role: RoleTable; role_permission: RolePermissionTable; role_assignment: RoleAssignmentTable;
