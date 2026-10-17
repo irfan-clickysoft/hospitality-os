@@ -3,12 +3,14 @@ import type { Kysely } from 'kysely';
 import { ROLE_TEMPLATES } from '@hos/auth';
 import type { DB } from '@hos/db';
 import { DB_ADMIN } from '../db/db.module.js';
+import { newToken } from '../identity/tokens.js';
 
 export interface CreateTenantInput {
   name: string; slug: string; ownerEmail: string; ownerName: string;
   legalEntityName?: string; referredBy?: string; platformActorId?: string;
 }
-export interface CreatedTenant { tenantId: string; legalEntityId: string; ownerUserId: string }
+/** `ownerInviteToken` is shown once to the platform operator for delivery (email/WhatsApp); only its hash is stored. */
+export interface CreatedTenant { tenantId: string; legalEntityId: string; ownerUserId: string; ownerInviteToken: string }
 
 /** Platform-realm operation (BYPASSRLS connection): creates a tenant with its legal entity, system roles and owner. */
 @Injectable()
@@ -37,6 +39,10 @@ export class ProvisioningService {
         tenant_id: tenantId, user_id: owner.id, role_id: roleIds.get('group_owner')!, scope_type: 'TENANT', scope_id: null, valid_to: null,
       }).execute();
 
+      const invite = newToken(tenantId);
+      await trx.insertInto('user_token').values({
+        tenant_id: tenantId, user_id: owner.id, purpose: 'INVITE', token_hash: invite.hash, expires_at: new Date(Date.now() + 7 * 86_400_000), used_at: null,
+      }).execute();
       await trx.insertInto('audit_log').values({
         tenant_id: tenantId, actor_type: input.platformActorId ? 'PLATFORM_USER' : 'SYSTEM', actor_id: input.platformActorId ?? null, on_behalf_of: null,
         action: 'tenant.create', resource_type: 'tenant', resource_id: tenantId, property_id: null,
@@ -46,7 +52,7 @@ export class ProvisioningService {
         tenant_id: tenantId, aggregate_type: 'tenant', aggregate_id: tenantId, event_type: 'TenantCreated', event_version: 1,
         property_id: null, business_date: null, payload: JSON.stringify({ tenantId, slug: input.slug }), published_at: null,
       }).execute();
-      return { tenantId, legalEntityId: le.id, ownerUserId: owner.id };
+      return { tenantId, legalEntityId: le.id, ownerUserId: owner.id, ownerInviteToken: invite.token };
     });
   }
 }

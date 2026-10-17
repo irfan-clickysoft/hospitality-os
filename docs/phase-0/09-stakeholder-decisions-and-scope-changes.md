@@ -14,6 +14,10 @@
 |---|---|
 | Properties | **Boulevard** (Karachi): 9 rooms + 1 conference/meeting room (sold **hourly or full-day**) · **Creek** (Karachi): 10 rooms · **Ramna** (Islamabad): 8 rooms — **27 rooms in total** |
 | Tenancy | One tenant (Sunset), three properties, **two tax jurisdictions** (Sindh, Islamabad) ⇒ tax configuration per property is mandatory |
+| Room types | Three at every property: **Executive, Deluxe, Standard** |
+| Staffing per property | 2 guards · 1 manager · 1 cook + 1 kitchen support · 4 housekeeping · 1 night-shift front-desk officer / auditor (≈ 10 people per property, ≈ 30 across three) |
+| Central team | 1 accountant · 1 general manager · 1 bookings manager + 2 reservation agents (work across all three properties) |
+| Observation week | **This week** at Boulevard (dates agreed asap) — checklist in [`11-observation-week-checklist.md`](11-observation-week-checklist.md) |
 | Guests | Mostly **corporate** across all three properties; OTA bookings (notably Booking.com, with frequent unpaid cancellations); individuals |
 | Operations | Corporate accounts on credit; **cash-heavy**; some payments to bank accounts (see §4.15) |
 | Legacy data | Excel customer data → import tool |
@@ -321,3 +325,19 @@ See `08` amendments: **D-11** (identity — revised), **D-12** (mobile — manag
 8. Confirm the **cash/payment-account position** (§4.15).
 9. Engage a **tax advisor and data-protection counsel** (independent of the pilot).
 10. ~~Observation-week staff~~ — **confirmed**. Next: agree the week's dates and a named contact per function (front desk, night audit, housekeeping, gate security, kitchen).
+
+
+## 11. Sunset staffing → system roles (implemented in `@hos/auth` role templates)
+| Sunset position | Count | Role template | Scope | Notes |
+|---|---|---|---|---|
+| Property manager | 1 per property | `general_manager` | that property | MFA required (sensitive permissions) |
+| Night-shift front-desk officer / auditor | 1 per property | `night_auditor` + `front_desk_agent` | that property | Runs night audit, takes cash (cashier session) |
+| Housekeeping staff | 4 per property | `housekeeper` (+ `housekeeping_supervisor` for the lead) | that property | Urdu default, mobile app, no financial access |
+| Cook | 1 per property | `kitchen_cook` | that property | Orders and kitchen queue |
+| Kitchen support | 1 per property | `kitchen_support` | that property | Orders only |
+| Guards | 2 per property | `gate_security` | that property | Masked arrivals + visitor/vehicle log; no folios or full reservations; Urdu default |
+| Centralised accountant | 1 | `accountant` | whole tenant | MFA required; tax configuration needs a second approver |
+| Centralised GM | 1 | `group_gm` | whole tenant | MFA required; cannot change tenant settings or approve tax codes |
+| Centralised bookings manager | 1 | `central_bookings_manager` | whole tenant | Rates and reservations across properties |
+| Booking resources | 2 | `reservation_agent` | whole tenant | Create/modify reservations only |
+| Owner (Irfan A Rehman) | 1 | `group_owner` | whole tenant | MFA required |

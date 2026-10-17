@@ -20,6 +20,7 @@ export class TenantMiddleware implements NestMiddleware {
     if (!principal) { runWithTenantless(req, requestId); return next(); }
     runWithTenant({
       tenantId: principal.tenantId, actorId: principal.userId, requestId,
+      sessionId: principal.sessionId, sessionState: principal.sessionState, mfaVerifiedAt: principal.mfaVerifiedAt, csrfToken: principal.csrfToken,
       ip: req.socket.remoteAddress, userAgent: req.headers['user-agent'],
     }, () => next());
   }

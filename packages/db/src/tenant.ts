@@ -19,3 +19,12 @@ export async function withTenant<T>(db: Kysely<DB>, tenantId: string, fn: (trx: 
     return fn(trx);
   });
 }
+
+/** Pre-authentication lookup: resolves a tenant id from its slug via the narrowly scoped `tenant_slug_lookup` RLS policy. */
+export async function resolveTenantBySlug(db: Kysely<DB>, slug: string): Promise<{ id: string; status: string } | undefined> {
+  if (!/^[a-z0-9][a-z0-9-]{1,62}$/i.test(slug)) return undefined;
+  return db.transaction().execute(async (trx) => {
+    await sql`SELECT set_config('app.lookup_slug', ${slug}, true)`.execute(trx);
+    return trx.selectFrom('tenant').select(['id', 'status']).where('slug', '=', slug).executeTakeFirst();
+  });
+}

@@ -10,7 +10,8 @@ Architecture and product decisions: [`docs/phase-0/00-index.md`](docs/phase-0/00
 - API: global permission guard (**deny by default**; every route must declare a permission or be explicitly `@Public`, enforced by a contract test), tenant middleware + correlation ids, RFC 9457 problem+json errors, 404-not-403 for foreign resources
 - Audit service (same-transaction, redacting), **transactional outbox** + relay (ordered per aggregate, retry, dead-letter, safe with concurrent relays), idempotent inbox, **idempotency keys** (exactly-once under concurrency)
 - Tenant provisioning (roles seeded per tenant, owner, audit + `TenantCreated` event)
-Not yet: login/sessions/MFA (identity decision D-11 pending), observability, Terraform, i18n scaffolding.
+**Slice 3 (identity):** invitation → password (Argon2id, length-first policy), login with lockout and non-enumerating errors, server-side sessions (hashed opaque tokens in `__Host-` cookies, idle + absolute expiry), CSRF token + Origin allow-list, TOTP two-factor (RFC 6238, encrypted seeds, replay protection, recovery codes), **step-up MFA for sensitive permissions**, password change with session revocation, staff language preference (English / Urdu), audit-log read endpoint.
+Not yet: observability, Terraform, i18n scaffolding, first business modules (rooms, rates, availability).
 
 ## Local setup
 Requires Node 22, pnpm 10, PostgreSQL 16 with `btree_gist`, `pgcrypto`, `pg_trgm`, `citext`.

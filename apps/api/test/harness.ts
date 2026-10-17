@@ -24,9 +24,11 @@ class HeaderPrincipalResolver implements PrincipalResolver {
 @Controller('test-unprotected')
 export class UnprotectedController { @Get() get() { return { leaked: true }; } }
 
-export async function createTestApp(): Promise<NestFastifyApplication> {
-  const mod = await Test.createTestingModule({ imports: [AppModule, DiscoveryModule], controllers: [UnprotectedController] })
-    .overrideProvider(PRINCIPAL_RESOLVER).useClass(HeaderPrincipalResolver).compile();
+/** `realAuth: true` exercises the real session/cookie resolver; default uses a header-based stand-in for authorization-only tests. */
+export async function createTestApp(opts: { realAuth?: boolean } = {}): Promise<NestFastifyApplication> {
+  let builder = Test.createTestingModule({ imports: [AppModule, DiscoveryModule], controllers: [UnprotectedController] });
+  if (!opts.realAuth) builder = builder.overrideProvider(PRINCIPAL_RESOLVER).useClass(HeaderPrincipalResolver);
+  const mod = await builder.compile();
   const app = mod.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
   await app.init();
   await app.getHttpAdapter().getInstance().ready();

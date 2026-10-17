@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { canAssignRole, decide, type Grant, type Limits, type ScopeType } from './authorize.js';
-import { ROLE_TEMPLATES } from './roles.js';
+import { ROLE_TEMPLATES, SENSITIVE_PERMISSIONS } from './roles.js';
 
 const LE1 = 'le-1', P1 = 'prop-1', P2 = 'prop-2', D1 = 'dept-1';
 const g = (permission: string, scopeType: ScopeType = 'TENANT', scopeId: string | null = null, limits: Limits = {}, over: Partial<Grant> = {}): Grant =>
@@ -87,5 +87,24 @@ describe('canAssignRole (privilege escalation)', () => {
   it('an expired role.manage grant cannot be used', () => {
     const exp = [g('role.manage', 'TENANT', null, {}, { validTo: new Date('2026-10-01') }), ...roleFd.map((p) => g(p))];
     expect(canAssignRole(exp, { rolePermissions: roleFd, scopeType: 'PROPERTY', scopeId: P1, scope: scopeP1, at: NOW }).effect).toBe('DENY');
+  });
+});
+
+describe('role templates', () => {
+  it('have unique keys and no duplicate permissions', () => {
+    const keys = ROLE_TEMPLATES.map((r) => r.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const r of ROLE_TEMPLATES) expect(new Set(r.permissions).size, r.key).toBe(r.permissions.length);
+  });
+  it('never give frontline roles sensitive permissions', () => {
+    for (const k of ['housekeeper', 'kitchen_support', 'gate_security', 'reservation_agent', 'cashier', 'front_desk_agent']) {
+      const r = ROLE_TEMPLATES.find((x) => x.key === k)!;
+      expect(r.permissions.filter((p) => SENSITIVE_PERMISSIONS.has(p)), k).toEqual([]);
+    }
+  });
+  it('gate security cannot see guest financials or full reservation data', () => {
+    const r = ROLE_TEMPLATES.find((x) => x.key === 'gate_security')!;
+    expect(r.permissions).not.toContain('reservation.view');
+    expect(r.permissions).not.toContain('folio.view');
   });
 });

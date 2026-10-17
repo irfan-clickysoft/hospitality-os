@@ -1,11 +1,16 @@
 import type { IncomingMessage } from 'node:http';
 
-export interface Principal { tenantId: string; userId: string }
+export interface Principal {
+  tenantId: string;
+  userId: string;
+  sessionId?: string;
+  sessionState?: 'PENDING_MFA' | 'ACTIVE';
+  mfaVerifiedAt?: Date | null;
+  /** Present for cookie sessions: unsafe requests must echo it in X-CSRF-Token. */
+  csrfToken?: string;
+}
 
-/**
- * Resolves the authenticated principal from a request (session cookie / bearer token). The real implementation arrives with the
- * identity slice; until then the default resolves nobody, so every protected route answers 401.
- */
+/** Resolves the authenticated principal from a request (session cookie). */
 export interface PrincipalResolver { resolve(req: IncomingMessage): Promise<Principal | null> }
 export const PRINCIPAL_RESOLVER = Symbol('PRINCIPAL_RESOLVER');
 

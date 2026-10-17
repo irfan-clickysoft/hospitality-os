@@ -1,6 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-export interface TenantContext { tenantId: string; actorId?: string; requestId?: string; ip?: string; userAgent?: string }
+export interface TenantContext {
+  tenantId: string; actorId?: string; requestId?: string; ip?: string; userAgent?: string;
+  sessionId?: string; sessionState?: 'PENDING_MFA' | 'ACTIVE'; mfaVerifiedAt?: Date | null; csrfToken?: string;
+}
 
 const storage = new AsyncLocalStorage<TenantContext>();
 

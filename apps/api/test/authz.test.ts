@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { DiscoveryService, MetadataScanner, Reflector } from '@nestjs/core';
-import { PUBLIC_ROUTE, REQUIRE_PERMISSION } from '../src/authz/decorators.js';
+import { AUTHENTICATED_ONLY, PUBLIC_ROUTE, REQUIRE_PERMISSION } from '../src/authz/decorators.js';
 import { addUser, as, assignRole, createTestApp, provision } from './harness.js';
 
 let app: NestFastifyApplication;
@@ -36,7 +36,8 @@ describe('authentication & deny-by-default', () => {
       for (const name of scanner.getAllMethodNames(proto)) {
         const handler = proto[name];
         if (!Reflect.getMetadata('path', handler) && Reflect.getMetadata('method', handler) === undefined) continue; // not a route
-        const ok = reflector.getAllAndOverride(PUBLIC_ROUTE, [handler, w.metatype!]) || reflector.getAllAndOverride(REQUIRE_PERMISSION, [handler, w.metatype!]);
+        const targets = [handler, w.metatype!];
+        const ok = reflector.getAllAndOverride(PUBLIC_ROUTE, targets) || reflector.getAllAndOverride(AUTHENTICATED_ONLY, targets) || reflector.getAllAndOverride(REQUIRE_PERMISSION, targets);
         if (!ok) offenders.push(`${w.metatype?.name}.${name}`);
       }
     }
