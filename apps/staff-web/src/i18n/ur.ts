@@ -464,4 +464,14 @@ export const ur: Record<Key, string> = {
   'err.PAYMENT_ACCOUNT_REQUIRED': 'وہ کھاتہ چنیں جس میں رقم گئی۔',
   'err.PAYMENT_ACCOUNT_INVALID': 'یہ کھاتہ یہاں اس قسم کی ادائیگی نہیں لے سکتا۔',
   'err.OWNER_REQUIRED': 'بتائیں یہ کھاتہ کس کا ہے۔',
+  // kitchen
+  'nav.kitchen': 'باورچی خانہ', 'kt.v.queue': 'آرڈر', 'kt.v.done': 'مکمل', 'kt.v.menu': 'مینو', 'kt.newOrder': 'نیا آرڈر', 'kt.nothing': 'کوئی آرڈر منتظر نہیں۔', 'kt.noMenu': 'مینو خالی ہے۔ کچن مینیجر سے آئٹم شامل کرنے کو کہیں۔',
+  'kt.s.NEW': 'نیا', 'kt.s.PREPARING': 'پک رہا ہے', 'kt.s.READY': 'تیار', 'kt.s.DELIVERED': 'پہنچا دیا', 'kt.s.CANCELLED': 'منسوخ', 'kt.minutes': '{n} منٹ پہلے',
+  'kt.prepare': 'پکانا شروع کریں', 'kt.ready': 'تیار ہے', 'kt.deliver': 'مہمان تک پہنچا دیا', 'kt.cancel': 'منسوخ کریں', 'kt.cancelWhy': 'منسوخی کی وجہ کیا ہے؟', 'kt.send': 'کچن بھیجیں',
+  'kt.category': 'حصہ', 'kt.name': 'نام', 'kt.nameUr': 'اردو نام', 'kt.price': 'قیمت', 'kt.addItem': 'مینو میں شامل کریں', 'kt.newPrice': 'نئی قیمت', 'kt.off': 'بند کریں', 'kt.on': 'چالو کریں',
+  'err.NOT_IN_HOUSE': 'روم سروس صرف ٹھہرے ہوئے مہمانوں کے لیے ہے۔',
+  'err.MENU_ITEM_INVALID': 'کوئی آئٹم اس مینو میں نہیں۔',
+  'err.MENU_ITEM_UNAVAILABLE': 'کوئی آئٹم دستیاب نہیں۔',
+  'err.NOT_READY': 'کچن نے اس آرڈر کو ابھی تیار نہیں لکھا۔',
+  'err.ALREADY_DELIVERED': 'یہ آرڈر مہمان کے بِل پر آ چکا ہے۔ بِل پر اندراج واپس کریں۔',
 };

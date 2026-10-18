@@ -91,6 +91,10 @@ export interface ComplianceTaskTable { tenant_id: string; id: Generated<string>;
 
 export interface PaymentAccountTable { tenant_id: string; id: Generated<string>; property_id: string | null; kind: 'BANK' | 'CARD_CLEARING' | 'WALLET' | 'GATEWAY'; name: string; bank_name: string | null; account_title: string | null; last4: string | null; owner_type: Generated<'COMPANY' | 'PERSONAL' | 'OTHER'>; owner_name: string | null; currency: Generated<string>; status: Generated<'ACTIVE' | 'CLOSED'>; note: string | null; created_by: string | null; created_at: TsGen; version: Generated<number> }
 
+export interface MenuItemTable { tenant_id: string; id: Generated<string>; property_id: string; category: string; name: string; name_ur: string | null; price_minor: Big; active: Generated<boolean>; sort_order: Generated<number>; created_at: TsGen; version: Generated<number> }
+export interface FnbOrderTable { tenant_id: string; id: Generated<string>; property_id: string; number: string; reservation_id: string; reservation_room_id: string; folio_id: string; room_number: string; guest_name: string; status: Generated<'NEW' | 'PREPARING' | 'READY' | 'DELIVERED' | 'CANCELLED'>; note: string | null; total_minor: Big; currency: string; created_by: string; created_at: TsGen; prepared_at: TsNull; ready_at: TsNull; delivered_at: TsNull; delivered_by: string | null; business_date: D | null; cancel_reason: string | null; cancelled_by: string | null; version: Generated<number> }
+export interface FnbOrderLineTable { tenant_id: string; id: Generated<string>; order_id: string; menu_item_id: string; name: string; quantity: number; unit_price_minor: Big; line_minor: Big; note: string | null; posting_id: string | null }
+
 export interface DB {
   guest: GuestTable; property_counter: PropertyCounterTable; reservation: ReservationTable; reservation_room: ReservationRoomTable; stay_night: StayNightTable; reservation_history: ReservationHistoryTable; stay_guest: StayGuestTable;
   cashier_session: CashierSessionTable; cash_drop: CashDropTable; folio: FolioTable; payment: PaymentTable; folio_posting: FolioPostingTable;
@@ -98,7 +102,7 @@ export interface DB {
   night_audit_run: NightAuditRunTable; night_audit_step: NightAuditStepTable; daily_property_stats: DailyPropertyStatsTable; daily_revenue_line: DailyRevenueLineTable;
   tax_code: TaxCodeTable; tax_code_version: TaxCodeVersionTable; invoice_counter: InvoiceCounterTable; invoice: InvoiceTable; invoice_posting: InvoicePostingTable;
   company: CompanyTable; ar_item: ArItemTable; ar_item_void: ArItemVoidTable; ar_receipt: ArReceiptTable; ar_allocation: ArAllocationTable;
-  payment_account: PaymentAccountTable; compliance_rule: ComplianceRuleTable; compliance_hit: ComplianceHitTable; compliance_task: ComplianceTaskTable; work_order: WorkOrderTable; work_order_event: WorkOrderEventTable; ota_receivable: OtaReceivableTable; ota_receivable_event: OtaReceivableEventTable;
+  menu_item: MenuItemTable; fnb_order: FnbOrderTable; fnb_order_line: FnbOrderLineTable; payment_account: PaymentAccountTable; compliance_rule: ComplianceRuleTable; compliance_hit: ComplianceHitTable; compliance_task: ComplianceTaskTable; work_order: WorkOrderTable; work_order_event: WorkOrderEventTable; ota_receivable: OtaReceivableTable; ota_receivable_event: OtaReceivableEventTable;
   rate_plan: RatePlanTable; rate_base: RateBaseTable; rate_season: RateSeasonTable; rate_season_value: RateSeasonValueTable; rate_override: RateOverrideTable; rate_restriction: RateRestrictionTable;
   building: BuildingTable; floor: FloorTable; room_type: RoomTypeTable; room: RoomTable; amenity: AmenityTable; room_type_amenity: RoomTypeAmenityTable;
   room_block: RoomBlockTable; inventory_day: InventoryDayTable; room_assignment: RoomAssignmentTable;

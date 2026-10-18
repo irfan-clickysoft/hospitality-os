@@ -462,5 +462,15 @@ export const en = {
   'err.PAYMENT_ACCOUNT_REQUIRED': 'Choose the account the money went into.',
   'err.PAYMENT_ACCOUNT_INVALID': 'That account cannot take this kind of payment here.',
   'err.OWNER_REQUIRED': 'Say whose account this is.',
+  // kitchen
+  'nav.kitchen': 'Kitchen', 'kt.v.queue': 'Orders', 'kt.v.done': 'Finished', 'kt.v.menu': 'Menu', 'kt.newOrder': 'New order', 'kt.nothing': 'No orders waiting.', 'kt.noMenu': 'The menu is empty. Ask the kitchen manager to add items.',
+  'kt.s.NEW': 'New', 'kt.s.PREPARING': 'Cooking', 'kt.s.READY': 'Ready', 'kt.s.DELIVERED': 'Delivered', 'kt.s.CANCELLED': 'Cancelled', 'kt.minutes': '{n} min ago',
+  'kt.prepare': 'Start cooking', 'kt.ready': 'Ready', 'kt.deliver': 'Delivered to guest', 'kt.cancel': 'Cancel', 'kt.cancelWhy': 'Why is it cancelled?', 'kt.send': 'Send to kitchen',
+  'kt.category': 'Section', 'kt.name': 'Name', 'kt.nameUr': 'Name in Urdu', 'kt.price': 'Price', 'kt.addItem': 'Add to menu', 'kt.newPrice': 'New price', 'kt.off': 'Switch off', 'kt.on': 'Switch on',
+  'err.NOT_IN_HOUSE': 'Room service is only for guests who are in the house.',
+  'err.MENU_ITEM_INVALID': 'An item is not on this menu.',
+  'err.MENU_ITEM_UNAVAILABLE': 'An item is not available.',
+  'err.NOT_READY': 'The kitchen has not marked this order ready.',
+  'err.ALREADY_DELIVERED': 'This order is already on the guest’s bill. Reverse the charges on the bill instead.',
 } as const;
 export type Key = keyof typeof en;
