@@ -3,9 +3,11 @@
 # hos_owner: owns schema, runs migrations. hos_app: runtime, RLS ENFORCED (no BYPASSRLS).
 # hos_admin: provisioning/support jobs only (BYPASSRLS). Passwords here are dev-only.
 set -euo pipefail
+cd "$(dirname "$0")/.."
+. scripts/psql.sh
 DBS="${HOS_DATABASES:-hos_dev hos_test hos_api_test}"
 psql_stdin() {
-  if [ -n "${PGSUPERUSER_URL:-}" ]; then psql "$PGSUPERUSER_URL" -v ON_ERROR_STOP=1 -qAt
+  if [ -n "${PGSUPERUSER_URL:-}" ]; then hpsql "$PGSUPERUSER_URL" -v ON_ERROR_STOP=1 -qAt
   else su postgres -c "psql -v ON_ERROR_STOP=1 -qAt"; fi
 }
 sql() { printf '%s\n' "$1" | psql_stdin; }
@@ -21,7 +23,7 @@ done
 # extensions need superuser: install once per database
 for db in $DBS; do
   if [ -n "${PGSUPERUSER_URL:-}" ]; then
-    psql "${PGSUPERUSER_URL%/*}/$db" -v ON_ERROR_STOP=1 -qAt -c "CREATE EXTENSION IF NOT EXISTS btree_gist; CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS citext;"
+    hpsql "${PGSUPERUSER_URL%/*}/$db" -v ON_ERROR_STOP=1 -qAt -c "CREATE EXTENSION IF NOT EXISTS btree_gist; CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS citext;"
   else
     su postgres -c "psql -d $db -v ON_ERROR_STOP=1 -qAt -c 'CREATE EXTENSION IF NOT EXISTS btree_gist; CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS citext;'"
   fi
