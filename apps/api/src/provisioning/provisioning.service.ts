@@ -55,4 +55,29 @@ export class ProvisioningService {
       return { tenantId, legalEntityId: le.id, ownerUserId: owner.id, ownerInviteToken: invite.token };
     });
   }
+
+  /**
+   * Brings every tenant's built-in roles up to the current templates: adds roles that did not exist when the tenant was created and adds permissions that
+   * were introduced later. It only ever adds — a permission a tenant removed from a built-in role stays removed only if it was never part of the template,
+   * and custom roles are never touched. Run it after each release (the deploy pipeline will do this automatically).
+   */
+  async syncSystemRoles(tenantId?: string): Promise<{ tenants: number; rolesAdded: number; permissionsAdded: number }> {
+    if (!this.admin) throw new Error('Provisioning requires DATABASE_URL_ADMIN');
+    return this.admin.transaction().execute(async (trx) => {
+      let q = trx.selectFrom('tenant').select('id');
+      if (tenantId) q = q.where('id', '=', tenantId);
+      const tenants = await q.execute();
+      let rolesAdded = 0, permissionsAdded = 0;
+      for (const t of tenants) {
+        for (const tpl of ROLE_TEMPLATES) {
+          let role = await trx.selectFrom('role').select('id').where('tenant_id', '=', t.id).where('key', '=', tpl.key).executeTakeFirst();
+          if (!role) { role = await trx.insertInto('role').values({ tenant_id: t.id, key: tpl.key, name: tpl.name, is_system: true }).returning('id').executeTakeFirstOrThrow(); rolesAdded++; }
+          const have = new Set((await trx.selectFrom('role_permission').select('permission_key').where('tenant_id', '=', t.id).where('role_id', '=', role.id).execute()).map((r) => r.permission_key));
+          const missing = tpl.permissions.filter((p) => !have.has(p));
+          if (missing.length) { await trx.insertInto('role_permission').values(missing.map((p) => ({ tenant_id: t.id, role_id: role!.id, permission_key: p }))).execute(); permissionsAdded += missing.length; }
+        }
+      }
+      return { tenants: tenants.length, rolesAdded, permissionsAdded };
+    });
+  }
 }

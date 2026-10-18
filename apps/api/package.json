@@ -11,7 +11,8 @@
     "test": "vitest run",
     "seed:sunset": "tsx --env-file=../../.env src/cli/seed-sunset.ts",
     "seed:sunset-rates": "tsx --env-file=../../.env src/cli/seed-sunset-rates.ts",
-    "seed:demo-staff": "tsx --env-file=../../.env src/cli/seed-demo-staff.ts"
+    "seed:demo-staff": "tsx --env-file=../../.env src/cli/seed-demo-staff.ts",
+    "roles:sync": "tsx --env-file=../../.env src/cli/sync-roles.ts"
   },
   "dependencies": {
     "@hos/auth": "workspace:*",

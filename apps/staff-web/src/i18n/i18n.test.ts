@@ -13,7 +13,7 @@ describe('translations', () => {
     for (const [k, v] of Object.entries(ur)) {
       const e = (en as Record<string, string>)[k]!;
       expect(v.trim(), k).not.toBe('');
-      if (k !== 'nav.language' && k !== 'common.none') expect(v, `${k} is still English`).not.toBe(e);
+      if (!['nav.language', 'common.none', 'src.OTA_BOOKING_COM'].includes(k)) expect(v, `${k} is still English`).not.toBe(e);
       expect(placeholders(v), k).toEqual(placeholders(e));
     }
   });

@@ -173,3 +173,22 @@ describe('idempotency', () => {
     await expect(inTenant(() => withTenant(appDb, T.tenantId, (trx) => idem.run(trx, 'short', 'h', async () => ({ statusCode: 200, body: 1 }))))).rejects.toMatchObject({ status: 400 });
   });
 });
+
+describe('built-in roles stay current', () => {
+  it('adds roles and permissions introduced after a tenant was created, never removes, never touches custom roles', async () => {
+    const t = await provision(app, 'rolesync');
+    const roleId = async (key: string) => (await adminDb.selectFrom('role').select('id').where('tenant_id', '=', t.tenantId).where('key', '=', key).executeTakeFirstOrThrow()).id;
+    const fd = await roleId('front_desk_agent');
+    await adminDb.deleteFrom('role_permission').where('tenant_id', '=', t.tenantId).where('role_id', '=', fd).where('permission_key', 'in', ['frontdesk.check_in', 'frontdesk.check_out']).execute();
+    await adminDb.deleteFrom('role').where('tenant_id', '=', t.tenantId).where('key', '=', 'property_admin').execute();
+    const custom = (await adminDb.insertInto('role').values({ tenant_id: t.tenantId, key: 'night_shift_lead', name: 'Night shift lead', is_system: false }).returning('id').executeTakeFirstOrThrow()).id;
+    await adminDb.insertInto('role_permission').values({ tenant_id: t.tenantId, role_id: custom, permission_key: 'report.view' }).execute();
+    const r = await app.get(ProvisioningService).syncSystemRoles(t.tenantId);
+    expect(r).toMatchObject({ tenants: 1, rolesAdded: 1 }); expect(r.permissionsAdded).toBeGreaterThanOrEqual(2);
+    const perms = (await adminDb.selectFrom('role_permission').select('permission_key').where('tenant_id', '=', t.tenantId).where('role_id', '=', fd).execute()).map((p) => p.permission_key);
+    expect(perms).toEqual(expect.arrayContaining(['frontdesk.check_in', 'frontdesk.check_out']));
+    expect(await roleId('property_admin')).toBeDefined();
+    expect((await adminDb.selectFrom('role_permission').select('permission_key').where('tenant_id', '=', t.tenantId).where('role_id', '=', custom).execute()).map((p) => p.permission_key)).toEqual(['report.view']);
+    expect(await app.get(ProvisioningService).syncSystemRoles(t.tenantId)).toEqual({ tenants: 1, rolesAdded: 0, permissionsAdded: 0 });      // nothing left to add
+  });
+});

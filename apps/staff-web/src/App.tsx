@@ -5,24 +5,35 @@ import { MyRooms } from './screens/MyRooms.js';
 import { Board } from './screens/Board.js';
 import { Issues } from './screens/Issues.js';
 import { LostFound } from './screens/LostFound.js';
+import { Bookings } from './desk/Bookings.js';
+import { Cashier } from './desk/Cashier.js';
+import { NightAudit } from './desk/NightAudit.js';
+import { Rack } from './desk/Rack.js';
+import { Today } from './desk/Today.js';
+import { StepUpProvider } from './lib/stepup.js';
 import { AuthProvider, useAuth, useWork, WorkProvider } from './state.js';
 import { Spinner } from './ui/kit.js';
 import type { Key } from './i18n/en.js';
 import { errorText } from './i18n/index.js';
 
-type Tab = 'mine' | 'board' | 'issues' | 'lost';
+type Tab = 'today' | 'rack' | 'bookings' | 'cashier' | 'audit' | 'mine' | 'board' | 'issues' | 'lost';
 
 function Shell() {
   const { t, locale, setLocale } = useT();
   const { me, property, properties, setPropertyId, can, logout, offlineBoot } = useAuth();
   const work = useWork();
   const tabs = useMemo(() => [
+    can('reservation.view') && { id: 'today' as Tab, label: 'nav.today' as Key },
+    can('reservation.view') && { id: 'rack' as Tab, label: 'nav.rack' as Key },
+    can('reservation.view') && { id: 'bookings' as Tab, label: 'nav.bookings' as Key },
+    can('cashier.operate') && { id: 'cashier' as Tab, label: 'nav.cashier' as Key },
+    can('nightaudit.run') && { id: 'audit' as Tab, label: 'nav.audit' as Key },
     can('housekeeping.update') && { id: 'mine' as Tab, label: 'nav.myRooms' as Key },
     can('housekeeping.view') && { id: 'board' as Tab, label: 'nav.board' as Key },
     can('housekeeping.view') && { id: 'issues' as Tab, label: 'nav.issues' as Key },
     can('housekeeping.view') && { id: 'lost' as Tab, label: 'nav.lostFound' as Key },
   ].filter(Boolean) as Array<{ id: Tab; label: Key }>, [can]);
-  const [tab, setTab] = useState<Tab>('mine');
+  const [tab, setTab] = useState<Tab>('today');
   useEffect(() => { if (tabs.length && !tabs.some((x) => x.id === tab)) setTab(tabs[0]!.id); }, [tabs, tab]);
   useEffect(() => { try { if (!localStorage.getItem('hos.locale') && me?.user.locale) setLocale(me.user.locale); } catch { /* ignore */ } }, [me, setLocale]);
 
@@ -42,7 +53,7 @@ function Shell() {
       {work.pending.length > 0 && <div className="banner" role="status">{t('banner.pending', { n: work.pending.length })}</div>}
       {work.notices.length > 0 && <div className="banner warn" role="alert">{t('banner.dropped', { n: work.notices.length })} <small>({[...new Set(work.notices.map((n) => errorText(locale, n.code)))].join(' ')})</small> <button className="link" onClick={work.clearNotices}>{t('common.close')}</button></div>}
       <main key={property.id} className="content">
-        {tab === 'mine' && <MyRooms />}{tab === 'board' && <Board />}{tab === 'issues' && <Issues />}{tab === 'lost' && <LostFound />}
+        {tab === 'today' && <Today />}{tab === 'rack' && <Rack />}{tab === 'bookings' && <Bookings />}{tab === 'cashier' && <Cashier />}{tab === 'audit' && <NightAudit />}{tab === 'mine' && <MyRooms />}{tab === 'board' && <Board />}{tab === 'issues' && <Issues />}{tab === 'lost' && <LostFound />}
         {tabs.length === 0 && <p className="muted center">{t('err.PERMISSION_DENIED')}</p>}
       </main>
       <nav className="tabs" aria-label="main">
@@ -56,6 +67,6 @@ function Gate() {
   const { status, me } = useAuth();
   if (status === 'loading') return <Spinner />;
   if (status === 'out' || status === 'mfa') return <Login />;
-  return <WorkProvider userId={me!.user.id}><Shell /></WorkProvider>;
+  return <WorkProvider userId={me!.user.id}><StepUpProvider><Shell /></StepUpProvider></WorkProvider>;
 }
 export function App() { return <AuthProvider><Gate /></AuthProvider>; }

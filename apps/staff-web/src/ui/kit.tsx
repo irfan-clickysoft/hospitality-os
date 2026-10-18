@@ -4,7 +4,10 @@ import type { Key } from '../i18n/en.js';
 
 export const Spinner = () => { const { t } = useT(); return <p className="muted center" role="status">{t('common.loading')}</p>; };
 export const Empty = ({ text }: { text: string }) => <p className="muted center empty">{text}</p>;
-export const ErrorLine = ({ code }: { code?: string }) => { const { err } = useT(); return code ? <p className="error" role="alert">{err(code)}</p> : null; };
+export const ErrorLine = ({ code, detail }: { code?: string; detail?: string }) => { const { err, t } = useT(); if (!code) return null; const known = err(code); return <p className="error" role="alert">{known === t('err.generic') && detail ? detail : known}</p>; };
+/** One state for "what went wrong" that keeps the server's message as a fallback. */
+export interface Problem { code: string; detail?: string }
+export const problemOf = (e: unknown): Problem => (e instanceof Error && 'code' in e ? { code: String((e as { code: unknown }).code), detail: (e as Error).message } : { code: 'generic' });
 
 export function Chip({ active, onClick, children }: { active?: boolean; onClick?: () => void; children: ReactNode }) {
   return <button type="button" className={`chip${active ? ' on' : ''}`} onClick={onClick} aria-pressed={!!active}>{children}</button>;

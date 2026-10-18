@@ -124,6 +124,7 @@ export class FrontDeskService {
     const at = new Date(this.clock.now());
     await trx.updateTable('reservation_room').set({ checked_in_at: at, checked_in_business_date: bd }).where('id', '=', lineId).execute();
     await this.folios.ensureGuestFolio(trx, propertyId, id);
+    await trx.updateTable('reservation').set({ at_risk: false }).where('id', '=', id).where('at_risk', '=', true).execute();          // a guest who has arrived is no longer a no-show risk
     await trx.updateTable('room_assignment').set({ status: 'IN_HOUSE' }).where('assignment_ref', '=', lineId).where('status', '=', 'ASSIGNED').execute();
 
     const early = bd === line.arrival && hoursBeforeArrival(line.arrival, p.check_in_time, p.timezone, this.clock.now()) > 0;
