@@ -55,7 +55,7 @@ export class ManagementService {
         SELECT r.company_id, c.name, sum(p.amount_minor)::text AS amt FROM folio_posting p JOIN folio f ON f.tenant_id = p.tenant_id AND f.id = p.folio_id JOIN reservation r ON r.tenant_id = f.tenant_id AND r.id = f.reservation_id
         LEFT JOIN company c ON c.tenant_id = r.tenant_id AND c.id = r.company_id
         WHERE p.tenant_id = ${t} AND p.property_id = ANY(${ids}::uuid[]) AND p.business_date BETWEEN ${from}::date AND ${to}::date AND r.company_id IS NOT NULL AND p.payment_id IS NULL
-          AND p.txn_code NOT IN ('TAX','AR_TRANSFER') AND p.posting_type IN ('CHARGE','DISCOUNT','REVERSAL','ADJUSTMENT') GROUP BY r.company_id, c.name HAVING sum(p.amount_minor) <> 0 ORDER BY sum(p.amount_minor) DESC LIMIT 10`.execute(trx);
+          AND p.txn_code NOT IN ('TAX','AR_TRANSFER','OTA_TRANSFER') AND p.posting_type IN ('CHARGE','DISCOUNT','REVERSAL','ADJUSTMENT') GROUP BY r.company_id, c.name HAVING sum(p.amount_minor) <> 0 ORDER BY sum(p.amount_minor) DESC LIMIT 10`.execute(trx);
       const cash = await sql<{ property_id: string; open_n: number; review_n: number; variance: string }>`
         SELECT property_id, (count(*) FILTER (WHERE status = 'OPEN'))::int AS open_n, (count(*) FILTER (WHERE status = 'CLOSED'))::int AS review_n,
           coalesce(sum(variance_minor) FILTER (WHERE status IN ('CLOSED','REVIEWED') AND opened_business_date BETWEEN ${from}::date AND ${to}::date),0)::text AS variance
@@ -73,6 +73,10 @@ export class ManagementService {
           (SELECT count(*) FROM reservation r WHERE r.tenant_id = p.tenant_id AND r.property_id = p.id AND r.source = 'OTA_BOOKING_COM' AND r.created_at::date BETWEEN ${from}::date AND ${to}::date AND r.guarantee_type = 'DEPOSIT')::int AS ota_deposit,
           coalesce((SELECT sum(x.amount_minor) FROM folio_posting x WHERE x.tenant_id = p.tenant_id AND x.property_id = p.id AND x.business_date BETWEEN ${from}::date AND ${to}::date AND x.txn_code IN ('CANCEL_FEE','NOSHOW_FEE') AND x.posting_type IN ('CHARGE','REVERSAL')),0)::text AS fee_net
         FROM property p WHERE p.tenant_id = ${t} AND p.id = ANY(${ids}::uuid[])`.execute(trx);
+      const otaRec = await sql<{ property_id: string; open_amt: string; written: string }>`
+        SELECT r.property_id, coalesce(sum(r.amount_minor - r.received_minor - r.written_off_minor) FILTER (WHERE r.status IN ('CLAIMABLE','CLAIMED','DISPUTED')),0)::text AS open_amt,
+          coalesce((SELECT sum(e.amount_minor) FROM ota_receivable_event e JOIN ota_receivable x ON x.tenant_id = e.tenant_id AND x.id = e.receivable_id WHERE e.tenant_id = r.tenant_id AND x.property_id = r.property_id AND e.action = 'WRITE_OFF' AND e.business_date BETWEEN ${from}::date AND ${to}::date),0)::text AS written
+        FROM ota_receivable r WHERE r.tenant_id = ${t} AND r.property_id = ANY(${ids}::uuid[]) GROUP BY r.tenant_id, r.property_id`.execute(trx);
       const arPending = await sql<{ n: number; amt: string }>`SELECT count(*)::int AS n, coalesce(sum(amount_minor),0)::text AS amt FROM ar_receipt WHERE tenant_id = ${t} AND status = 'PENDING_VERIFICATION'`.execute(trx);
       const taxDrafts = tenantWide ? (await sql<{ n: number }>`SELECT count(*)::int AS n FROM tax_code_version WHERE tenant_id = ${t} AND status = 'DRAFT'`.execute(trx)).rows[0]!.n : 0;
 
@@ -93,7 +97,7 @@ export class ManagementService {
           cash: { openSessions: cs?.open_n ?? 0, awaitingReview: cs?.review_n ?? 0, variance: fmt(cs?.variance ?? '0', p.currency) },
           approvals: { paymentsToVerify: pd?.n ?? 0, paymentsToVerifyAmount: fmt(pd?.amt ?? '0', p.currency), sessionsToReview: cs?.review_n ?? 0 },
           issues: { open: is?.n ?? 0, oldestHours: is?.oldest_h ?? 0 },
-          revenueProtection: { otaConfirmed: pr.ota_future, otaGuaranteed: pr.ota_guaranteed, otaAtRisk: pr.ota_risk, depositConversionPct: pct(pr.ota_deposit, pr.ota_created), otaCreated: pr.ota_created, feesNet: fmt(pr.fee_net, p.currency) },
+          revenueProtection: { otaConfirmed: pr.ota_future, otaGuaranteed: pr.ota_guaranteed, otaAtRisk: pr.ota_risk, depositConversionPct: pct(pr.ota_deposit, pr.ota_created), otaCreated: pr.ota_created, feesNet: fmt(pr.fee_net, p.currency), otaReceivable: fmt(otaRec.rows.find((x) => x.property_id === p.id)?.open_amt ?? '0', p.currency), otaWrittenOff: fmt(otaRec.rows.find((x) => x.property_id === p.id)?.written ?? '0', p.currency) },
         };
       });
       void byProp;

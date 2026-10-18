@@ -12,6 +12,7 @@ import { CheckInSheet } from './CheckInSheet.js';
 import { CheckOutSheet } from './CheckOutSheet.js';
 import { PaymentSheet } from './PaymentSheet.js';
 import { RoomPicker } from './RoomPicker.js';
+import { OtaClaimPanel } from './OtaClaims.js';
 import { CompanyBillings } from './BillToCompany.js';
 import { InvoicePanel } from './Invoices.js';
 import { STATUS_TONE, type FolioView, type Line, type ReservationDetail } from './types.js';
@@ -166,6 +167,7 @@ function FolioPanel({ f, r, open, onChanged }: { f: FolioView | null; r: Reserva
       {f.postings.length === 0 ? <p className="muted small">{t('common.none')}</p> : (
         <ul className="plain small">{f.postings.map((p) => <li key={p.id} className={`row between${p.reversed ? ' struck' : ''}`}><span>{p.businessDate} · {p.description ?? p.txnCode}</span><span dir="ltr">{money(p.amount)}</span></li>)}</ul>)}
       <CompanyBillings reservationId={r.id} companyId={r.companyId} balance={bal ?? null} folioOpen={f.folio?.status === 'OPEN'} onChanged={onChanged} />
+      <OtaClaimPanel reservationId={r.id} source={r.source} balance={bal ?? null} folioOpen={f.folio?.status === 'OPEN'} onChanged={onChanged} />
       <InvoicePanel reservationId={r.id} finished={r.status === 'CHECKED_OUT'} />
     </div>
   );

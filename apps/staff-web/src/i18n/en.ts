@@ -406,5 +406,16 @@ export const en = {
   'mg.feesRecovered': 'No-show and late-cancel fees', 'mg.issues': 'Open room issues', 'mg.issuesLine': '{n} · oldest {h} h',
   'mg.approvals': 'Waiting for approval', 'mg.payVerify': 'Bank transfers to verify', 'mg.sessionReview': 'Cashier sessions to review', 'mg.arVerify': 'Company payments to verify', 'mg.taxApprove': 'Tax rates to approve', 'mg.nothingPending': 'Nothing waiting',
   'mg.bySource': 'Revenue by source', 'mg.byCompany': 'Top companies',
+  // OTA claims
+  'nav.ota': 'OTA claims', 'mg.otaOwed': 'Owed by OTAs', 'mg.otaLost': 'OTA claims written off',
+  'ota.title': 'OTA claim', 'ota.claimFee': 'Claim from OTA', 'ota.claimHelp': 'Moves a fee the OTA owes ({balance} is on the guest’s bill) off the guest’s bill onto a claim. Leave the amount empty to claim the whole fee.',
+  'ota.kind': 'What for', 'ota.k.NO_SHOW': 'No-show', 'ota.k.LATE_CANCELLATION': 'Late cancellation', 'ota.k.OTHER': 'Other',
+  'ota.s.CLAIMABLE': 'To send', 'ota.s.CLAIMED': 'Sent to OTA', 'ota.s.RECEIVED': 'Received', 'ota.s.DISPUTED': 'Disputed', 'ota.s.WRITTEN_OFF': 'Written off', 'ota.s.VOID': 'Taken back',
+  'ota.owed': 'Owed by OTAs', 'ota.b.d0_30': '0–30 days', 'ota.b.d31_60': '31–60 days', 'ota.b.d61_90': '61–90 days', 'ota.b.d90plus': 'Over 90 days',
+  'ota.f.open': 'Still owed', 'ota.f.all': 'All', 'ota.age': '{n} days ago', 'ota.received': 'Received', 'ota.writtenOff': 'Written off', 'ota.stillOwed': 'Still owed', 'ota.claimRef': 'OTA claim reference',
+  'ota.markSent': 'Mark as sent to OTA', 'ota.recordReceived': 'Record money received', 'ota.dispute': 'Dispute', 'ota.resolve': 'Resolved', 'ota.writeOff': 'Write off the rest',
+  'ota.e.CREATE': 'Claim created', 'ota.e.CLAIM': 'Sent to OTA', 'ota.e.RECEIVE': 'Money received', 'ota.e.DISPUTE': 'Disputed', 'ota.e.RESOLVE': 'Dispute resolved', 'ota.e.WRITE_OFF': 'Written off', 'ota.e.VOID': 'Taken back',
+  'err.NOT_AN_OTA_BOOKING': 'Only a booking from an OTA can be claimed from the OTA.',
+  'err.NOTHING_TO_CLAIM': 'There is nothing owing on this bill.',
 } as const;
 export type Key = keyof typeof en;

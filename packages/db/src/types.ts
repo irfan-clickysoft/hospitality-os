@@ -79,6 +79,9 @@ export interface ArItemVoidTable { tenant_id: string; item_id: string; reason: s
 export interface ArReceiptTable { tenant_id: string; id: Generated<string>; company_id: string; method: 'BANK_TRANSFER' | 'CHEQUE' | 'WALLET'; amount_minor: Big; withheld_minor: ColumnType<string, string | number | bigint | undefined, string | number | bigint>; withholding_ref: string | null; currency: string; reference: string; counterparty: string | null; received_on: D; apply_to: Generated<string[]>; status: Generated<'PENDING_VERIFICATION' | 'CAPTURED' | 'REJECTED'>; note: string | null; created_by: string; created_at: TsGen; verified_by: string | null; verified_at: TsNull; decision_note: string | null }
 export interface ArAllocationTable { tenant_id: string; id: Generated<string>; receipt_id: string; item_id: string; applied_minor: Big; created_at: TsGen }
 
+export interface OtaReceivableTable { tenant_id: string; id: Generated<string>; property_id: string; reservation_id: string; folio_id: string; posting_id: string; source: 'OTA_BOOKING_COM' | 'OTA_OTHER'; ota_ref: string | null; confirmation_no: string; guest_name: string | null; kind: 'NO_SHOW' | 'LATE_CANCELLATION' | 'OTHER'; amount_minor: Big; received_minor: ColumnType<string, string | number | bigint | undefined, string | number | bigint>; written_off_minor: ColumnType<string, string | number | bigint | undefined, string | number | bigint>; currency: string; status: Generated<'CLAIMABLE' | 'CLAIMED' | 'RECEIVED' | 'DISPUTED' | 'WRITTEN_OFF' | 'VOID'>; claim_ref: string | null; claimed_on: D | null; incurred_on: D; note: string | null; created_by: string; created_at: TsGen; version: Generated<number> }
+export interface OtaReceivableEventTable { tenant_id: string; id: Generated<string>; receivable_id: string; action: 'CREATE' | 'CLAIM' | 'RECEIVE' | 'DISPUTE' | 'RESOLVE' | 'WRITE_OFF' | 'VOID'; amount_minor: BigNull; reference: string | null; note: string | null; business_date: D; actor_id: string; at: TsGen }
+
 export interface DB {
   guest: GuestTable; property_counter: PropertyCounterTable; reservation: ReservationTable; reservation_room: ReservationRoomTable; stay_night: StayNightTable; reservation_history: ReservationHistoryTable; stay_guest: StayGuestTable;
   cashier_session: CashierSessionTable; cash_drop: CashDropTable; folio: FolioTable; payment: PaymentTable; folio_posting: FolioPostingTable;
@@ -86,6 +89,7 @@ export interface DB {
   night_audit_run: NightAuditRunTable; night_audit_step: NightAuditStepTable; daily_property_stats: DailyPropertyStatsTable; daily_revenue_line: DailyRevenueLineTable;
   tax_code: TaxCodeTable; tax_code_version: TaxCodeVersionTable; invoice_counter: InvoiceCounterTable; invoice: InvoiceTable; invoice_posting: InvoicePostingTable;
   company: CompanyTable; ar_item: ArItemTable; ar_item_void: ArItemVoidTable; ar_receipt: ArReceiptTable; ar_allocation: ArAllocationTable;
+  ota_receivable: OtaReceivableTable; ota_receivable_event: OtaReceivableEventTable;
   rate_plan: RatePlanTable; rate_base: RateBaseTable; rate_season: RateSeasonTable; rate_season_value: RateSeasonValueTable; rate_override: RateOverrideTable; rate_restriction: RateRestrictionTable;
   building: BuildingTable; floor: FloorTable; room_type: RoomTypeTable; room: RoomTable; amenity: AmenityTable; room_type_amenity: RoomTypeAmenityTable;
   room_block: RoomBlockTable; inventory_day: InventoryDayTable; room_assignment: RoomAssignmentTable;

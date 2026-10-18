@@ -408,4 +408,15 @@ export const ur: Record<Key, string> = {
   'mg.feesRecovered': 'نو شو اور دیر سے منسوخی کی فیس', 'mg.issues': 'کھلے کمرے کے مسائل', 'mg.issuesLine': '{n} · سب سے پرانا {h} گھنٹے',
   'mg.approvals': 'منظوری کے منتظر', 'mg.payVerify': 'تصدیق طلب بینک ٹرانسفر', 'mg.sessionReview': 'جائزہ طلب کیشیئر سیشن', 'mg.arVerify': 'تصدیق طلب کمپنی ادائیگیاں', 'mg.taxApprove': 'منظوری طلب ٹیکس شرحیں', 'mg.nothingPending': 'کچھ منتظر نہیں',
   'mg.bySource': 'ذریعے کے لحاظ سے آمدنی', 'mg.byCompany': 'سرِفہرست کمپنیاں',
+  // OTA claims
+  'nav.ota': 'OTA دعوے', 'mg.otaOwed': 'OTA کے ذمے', 'mg.otaLost': 'معاف کیے گئے OTA دعوے',
+  'ota.title': 'OTA دعویٰ', 'ota.claimFee': 'OTA سے وصول کریں', 'ota.claimHelp': 'جو فیس OTA کے ذمے ہے ({balance} مہمان کے بِل پر ہے) اسے مہمان کے بِل سے ہٹا کر دعوے میں ڈالتا ہے۔ پوری فیس کے لیے رقم خالی چھوڑیں۔',
+  'ota.kind': 'کس بات کی', 'ota.k.NO_SHOW': 'نو شو', 'ota.k.LATE_CANCELLATION': 'دیر سے منسوخی', 'ota.k.OTHER': 'دیگر',
+  'ota.s.CLAIMABLE': 'بھیجنا باقی', 'ota.s.CLAIMED': 'OTA کو بھیج دیا', 'ota.s.RECEIVED': 'وصول ہو گیا', 'ota.s.DISPUTED': 'تنازع', 'ota.s.WRITTEN_OFF': 'معاف', 'ota.s.VOID': 'واپس لیا',
+  'ota.owed': 'OTA کے ذمے', 'ota.b.d0_30': '0–30 دن', 'ota.b.d31_60': '31–60 دن', 'ota.b.d61_90': '61–90 دن', 'ota.b.d90plus': '90 دن سے زیادہ',
+  'ota.f.open': 'ابھی واجب', 'ota.f.all': 'سب', 'ota.age': '{n} دن پہلے', 'ota.received': 'وصول', 'ota.writtenOff': 'معاف', 'ota.stillOwed': 'ابھی واجب', 'ota.claimRef': 'OTA دعوے کا حوالہ',
+  'ota.markSent': 'OTA کو بھیج دیا لکھیں', 'ota.recordReceived': 'وصول شدہ رقم درج کریں', 'ota.dispute': 'تنازع اٹھائیں', 'ota.resolve': 'تنازع حل ہو گیا', 'ota.writeOff': 'باقی معاف کریں',
+  'ota.e.CREATE': 'دعویٰ بنا', 'ota.e.CLAIM': 'OTA کو بھیجا', 'ota.e.RECEIVE': 'رقم وصول ہوئی', 'ota.e.DISPUTE': 'تنازع', 'ota.e.RESOLVE': 'تنازع حل', 'ota.e.WRITE_OFF': 'معاف کیا', 'ota.e.VOID': 'واپس لیا',
+  'err.NOT_AN_OTA_BOOKING': 'صرف OTA کی بکنگ پر OTA سے دعویٰ ہو سکتا ہے۔',
+  'err.NOTHING_TO_CLAIM': 'اس بِل میں کچھ واجب الادا نہیں۔',
 };

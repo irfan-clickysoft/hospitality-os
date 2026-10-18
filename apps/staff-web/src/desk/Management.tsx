@@ -15,7 +15,7 @@ interface Prop {
   cash: { openSessions: number; awaitingReview: number; variance: Amount };
   approvals: { paymentsToVerify: number; paymentsToVerifyAmount: Amount; sessionsToReview: number };
   issues: { open: number; oldestHours: number };
-  revenueProtection: { otaConfirmed: number; otaGuaranteed: number; otaAtRisk: number; depositConversionPct: number; otaCreated: number; feesNet: Amount };
+  revenueProtection: { otaConfirmed: number; otaGuaranteed: number; otaAtRisk: number; depositConversionPct: number; otaCreated: number; feesNet: Amount; otaReceivable: Amount; otaWrittenOff: Amount };
 }
 interface Overview {
   from: string; to: string; scope: string;
@@ -78,6 +78,8 @@ export function Management() {
           <div className="row between"><span>{t('mg.coming')}</span><span>{t('mg.comingLine', { n: p.upcoming.reservations, nights: p.upcoming.roomNights })}</span></div>
           {p.upcoming.atRisk > 0 && <div className="row between"><span className="error">{t('mg.atRisk')}</span><strong className="error">{p.upcoming.atRisk} · {money(p.upcoming.atRiskValue)}</strong></div>}
           {p.revenueProtection.otaConfirmed > 0 && <div className="row between"><span>{t('mg.ota')}</span><span>{t('mg.otaLine', { g: p.revenueProtection.otaGuaranteed, n: p.revenueProtection.otaConfirmed, pct: p.revenueProtection.depositConversionPct })}</span></div>}
+          {!zero(p.revenueProtection.otaReceivable) && <div className="row between"><span>{t('mg.otaOwed')}</span><strong>{money(p.revenueProtection.otaReceivable)}</strong></div>}
+          {!zero(p.revenueProtection.otaWrittenOff) && <div className="row between"><span>{t('mg.otaLost')}</span><strong className="error">{money(p.revenueProtection.otaWrittenOff)}</strong></div>}
           {!zero(p.revenueProtection.feesNet) && <div className="row between"><span>{t('mg.feesRecovered')}</span><strong>{money(p.revenueProtection.feesNet)}</strong></div>}
           {(p.cash.openSessions > 0 || !zero(p.cash.variance)) && <div className="row between"><span>{t('cash.variance')}</span><strong className={!zero(p.cash.variance) ? 'error' : ''}>{money(p.cash.variance)}</strong></div>}
           {p.issues.open > 0 && <div className="row between"><span>{t('mg.issues')}</span><span>{t('mg.issuesLine', { n: p.issues.open, h: p.issues.oldestHours })}</span></div>}
