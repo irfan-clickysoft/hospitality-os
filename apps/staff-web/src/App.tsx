@@ -14,6 +14,10 @@ import { Maintenance } from './desk/Maintenance.js';
 import { Compliance } from './desk/Compliance.js';
 import { Accounts } from './desk/Accounts.js';
 import { Kitchen } from './desk/Kitchen.js';
+import { Account } from './desk/Account.js';
+import { AuditLog } from './desk/AuditLog.js';
+import { Staff } from './desk/Staff.js';
+import { Invite } from './screens/Invite.js';
 import { Cashier } from './desk/Cashier.js';
 import { NightAudit } from './desk/NightAudit.js';
 import { Rack } from './desk/Rack.js';
@@ -25,12 +29,13 @@ import { Spinner } from './ui/kit.js';
 import type { Key } from './i18n/en.js';
 import { errorText } from './i18n/index.js';
 
-type Tab = 'today' | 'management' | 'rack' | 'bookings' | 'cashier' | 'companies' | 'ota' | 'maintenance' | 'compliance' | 'accounts' | 'kitchen' | 'import' | 'audit' | 'tax' | 'mine' | 'board' | 'issues' | 'lost';
+type Tab = 'today' | 'management' | 'rack' | 'bookings' | 'cashier' | 'companies' | 'ota' | 'maintenance' | 'compliance' | 'accounts' | 'kitchen' | 'staff' | 'trail' | 'import' | 'audit' | 'tax' | 'mine' | 'board' | 'issues' | 'lost';
 
 function Shell() {
   const { t, locale, setLocale } = useT();
   const { me, property, properties, setPropertyId, can, logout, offlineBoot } = useAuth();
   const work = useWork();
+  const [account, setAccount] = useState(false);
   const tabs = useMemo(() => [
     can('management.view') && { id: 'management' as Tab, label: 'nav.management' as Key },
     can('reservation.view') && { id: 'today' as Tab, label: 'nav.today' as Key },
@@ -43,6 +48,8 @@ function Shell() {
     can('compliance.view') && { id: 'compliance' as Tab, label: 'nav.compliance' as Key },
     can('paymentaccount.view') && { id: 'accounts' as Tab, label: 'nav.accounts' as Key },
     can('fnb.order') && { id: 'kitchen' as Tab, label: 'nav.kitchen' as Key },
+    can('user.manage') && { id: 'staff' as Tab, label: 'nav.staff' as Key },
+    can('audit.view') && { id: 'trail' as Tab, label: 'nav.audit2' as Key },
     can('data.import') && { id: 'import' as Tab, label: 'nav.import' as Key },
     can('nightaudit.run') && { id: 'audit' as Tab, label: 'nav.audit' as Key },
     (can('tax.configure') || can('tax.approve')) && { id: 'tax' as Tab, label: 'nav.tax' as Key },
@@ -64,14 +71,16 @@ function Shell() {
         </div>
         <div className="row">
           <button className="link" onClick={() => setLocale(locale === 'ur' ? 'en' : 'ur')}>{t('nav.language')}</button>
+          <button className="link" onClick={() => setAccount(true)}>{me?.user.fullName ?? t('acct.title')}</button>
           <button className="link" onClick={logout}>{t('nav.logout')}</button>
         </div>
       </header>
+      {account && <Account onClose={() => setAccount(false)} />}
       {(!work.online || offlineBoot) && <div className="banner warn" role="status">{t('banner.offline')}</div>}
       {work.pending.length > 0 && <div className="banner" role="status">{t('banner.pending', { n: work.pending.length })}</div>}
       {work.notices.length > 0 && <div className="banner warn" role="alert">{t('banner.dropped', { n: work.notices.length })} <small>({[...new Set(work.notices.map((n) => errorText(locale, n.code)))].join(' ')})</small> <button className="link" onClick={work.clearNotices}>{t('common.close')}</button></div>}
       <main key={property.id} className="content">
-        {tab === 'today' && <Today />}{tab === 'management' && <Management />}{tab === 'rack' && <Rack />}{tab === 'bookings' && <Bookings />}{tab === 'cashier' && <Cashier />}{tab === 'companies' && <Companies />}{tab === 'ota' && <OtaTab />}{tab === 'import' && <Import />}{tab === 'maintenance' && <Maintenance />}{tab === 'compliance' && <Compliance />}{tab === 'accounts' && <Accounts />}{tab === 'kitchen' && <Kitchen />}{tab === 'audit' && <NightAudit />}{tab === 'tax' && <Tax />}{tab === 'mine' && <MyRooms />}{tab === 'board' && <Board />}{tab === 'issues' && <Issues />}{tab === 'lost' && <LostFound />}
+        {tab === 'today' && <Today />}{tab === 'management' && <Management />}{tab === 'rack' && <Rack />}{tab === 'bookings' && <Bookings />}{tab === 'cashier' && <Cashier />}{tab === 'companies' && <Companies />}{tab === 'ota' && <OtaTab />}{tab === 'import' && <Import />}{tab === 'maintenance' && <Maintenance />}{tab === 'compliance' && <Compliance />}{tab === 'accounts' && <Accounts />}{tab === 'kitchen' && <Kitchen />}{tab === 'staff' && <Staff />}{tab === 'trail' && <AuditLog />}{tab === 'audit' && <NightAudit />}{tab === 'tax' && <Tax />}{tab === 'mine' && <MyRooms />}{tab === 'board' && <Board />}{tab === 'issues' && <Issues />}{tab === 'lost' && <LostFound />}
         {tabs.length === 0 && <p className="muted center">{t('err.PERMISSION_DENIED')}</p>}
       </main>
       <nav className="tabs" aria-label="main">
@@ -83,6 +92,8 @@ function Shell() {
 
 function Gate() {
   const { status, me } = useAuth();
+  const [invite, setInvite] = useState(() => { const q = new URLSearchParams(window.location.search); const token = q.get('invite'); const tenant = q.get('tenant'); return token && tenant ? { token, tenant } : null; });
+  if (invite) return <Invite tenant={invite.tenant} token={invite.token} onDone={() => { window.history.replaceState(null, '', window.location.pathname); setInvite(null); }} />;
   if (status === 'loading') return <Spinner />;
   if (status === 'out' || status === 'mfa') return <Login />;
   return <WorkProvider userId={me!.user.id}><StepUpProvider><Shell /></StepUpProvider></WorkProvider>;
