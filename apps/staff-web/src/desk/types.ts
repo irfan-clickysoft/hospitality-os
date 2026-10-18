@@ -9,7 +9,7 @@ export interface Line {
   total: Amount; assignedRoom: { id: string; number: string } | null; allowedActions: string[]; version: number; nightPrices: Array<{ date: string; total: string }>;
 }
 export interface ReservationDetail {
-  id: string; confirmationNo: string; status: string; source: string; channel: string; externalRef: string | null; residency: string; version: number;
+  id: string; confirmationNo: string; status: string; source: string; channel: string; externalRef: string | null; companyId: string | null; residency: string; version: number;
   guest: { id: string; fullName: string; phone: string | null; email: string | null; nationality: string | null; vip: boolean };
   guarantee: { type: string; atRisk: boolean; deadline: string | null; depositRequired: Amount; depositPaid: Amount };
   optionExpiresAt: string | null; penalty: { amount: Amount; reason: string | null; waived: boolean }; notes: { internal: string | null; guest: string | null; specialRequests: string | null }; totalExTax: Amount; lines: Line[];

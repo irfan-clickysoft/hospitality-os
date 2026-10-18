@@ -88,7 +88,11 @@ export class InvoiceService {
 
       const n = await this.nextNumber(trx, le.id, 'INV', p.business_date, le.fiscal_year_start_month);
       const issuer = { name: le.name, ntn: le.ntn, strn: le.strn, address: le.address, property: p.name };
-      const billTo = i.billTo ? { name: i.billTo.name, ntn: i.billTo.ntn ?? null, strn: i.billTo.strn ?? null, address: i.billTo.address ?? null } : { name: res.full_name, phone: res.phone, nationality: res.nationality };
+      let co: { id: string; name: string; ntn: string | null; strn: string | null; address: string | null } | undefined;
+      if (i.companyId) { co = await trx.selectFrom('company').select(['id', 'name', 'ntn', 'strn', 'address']).where('id', '=', i.companyId).executeTakeFirst(); if (!co) throw fail(422, 'COMPANY_NOT_FOUND', 'That company does not exist'); }
+      const onCredit = await sql<{ s: string }>`SELECT coalesce(sum(i.amount_minor),0)::text AS s FROM ar_item i WHERE i.tenant_id = ${currentTenant().tenantId} AND i.folio_id = ${folio.id} AND NOT EXISTS (SELECT 1 FROM ar_item_void v WHERE v.tenant_id = i.tenant_id AND v.item_id = i.id)`.execute(trx);
+      if (BigInt(onCredit.rows[0]!.s) > 0n) paid.set('COMPANY_CREDIT', BigInt(onCredit.rows[0]!.s));
+      const billTo = co ? { name: co.name, ntn: co.ntn, strn: co.strn, address: co.address, companyId: co.id } : i.billTo ? { name: i.billTo.name, ntn: i.billTo.ntn ?? null, strn: i.billTo.strn ?? null, address: i.billTo.address ?? null } : { name: res.full_name, phone: res.phone, nationality: res.nationality };
       const reference = { confirmationNo: res.confirmation_no, folioNo: folio.folio_no, arrival: stay.length ? stay.map((s) => s.arrival).sort()[0] : null, departure: stay.length ? stay.map((s) => s.departure).sort().reverse()[0] : null, rooms: rooms.rows.map((r) => r.number) };
       const payments = { received: [...paid.entries()].map(([method, amt]) => ({ method, amountMinor: amt.toString() })), balanceAtIssueMinor: folio.balance_minor };
       const content = { number: n.number, issueDate: p.business_date, issuer, billTo, lines, taxSummary: [...summary.values()], netMinor: net.toString(), taxMinor: tax.toString(), currency: p.currency, reference };

@@ -200,14 +200,17 @@ describe('quotes: availability + price + eligibility in one call', () => {
 
   it('corporate rates are only offered to the contracted company', async () => {
     const { propertyId, barId } = await sunset('Q7');
-    const company = crypto.randomUUID();
+    const company = (await call('POST', '/v1/companies', O, { name: 'ACME Q7' })).json().id as string;
+    const other = (await call('POST', '/v1/companies', O, { name: 'Other Q7' })).json().id as string;
     const corp = await call('POST', `/v1/properties/${propertyId}/rate-plans`, O, { code: 'CORP-ACME', name: 'ACME corporate', audience: 'CORPORATE', companyIds: [company],
       derive: { parentPlanId: barId, type: 'PERCENT', value: -1500, roundTo: '100' }, channels: ['CORPORATE', 'PHONE', 'DIRECT'] });
     expect(corp.statusCode, corp.body).toBe(201);
     expect(pick((await quote(propertyId, {})).json(), 'STD', 'CORP-ACME')).toBeUndefined();
     const q = (await quote(propertyId, { companyId: company })).json();
     expect(pick(q, 'STD', 'CORP-ACME').subtotal.amount).toBe('23000.00');                                     // 12,000 → 10,200; 15,000 → 12,750 → rounded to the Rs 100 step = 12,800
-    expect(pick(await quote(propertyId, { companyId: crypto.randomUUID() }).then((r) => r.json()), 'STD', 'CORP-ACME')).toBeUndefined();
+    expect(pick(await quote(propertyId, { companyId: other }).then((r) => r.json()), 'STD', 'CORP-ACME')).toBeUndefined();
+    const ghost = await quote(propertyId, { companyId: crypto.randomUUID() });
+    expect(ghost.statusCode).toBe(422); expect(ghost.json().code).toBe('COMPANY_NOT_FOUND');
   });
 
   it('discounts: within the user\'s limit is applied; above it needs approval and yields no bookable token', async () => {

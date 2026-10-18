@@ -16,6 +16,9 @@ import { FolioService } from './folio/folio.service.js';
 import { PaymentsService } from './folio/payments.service.js';
 import { NightAuditController } from './night-audit/night-audit.controller.js';
 import { NightAuditService } from './night-audit/night-audit.service.js';
+import { CompaniesController } from './companies/companies.controller.js';
+import { ArService } from './companies/ar.service.js';
+import { CompaniesService } from './companies/companies.service.js';
 import { InvoiceController } from './invoices/invoice.controller.js';
 import { InvoiceService } from './invoices/invoice.service.js';
 import { TaxController } from './tax/tax.controller.js';
@@ -35,8 +38,8 @@ import { TenantMiddleware } from './tenancy/tenant.middleware.js';
 
 @Module({
   imports: [DbModule, CoreServicesModule, IdentityModule, AuthzModule, InventoryModule],
-  controllers: [HealthController, PropertySetupController, RatesController, GuestsController, ReservationsController, FrontDeskController, FolioController, HousekeepingController, NightAuditController, TaxController, InvoiceController, AuditController],
-  providers: [TenantMiddleware, PropertySetupService, RatesService, QuoteSigner, GuestsService, ReservationsService, FrontDeskService, FolioService, HousekeepingService, NightAuditService, TaxService, InvoiceService, PaymentsService, CashierService, { provide: APP_FILTER, useClass: ProblemDetailsFilter }],
+  controllers: [HealthController, PropertySetupController, RatesController, GuestsController, ReservationsController, FrontDeskController, FolioController, HousekeepingController, NightAuditController, TaxController, InvoiceController, CompaniesController, AuditController],
+  providers: [TenantMiddleware, PropertySetupService, RatesService, QuoteSigner, GuestsService, ReservationsService, FrontDeskService, FolioService, HousekeepingService, NightAuditService, TaxService, InvoiceService, CompaniesService, ArService, PaymentsService, CashierService, { provide: APP_FILTER, useClass: ProblemDetailsFilter }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void { consumer.apply(TenantMiddleware).forRoutes('*'); }

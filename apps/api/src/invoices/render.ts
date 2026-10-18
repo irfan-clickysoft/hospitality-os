@@ -12,7 +12,7 @@ interface View {
   net: { amount: string }; tax: { amount: string }; total: { amount: string };
   payments: { received: Array<{ method: string; amountMinor: string }>; balanceAtIssueMinor: string };
 }
-const METHOD: Record<string, string> = { CASH: 'Cash', CARD_SLIP: 'Card', WALLET: 'Wallet', BANK_TRANSFER: 'Bank transfer' };
+const METHOD: Record<string, string> = { CASH: 'Cash', CARD_SLIP: 'Card', WALLET: 'Wallet', BANK_TRANSFER: 'Bank transfer', COMPANY_CREDIT: 'Charged to account' };
 const minor = (m: string): string => { const neg = m.startsWith('-'); const d = m.replace('-', '').padStart(3, '0'); return money({ amount: `${neg ? '-' : ''}${d.slice(0, -2)}.${d.slice(-2)}` }); };
 
 export function renderInvoiceHtml(v: View): string {

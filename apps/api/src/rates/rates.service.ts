@@ -12,6 +12,7 @@ import { TenantDb } from '../db/tenant-db.js';
 import { InventoryService } from '../inventory/inventory.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
+import { CompaniesService } from '../companies/companies.service.js';
 import { TaxService } from '../tax/tax.service.js';
 import { QuoteSigner } from './quote-signer.js';
 import type * as S from './schemas.js';
@@ -32,6 +33,7 @@ export class RatesService {
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
     @Inject(QuoteSigner) private readonly signer: QuoteSigner,
     @Inject(TaxService) private readonly tax: TaxService,
+    @Inject(CompaniesService) private readonly companies: CompaniesService,
     @Inject(CLOCK) private readonly clock: ClockLike,
   ) {}
 
@@ -287,6 +289,7 @@ export class RatesService {
 
   /** A signed quote for exactly one room/plan with no discount — used by flows that price and book in one step (walk-ins). */
   async issueQuoteToken(trx: Trx, propertyId: string, planId: string, r: Parameters<RatesService['priceOne']>[3]): Promise<string> {
+    if (r.companyId) await this.companies.assertBookable(trx, r.companyId);
     const { quote, currency } = await this.priceOne(trx, propertyId, planId, r);
     if (!quote.sellable) throw new HttpException({ code: 'NOT_SELLABLE', message: 'This rate is not available for these dates', reasons: quote.reasons }, 409);
     const nightsHash = Buffer.from(quote.nights.map((n) => `${n.date}:${n.totalMinor}`).join('|')).toString('base64url').slice(0, 64);
@@ -334,6 +337,7 @@ export class RatesService {
       if (p.status !== 'LIVE') throw new UnprocessableEntityException({ code: 'PROPERTY_NOT_LIVE', message: 'This property is not live yet' });
       if (i.arrival < p.business_date) throw new UnprocessableEntityException({ code: 'DATE_IN_PAST', message: `Arrival cannot be before the business date (${p.business_date})` });
       nightsOf(i.arrival, i.departure, 90);
+      if (i.companyId) await this.companies.assertBookable(trx, i.companyId);
       const planRows = await trx.selectFrom('rate_plan').selectAll().where('property_id', '=', propertyId).where('status', '=', 'ACTIVE').orderBy('sort_order').orderBy('code').execute();
       const baseIds = [...new Set(planRows.map((r) => (r.kind === 'DERIVED' ? r.parent_rate_plan_id! : r.id)))];
       const [books, restr, types, avail] = await Promise.all([

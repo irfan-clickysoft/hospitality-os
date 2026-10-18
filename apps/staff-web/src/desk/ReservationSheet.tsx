@@ -12,6 +12,7 @@ import { CheckInSheet } from './CheckInSheet.js';
 import { CheckOutSheet } from './CheckOutSheet.js';
 import { PaymentSheet } from './PaymentSheet.js';
 import { RoomPicker } from './RoomPicker.js';
+import { CompanyBillings } from './BillToCompany.js';
 import { InvoicePanel } from './Invoices.js';
 import { STATUS_TONE, type FolioView, type Line, type ReservationDetail } from './types.js';
 
@@ -48,7 +49,7 @@ export function ReservationSheet({ reservationId, businessDate, onChanged, onClo
         )}
         {tab === 'stay' && r.status === 'OPTION' && can('reservation.modify') && <Quick label={t('rs.confirmOption')} run={() => api('POST', `${base}/reservations/${r.id}/confirm`, {})} done={refresh} />}
 
-        {tab === 'folio' && <FolioPanel f={folio.data} r={r} open={(kind, paymentId) => setDialog({ kind, paymentId })} />}
+        {tab === 'folio' && <FolioPanel f={folio.data} r={r} open={(kind, paymentId) => setDialog({ kind, paymentId })} onChanged={refresh} />}
         {tab === 'history' && <ul className="plain small">{[...r.history].reverse().map((h, i) => <li key={i} className="row between"><span>{t(`hist.${h.action}` as Key) === `hist.${h.action}` ? h.action : t(`hist.${h.action}` as Key)}{h.to ? ` → ${t(`rs.${h.to}` as Key)}` : ''}{h.reason ? ` · ${h.reason}` : ''}</span><span className="muted">{new Date(h.at).toLocaleString(locale === 'ur' ? 'ur-PK-u-nu-latn' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' })}</span></li>)}</ul>}
         <ErrorLine code={res.error?.code} />
       </>)}
@@ -137,7 +138,7 @@ function CancelSheet({ r, line, noShow, onDone, onClose }: { r: ReservationDetai
   );
 }
 
-function FolioPanel({ f, r, open }: { f: FolioView | null; r: ReservationDetail; open: (k: 'pay' | 'deposit' | 'charge' | 'void' | 'refund', paymentId?: string) => void }) {
+function FolioPanel({ f, r, open, onChanged }: { f: FolioView | null; r: ReservationDetail; open: (k: 'pay' | 'deposit' | 'charge' | 'void' | 'refund', paymentId?: string) => void; onChanged: () => void }) {
   const { t } = useT();
   const { can } = useAuth();
   if (!f) return <Spinner />;
@@ -164,6 +165,7 @@ function FolioPanel({ f, r, open }: { f: FolioView | null; r: ReservationDetail;
       <h3>{t('fo.postings')}</h3>
       {f.postings.length === 0 ? <p className="muted small">{t('common.none')}</p> : (
         <ul className="plain small">{f.postings.map((p) => <li key={p.id} className={`row between${p.reversed ? ' struck' : ''}`}><span>{p.businessDate} · {p.description ?? p.txnCode}</span><span dir="ltr">{money(p.amount)}</span></li>)}</ul>)}
+      <CompanyBillings reservationId={r.id} companyId={r.companyId} balance={bal ?? null} folioOpen={f.folio?.status === 'OPEN'} onChanged={onChanged} />
       <InvoicePanel reservationId={r.id} finished={r.status === 'CHECKED_OUT'} />
     </div>
   );

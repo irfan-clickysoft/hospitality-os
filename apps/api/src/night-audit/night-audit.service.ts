@@ -253,7 +253,7 @@ export class NightAuditService {
       SELECT p.txn_code, l.room_type_id, r.source, count(*)::int AS n, sum(p.amount_minor)::text AS amount
       FROM folio_posting p LEFT JOIN reservation_room l ON l.tenant_id = p.tenant_id AND l.id = p.reservation_room_id
         LEFT JOIN folio f ON f.tenant_id = p.tenant_id AND f.id = p.folio_id LEFT JOIN reservation r ON r.tenant_id = f.tenant_id AND r.id = f.reservation_id
-      WHERE p.tenant_id = ${t} AND p.property_id = ${propertyId} AND p.business_date = ${bd}::date AND p.payment_id IS NULL AND p.txn_code <> 'TAX' AND p.posting_type IN ('CHARGE','DISCOUNT','REVERSAL','ADJUSTMENT')
+      WHERE p.tenant_id = ${t} AND p.property_id = ${propertyId} AND p.business_date = ${bd}::date AND p.payment_id IS NULL AND p.txn_code NOT IN ('TAX','AR_TRANSFER') AND p.posting_type IN ('CHARGE','DISCOUNT','REVERSAL','ADJUSTMENT')
       GROUP BY p.txn_code, l.room_type_id, r.source ORDER BY p.txn_code`.execute(trx);
     let room = 0n, fees = 0n, other = 0n;
     for (const r of rev.rows) { const a = BigInt(r.amount); if (['ROOM', 'ROOM_EXTRAS', 'ROOM_DISCOUNT'].includes(r.txn_code)) room += a; else if (r.txn_code === 'CANCEL_FEE' || r.txn_code === 'NOSHOW_FEE') fees += a; else other += a; }
@@ -261,7 +261,7 @@ export class NightAuditService {
       WHERE tenant_id = ${t} AND property_id = ${propertyId} AND business_date = ${bd}::date AND tax_code IS NOT NULL GROUP BY tax_code ORDER BY tax_code`.execute(trx);
     const taxTotal = taxRows.rows.reduce((a, r) => a + BigInt(r.tax), 0n);
     const pay = await sql<{ txn_code: string; received: string }>`SELECT txn_code, (-sum(amount_minor))::text AS received FROM folio_posting WHERE tenant_id = ${t} AND property_id = ${propertyId} AND business_date = ${bd}::date
-      AND (posting_type IN ('PAYMENT','DEPOSIT_RECEIVED','REFUND') OR (posting_type = 'REVERSAL' AND payment_id IS NOT NULL)) GROUP BY txn_code ORDER BY txn_code`.execute(trx);
+      AND (posting_type IN ('PAYMENT','DEPOSIT_RECEIVED','REFUND') OR (posting_type = 'REVERSAL' AND (payment_id IS NOT NULL OR txn_code = 'AR_TRANSFER'))) GROUP BY txn_code ORDER BY txn_code`.execute(trx);
     const ledger = (await sql<{ owed: string; held: string }>`SELECT coalesce(sum(balance_minor) FILTER (WHERE balance_minor > 0),0)::text AS owed, coalesce(-sum(balance_minor) FILTER (WHERE balance_minor < 0),0)::text AS held
       FROM folio WHERE tenant_id = ${t} AND property_id = ${propertyId} AND status = 'OPEN'`.execute(trx)).rows[0]!;
     const variance = (await sql<{ v: string }>`SELECT coalesce(sum(variance_minor),0)::text AS v FROM cashier_session WHERE tenant_id = ${t} AND property_id = ${propertyId} AND status IN ('CLOSED','REVIEWED') AND opened_business_date = ${bd}::date`.execute(trx)).rows[0]!;

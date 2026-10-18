@@ -4,7 +4,7 @@ import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
 import { useAction } from '../lib/action.js';
 import { addDays, money, newKey, shortDate, whatsappNumber } from '../lib/format.js';
-import { useAuth } from '../state.js';
+import { useAuth, useLive } from '../state.js';
 import { Badge, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 import { policyLines } from './policy.js';
 import type { Amount } from './types.js';
@@ -20,10 +20,12 @@ const CHANNEL: Record<string, string> = { PHONE: 'PHONE', WHATSAPP: 'DIRECT', WE
 /** Quote → guest → book. The price shown is the one the server signed; the booking is refused if it changed. */
 export function NewBooking({ initial, businessDate, onClose, onOpenReservation }: { initial: { arrival: string; roomTypeId?: string }; businessDate: string; onClose: () => void; onOpenReservation: (id: string) => void }) {
   const { t, locale } = useT();
-  const { property } = useAuth();
+  const { property, can } = useAuth();
   const base = `/v1/properties/${property!.id}`;
   const [step, setStep] = useState<'search' | 'options' | 'guest' | 'confirm' | 'done'>('search');
   const [arrival, setArrival] = useState(initial.arrival); const [nights, setNights] = useState(1); const [adults, setAdults] = useState(2); const [children, setChildren] = useState(0);
+  const companies = useLive<{ items: Array<{ id: string; name: string; status: string }> }>(can('company.view') ? '/v1/companies' : null, 300_000);
+  const [companyId, setCompanyId] = useState('');
   const [foreign, setForeign] = useState(false); const [source, setSource] = useState<(typeof SOURCES)[number]>('PHONE');
   const [options, setOptions] = useState<Option[]>([]); const [chosen, setChosen] = useState<Option | null>(null);
   const [q, setQ] = useState(''); const [hits, setHits] = useState<GuestHit[]>([]); const [guest, setGuest] = useState<GuestHit | null>(null);
@@ -35,7 +37,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   const departure = addDays(arrival, nights);
 
   const search = async () => {
-    const r = await run(() => api<{ options: Option[] }>('POST', `${base}/quotes`, { arrival, departure, adults, children, channel: CHANNEL[source], residency: foreign ? 'NON_RESIDENT' : 'RESIDENT', ...(initial.roomTypeId ? { roomTypeId: initial.roomTypeId } : {}) }));
+    const r = await run(() => api<{ options: Option[] }>('POST', `${base}/quotes`, { arrival, departure, adults, children, channel: CHANNEL[source], residency: foreign ? 'NON_RESIDENT' : 'RESIDENT', ...(companyId ? { companyId } : {}), ...(initial.roomTypeId ? { roomTypeId: initial.roomTypeId } : {}) }));
     if (r) { setOptions(r.options.filter((o) => o.bookable)); setStep('options'); }
   };
   useEffect(() => {
@@ -58,6 +60,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
         <p className="muted small">{shortDate(arrival, locale)} → {shortDate(departure, locale)}</p>
         <div className="grid2"><label>{t('d.adults')}<input type="number" min={1} max={10} value={adults} onChange={(e) => setAdults(Math.max(1, Number(e.target.value) || 1))} dir="ltr" /></label><label>{t('d.children')}<input type="number" min={0} max={10} value={children} onChange={(e) => setChildren(Math.max(0, Number(e.target.value) || 0))} dir="ltr" /></label></div>
         <label>{t('bk.source')}<select value={source} onChange={(e) => setSource(e.target.value as typeof source)}>{SOURCES.map((s) => <option key={s} value={s}>{t(`src.${s}` as Key)}</option>)}</select></label>
+        {companies.data && companies.data.items.length > 0 && <label>{t('ar.company')} ({t('common.optional')})<select value={companyId} onChange={(e) => setCompanyId(e.target.value)}><option value="">—</option>{companies.data.items.filter((c) => c.status !== 'ARCHIVED').map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
         <label className="check"><input type="checkbox" checked={foreign} onChange={(e) => setForeign(e.target.checked)} /> {t('bk.foreign')}</label>
         <ErrorLine code={problem?.code} detail={problem?.detail} />
         <div className="actions"><button className="primary" disabled={busy} onClick={search}>{t('bk.search')}</button></div>
