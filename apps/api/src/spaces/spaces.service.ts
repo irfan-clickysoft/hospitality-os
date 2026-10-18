@@ -88,12 +88,13 @@ export class SpacesService {
       b.reservation_id ? sql<{ confirmation_no: string; guest: string }>`SELECT r.confirmation_no, g.full_name AS guest FROM reservation r JOIN guest g ON g.tenant_id = r.tenant_id AND g.id = r.guest_id WHERE r.tenant_id = ${currentTenant().tenantId} AND r.id = ${b.reservation_id}`.execute(trx).then((x) => x.rows[0]) : undefined,
       b.folio_id ? trx.selectFrom('folio').select(['folio_no', 'balance_minor', 'status']).where('id', '=', b.folio_id).executeTakeFirst() : undefined,
     ]);
+    const invoices = b.folio_id ? await trx.selectFrom('invoice').select(['id', 'number', 'doc_type', 'credits_invoice_id']).where('folio_id', '=', b.folio_id).orderBy('issued_at').orderBy('number').execute() : [];
     const company = b.company_id ? await trx.selectFrom('company').select('name').where('id', '=', b.company_id).executeTakeFirst() : undefined;
     return { id: b.id, number: b.number, spaceId: b.space_id, space: space?.name ?? '', spaceUr: space?.name_ur ?? null, eventName: b.event_name, hostName: b.host_name, hostPhone: b.host_phone, attendees: b.attendees, note: b.note,
       date: s.date, startTime: s.time, endTime: e.time, startsAt: b.starts_at, endsAt: b.ends_at, pricing: b.pricing, hours: b.hours, amount: fmt(b.amount_minor, b.currency), status: b.status, billTo: b.bill_to,
       stay: res ? { reservationId: b.reservation_id, confirmationNo: res.confirmation_no, guest: res.guest } : null,
       bill: folio ? { folioId: b.folio_id, folioNo: folio.folio_no, balance: fmt(folio.balance_minor, b.currency), status: folio.status } : null, company: company ? { id: b.company_id, name: company.name } : null,
-      completedAt: b.completed_at, cancelReason: b.cancel_reason, version: b.version };
+      invoices: invoices.map((x) => ({ id: x.id, number: x.number, docType: x.doc_type })), completedAt: b.completed_at, cancelReason: b.cancel_reason, version: b.version };
   }
 
   async book(propertyId: string, userId: string, i: z.infer<typeof S.CreateBooking>) {
@@ -198,6 +199,16 @@ export class SpacesService {
       if (q.status !== 'ALL') qb = qb.where('status', '=', q.status);
       const items = []; for (const b of await qb.execute()) items.push(await this.bookingView(trx, b, p.timezone));
       return { from, to, items };
+    });
+  }
+
+  /** The tax invoices and credit notes on a hire's own bill. */
+  async invoices(propertyId: string, bookingId: string) {
+    return this.tdb.tx(async (trx) => {
+      const b = await this.row(trx, propertyId, bookingId);
+      if (!b.folio_id) return { items: [] };
+      const rows = await trx.selectFrom('invoice').select(['id', 'doc_type', 'number', 'issue_date', 'total_minor', 'currency', 'credits_invoice_id']).where('folio_id', '=', b.folio_id).orderBy('issued_at').orderBy('number').execute();
+      return { items: rows.map((r) => ({ id: r.id, docType: r.doc_type, number: r.number, issueDate: r.issue_date, total: fmt(r.total_minor, r.currency), creditsInvoiceId: r.credits_invoice_id })) };
     });
   }
 

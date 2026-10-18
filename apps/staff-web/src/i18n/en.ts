@@ -474,6 +474,7 @@ export const en = {
   'err.ALREADY_DELIVERED': 'This order is already on the guest’s bill. Reverse the charges on the bill instead.',
   // conference room
   'nav.spaces': 'Conference room', 'sp.v.calendar': 'Calendar', 'sp.v.spaces': 'Spaces and prices', 'sp.newHire': 'New hire', 'sp.nothing': 'No hires in the next two weeks.', 'sp.noSpaces': 'No space is set up yet. Ask a manager to add the conference room under Spaces and prices.',
+  'sp.creditNote': 'Credit note',
   'sp.s.BOOKED': 'Booked', 'sp.s.COMPLETED': 'Done', 'sp.s.CANCELLED': 'Cancelled', 'sp.people': '{n} people', 'sp.beforeTax': 'before tax', 'sp.p.HOURLY': 'Per hour', 'sp.p.HALF_DAY': 'Half day (up to 4 h)', 'sp.p.FULL_DAY': 'Full day (up to 12 h)',
   'sp.onStay': 'Charged to the stay of {guest} ({no})', 'sp.ownBill': 'Own bill {no}', 'sp.complete': 'Hire done — put on the bill', 'sp.takePayment': 'Take payment', 'sp.cancelWhy': 'Why is it cancelled?',
   'sp.space': 'Space', 'sp.event': 'What is the event?', 'sp.host': 'Booked by', 'sp.phone': 'Phone', 'sp.date': 'Date', 'sp.people2': 'People', 'sp.from': 'From', 'sp.to': 'Until',
@@ -483,6 +484,7 @@ export const en = {
   'err.TOO_LONG_FOR_HALF_DAY': 'A half day is up to 4 hours. Use the full-day price.', 'err.TOO_LONG_FOR_FULL_DAY': 'A full day is up to 12 hours.', 'err.TIME_RANGE_INVALID': 'The hire must end after it starts, on the same day.',
   'err.TOO_SHORT': 'The shortest hire is 30 minutes.', 'err.DATE_IN_PAST': 'That date has already passed.', 'err.SPACE_INACTIVE': 'This space is not being hired out.', 'err.STAY_NOT_ACTIVE': 'That stay is not in the house or coming. Use an own bill instead.',
   'err.BILL_HAS_PAYMENTS': 'Money has been taken on this hire’s bill. Refund it first, then cancel.', 'err.ALREADY_COMPLETED': 'This hire is already on the bill. Reverse the charge on the bill instead.',
+  'err.NOT_A_SEPARATE_BILL': 'This hire is on a guest’s stay. Use the stay’s bill instead.', 'err.HIRE_NOT_DONE': 'Mark the hire done first, so there is something on its bill.',
   // staff, account, audit
   'nav.staff': 'Staff', 'nav.audit2': 'Audit trail', 'acct.title': 'My account',
   'inv2.title': 'Choose your password', 'inv2.help': 'Use at least 12 characters. A few ordinary words together make a strong password.', 'inv2.new': 'New password', 'inv2.again': 'New password again', 'inv2.set': 'Save password', 'inv2.done': 'Your password is saved. You can sign in now.',

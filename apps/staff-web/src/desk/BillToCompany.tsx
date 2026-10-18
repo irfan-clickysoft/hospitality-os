@@ -36,15 +36,15 @@ export function CompanyBillings({ reservationId, companyId, balance, folioOpen, 
           {i.status === 'OPEN' && can('folio.adjust') && <button className="link" onClick={() => setDialog(i)}>{t('ar.cancelBilling')}</button>}
         </li>))}</ul>
       {can('ar.bill') && folioOpen && owing && <div className="actions"><button onClick={() => setDialog('bill')}>{t('ar.bill')}</button></div>}
-      {dialog === 'bill' && <BillSheet reservationId={reservationId} companyId={companyId} balance={balance!} onDone={done} onClose={() => setDialog(null)} />}
+      {dialog === 'bill' && <BillSheet endpoint={`${base}/reservations/${reservationId}/bill-to-company`} companyId={companyId} balance={balance!} onDone={done} onClose={() => setDialog(null)} />}
       {dialog && dialog !== 'bill' && <VoidSheet item={dialog} onDone={done} onClose={() => setDialog(null)} />}
     </div>
   );
 }
 
-function BillSheet({ reservationId, companyId, balance, onDone, onClose }: { reservationId: string; companyId: string | null; balance: Amount; onDone: () => void; onClose: () => void }) {
+export function BillSheet({ endpoint, companyId, balance, onDone, onClose }: { endpoint: string; companyId: string | null; balance: Amount; onDone: () => void; onClose: () => void }) {
   const { t } = useT();
-  const { property, can } = useAuth();
+  const { can } = useAuth();
   const withStepUp = useStepUp();
   const cos = useLive<{ items: CompanyLite[] }>(can('company.view') ? '/v1/companies' : null, 120_000);
   const [pick, setPick] = useState(companyId ?? ''); const [amount, setAmount] = useState(''); const [note, setNote] = useState(''); const [why, setWhy] = useState('');
@@ -55,7 +55,7 @@ function BillSheet({ reservationId, companyId, balance, onDone, onClose }: { res
   const needsOverride = problem?.code === 'CREDIT_LIMIT_EXCEEDED' || problem?.code === 'COMPANY_ON_HOLD';
   const go = async (override: boolean) => {
     const body = { ...(pick ? { companyId: pick } : {}), ...(amount.trim() ? { amount: amount.trim() } : {}), ...(note.trim() ? { note: note.trim() } : {}), ...(override ? { override: { reason: why.trim() } } : {}) };
-    const call = () => api('POST', `/v1/properties/${property!.id}/reservations/${reservationId}/bill-to-company`, body, { 'idempotency-key': key });
+    const call = () => api('POST', endpoint, body, { 'idempotency-key': key });
     if (await run(() => override ? withStepUp(call) : call())) onDone();
   };
   return (

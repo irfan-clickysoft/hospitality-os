@@ -54,6 +54,19 @@ export class InvoiceService {
       const live = await trx.selectFrom('reservation_room').select('id').where('reservation_id', '=', reservationId).where('status', 'in', ['CHECKED_IN', 'CONFIRMED', 'OPTION']).executeTakeFirst();
       if (live) throw fail(409, 'STAY_NOT_FINISHED', 'The stay is not finished. Check the guest out first (until then the bill can be shown as an interim bill, not a tax invoice).');
 
+      const buildReference = async () => {
+        const stay = await trx.selectFrom('reservation_room').select(['arrival', 'departure', 'room_type_id', 'status']).where('reservation_id', '=', reservationId).where('status', 'in', ['CHECKED_OUT', 'CANCELLED', 'NO_SHOW']).execute();
+        const rooms = await sql<{ number: string }>`SELECT DISTINCT rm.number FROM room_assignment a JOIN room rm ON rm.id = a.room_id JOIN reservation_room l ON l.id = a.assignment_ref WHERE l.reservation_id = ${reservationId} ORDER BY rm.number`.execute(trx);
+        return { confirmationNo: res.confirmation_no, folioNo: folio.folio_no, arrival: stay.length ? stay.map((s) => s.arrival).sort()[0] : null, departure: stay.length ? stay.map((s) => s.departure).sort().reverse()[0] : null, rooms: rooms.rows.map((r) => r.number) };
+      };
+      return this.issueOnFolio(trx, { propertyId, p, folio, userId, i, reservationId, defaultBillTo: { name: res.full_name, phone: res.phone, nationality: res.nationality }, buildReference, auditRef: res.confirmation_no });
+    });
+  }
+
+  /** Turns the open items on a bill into a numbered tax invoice. Shared by a stay's bill and a conference-room hire's own bill. */
+  private async issueOnFolio(trx: Trx, a: { propertyId: string; p: { id: string; name: string; currency: string; business_date: string; legal_entity_id: string }; folio: { id: string; folio_no: string; balance_minor: string }; userId: string; i: z.infer<typeof S.IssueInvoice>;
+    reservationId: string | null; defaultBillTo: object; buildReference: () => Promise<object>; auditRef: string }) {
+    const { propertyId, p, folio, userId, i } = a;
       const rows = await sql<{ id: string; posting_type: string; txn_code: string; description: string | null; quantity: string; unit_price_minor: string | null; amount_minor: string; business_date: string; parent_posting_id: string | null; tax_code: string | null; tax_rate_bp: number | null; taxable_minor: string | null }>`
         SELECT p.id, p.posting_type, p.txn_code, p.description, p.quantity::text, p.unit_price_minor::text, p.amount_minor::text, p.business_date::text, p.parent_posting_id, p.tax_code, p.tax_rate_bp, p.taxable_minor::text
         FROM folio_posting p WHERE p.tenant_id = ${currentTenant().tenantId} AND p.folio_id = ${folio.id} AND p.posting_type IN ('CHARGE','DISCOUNT','TAX','ADJUSTMENT')
@@ -80,8 +93,6 @@ export class InvoiceService {
       for (const l of lines) for (const t of l.taxes) { const k = `${t.code}:${t.rateBp}`; const e = summary.get(k) ?? { code: t.code, rateBp: t.rateBp, taxableMinor: '0', taxMinor: '0' }; e.taxableMinor = (BigInt(e.taxableMinor) + BigInt(t.taxableMinor)).toString(); e.taxMinor = (BigInt(e.taxMinor) + BigInt(t.taxMinor)).toString(); summary.set(k, e); }
 
       const le = await trx.selectFrom('legal_entity').selectAll().where('id', '=', p.legal_entity_id).executeTakeFirstOrThrow();
-      const stay = await trx.selectFrom('reservation_room').select(['arrival', 'departure', 'room_type_id', 'status']).where('reservation_id', '=', reservationId).where('status', 'in', ['CHECKED_OUT', 'CANCELLED', 'NO_SHOW']).execute();
-      const rooms = await sql<{ number: string }>`SELECT DISTINCT rm.number FROM room_assignment a JOIN room rm ON rm.id = a.room_id JOIN reservation_room l ON l.id = a.assignment_ref WHERE l.reservation_id = ${reservationId} ORDER BY rm.number`.execute(trx);
       const pays = await trx.selectFrom('payment').select(['kind', 'method', 'amount_minor']).where('folio_id', '=', folio.id).where('status', '=', 'CAPTURED').execute();
       const paid = new Map<string, bigint>();
       for (const x of pays) { const k = `${x.method}`; paid.set(k, (paid.get(k) ?? 0n) + (x.kind === 'REFUND' ? -BigInt(x.amount_minor) : BigInt(x.amount_minor))); }
@@ -92,18 +103,36 @@ export class InvoiceService {
       if (i.companyId) { co = await trx.selectFrom('company').select(['id', 'name', 'ntn', 'strn', 'address']).where('id', '=', i.companyId).executeTakeFirst(); if (!co) throw fail(422, 'COMPANY_NOT_FOUND', 'That company does not exist'); }
       const onCredit = await sql<{ s: string }>`SELECT coalesce(sum(i.amount_minor),0)::text AS s FROM ar_item i WHERE i.tenant_id = ${currentTenant().tenantId} AND i.folio_id = ${folio.id} AND NOT EXISTS (SELECT 1 FROM ar_item_void v WHERE v.tenant_id = i.tenant_id AND v.item_id = i.id)`.execute(trx);
       if (BigInt(onCredit.rows[0]!.s) > 0n) paid.set('COMPANY_CREDIT', BigInt(onCredit.rows[0]!.s));
-      const billTo = co ? { name: co.name, ntn: co.ntn, strn: co.strn, address: co.address, companyId: co.id } : i.billTo ? { name: i.billTo.name, ntn: i.billTo.ntn ?? null, strn: i.billTo.strn ?? null, address: i.billTo.address ?? null } : { name: res.full_name, phone: res.phone, nationality: res.nationality };
-      const reference = { confirmationNo: res.confirmation_no, folioNo: folio.folio_no, arrival: stay.length ? stay.map((s) => s.arrival).sort()[0] : null, departure: stay.length ? stay.map((s) => s.departure).sort().reverse()[0] : null, rooms: rooms.rows.map((r) => r.number) };
+      const billTo = co ? { name: co.name, ntn: co.ntn, strn: co.strn, address: co.address, companyId: co.id } : i.billTo ? { name: i.billTo.name, ntn: i.billTo.ntn ?? null, strn: i.billTo.strn ?? null, address: i.billTo.address ?? null } : a.defaultBillTo;
+      const reference = await a.buildReference();
       const payments = { received: [...paid.entries()].map(([method, amt]) => ({ method, amountMinor: amt.toString() })), balanceAtIssueMinor: folio.balance_minor };
       const content = { number: n.number, issueDate: p.business_date, issuer, billTo, lines, taxSummary: [...summary.values()], netMinor: net.toString(), taxMinor: tax.toString(), currency: p.currency, reference };
-      const inv = await trx.insertInto('invoice').values({ tenant_id: currentTenant().tenantId, property_id: propertyId, legal_entity_id: le.id, folio_id: folio.id, reservation_id: reservationId, doc_type: 'TAX_INVOICE', series: 'INV', fiscal_year: n.fiscalYear,
+      const inv = await trx.insertInto('invoice').values({ tenant_id: currentTenant().tenantId, property_id: propertyId, legal_entity_id: le.id, folio_id: folio.id, reservation_id: a.reservationId, doc_type: 'TAX_INVOICE', series: 'INV', fiscal_year: n.fiscalYear,
         seq: n.seq, number: n.number, issue_date: p.business_date, currency: p.currency, issuer: JSON.stringify(issuer), bill_to: JSON.stringify(billTo), lines: JSON.stringify(lines), tax_summary: JSON.stringify([...summary.values()]), payments: JSON.stringify(payments),
         reference: JSON.stringify(reference), net_minor: net.toString(), tax_minor: tax.toString(), total_minor: (net + tax).toString(), content_hash: this.hash(content), issued_by: userId } as never).returning('id').executeTakeFirstOrThrow();
       await trx.insertInto('invoice_posting').values(rows.rows.map((r) => ({ tenant_id: currentTenant().tenantId, invoice_id: inv.id, posting_id: r.id })) as never).execute();
-      await this.audit.record(trx, { action: 'invoice.issue', resourceType: 'invoice', resourceId: inv.id, propertyId, after: { number: n.number, net: net.toString(), tax: tax.toString(), reservation: res.confirmation_no } });
-      await this.outbox.publish(trx, { aggregateType: 'invoice', aggregateId: inv.id, eventType: 'InvoiceIssued', propertyId, businessDate: p.business_date, payload: { invoiceId: inv.id, number: n.number, reservationId, totalMinor: (net + tax).toString(), currency: p.currency } });
+      await this.audit.record(trx, { action: 'invoice.issue', resourceType: 'invoice', resourceId: inv.id, propertyId, after: { number: n.number, net: net.toString(), tax: tax.toString(), for: a.auditRef } });
+      await this.outbox.publish(trx, { aggregateType: 'invoice', aggregateId: inv.id, eventType: 'InvoiceIssued', propertyId, businessDate: p.business_date, payload: { invoiceId: inv.id, number: n.number, reservationId: a.reservationId, totalMinor: (net + tax).toString(), currency: p.currency } });
       const warnings = [!le.ntn && 'ISSUER_NTN_MISSING', !le.strn && 'ISSUER_STRN_MISSING'].filter(Boolean);
       return { ...(await this.viewIn(trx, inv.id)), warnings };
+  }
+
+  async issueForHire(propertyId: string, bookingId: string, userId: string, i: z.infer<typeof S.IssueInvoice>) {
+    return this.tdb.tx(async (trx) => {
+      const p = await trx.selectFrom('property').select(['id', 'code', 'name', 'currency', 'business_date', 'legal_entity_id']).where('id', '=', propertyId).executeTakeFirst();
+      if (!p) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Property not found' });
+      const h = await sql<{ number: string; event_name: string; host_name: string; host_phone: string | null; bill_to: string; status: string; folio_id: string | null; company_id: string | null; space: string; starts_at: Date; ends_at: Date; tz: string }>`
+        SELECT b.number, b.event_name, b.host_name, b.host_phone, b.bill_to, b.status, b.folio_id, b.company_id, s.name AS space, b.starts_at, b.ends_at, p.timezone AS tz FROM space_booking b JOIN space s ON s.tenant_id = b.tenant_id AND s.id = b.space_id JOIN property p ON p.tenant_id = b.tenant_id AND p.id = b.property_id
+        WHERE b.tenant_id = ${currentTenant().tenantId} AND b.id = ${bookingId} AND b.property_id = ${propertyId}`.execute(trx).then((r) => r.rows[0]);
+      if (!h) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Booking not found' });
+      if (h.bill_to !== 'SEPARATE' || !h.folio_id) throw fail(422, 'NOT_A_SEPARATE_BILL', 'This hire is on a guest’s stay. Invoice the stay instead.');
+      if (h.status !== 'COMPLETED') throw fail(409, 'HIRE_NOT_DONE', 'Mark the hire done first; the invoice is made from what is on its bill.');
+      const folio = await trx.selectFrom('folio').selectAll().where('id', '=', h.folio_id).forUpdate().executeTakeFirstOrThrow();
+      const local = (d: Date) => { const f = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-CA', { timeZone: h.tz, hourCycle: 'h23', ...o }).format(d); return { date: f({ year: 'numeric', month: '2-digit', day: '2-digit' }), time: f({ hour: '2-digit', minute: '2-digit' }) }; };
+      const cid = i.companyId ?? h.company_id ?? undefined;
+      const company = cid && !i.billTo ? { ...i, companyId: cid } : i;
+      return this.issueOnFolio(trx, { propertyId, p, folio, userId, i: company, reservationId: null, defaultBillTo: { name: h.host_name, phone: h.host_phone },
+        buildReference: async () => ({ hireNumber: h.number, space: h.space, event: h.event_name, hireDate: local(h.starts_at).date, from: local(h.starts_at).time, to: local(h.ends_at).time, folioNo: folio.folio_no }), auditRef: h.number });
     });
   }
 

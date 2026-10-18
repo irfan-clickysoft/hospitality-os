@@ -151,4 +151,43 @@ describe('conference room', () => {
     const b = await book(w, { arrival: '2026-11-05', departure: '2026-11-06' }); await checkIn(w, b, '102'); await ok(call('POST', u(w, `reservations/${b.id}/rooms/${b.line}/check-out`), OM, { reason: 'left early', balanceReason: 'test: settled elsewhere' }));
     await code(hire(w, s, { billTo: 'STAY', reservationId: b.id, startTime: '20:00', endTime: '21:00', pricing: 'HOURLY' }), 422, 'STAY_NOT_ACTIVE');
   });
+
+  it('a hire on its own bill gets a tax invoice (with the tax from the setup), can be credited, and can be billed to a company on credit instead', async () => {
+    const w = await sunset(); at('2026-11-05', '10:00'); await setBd(w, '2026-11-05');
+    await adminDb.updateTable('property').set({ tax_jurisdiction: `HALL${++n}` }).where('id', '=', w.pid).execute();
+    const jur = (await adminDb.selectFrom('property').select('tax_jurisdiction').where('id', '=', w.pid).executeTakeFirstOrThrow()).tax_jurisdiction!;
+    const acc = await addUser(T.tenantId, `acc${++n}@spaces.test`); await assignRole(T.tenantId, acc, 'accountant', 'TENANT', null);
+    const c = await ok(call('POST', '/v1/tax/codes', as(T.tenantId, acc, { mfa: true }), { code: `HALL-${n}`, name: 'Hall hire (test)', jurisdiction: jur, version: { rateBp: 1600, appliesTo: ['HALL'], effectiveFrom: '2026-01-01' } }), 201);
+    await ok(call('POST', `/v1/tax/versions/${c.version.id}/approve`, OM, { advisorRef: 'TEST-1', legalBasis: 'Test fixture, not law' }));
+    const s = await hall(w);
+    const co = await ok(call('POST', '/v1/companies', OM, { name: `Hall Co ${++n}`, ntn: '1234567-8', creditLimit: '100000', termsDays: 30 }), 201);
+    const h = await ok(hire(w, s, { hostName: 'Walk-in Client' }), 201);
+    await code(call('POST', S(w, `/bookings/${h.id}/invoices`), O, {}), 409, 'HIRE_NOT_DONE');
+    await code(call('POST', S(w, `/bookings/${h.id}/bill-to-company`), O, { companyId: co.id }, key()), 409, 'HIRE_NOT_DONE');
+    at('2026-11-05', '15:00'); const done = await ok(call('POST', S(w, `/bookings/${h.id}/complete`), O, {}));
+    expect(done.bill.balance.amount).toBe('17400.00');                                                           // 15,000 + 16% tax
+    const inv = await ok(call('POST', S(w, `/bookings/${h.id}/invoices`), O, {}), 201);
+    expect(inv).toMatchObject({ docType: 'TAX_INVOICE', billTo: { name: 'Walk-in Client' }, net: { amount: '15000.00' }, tax: { amount: '2400.00' }, total: { amount: '17400.00' }, reservationId: null,
+      reference: { hireNumber: expect.stringMatching(/-CF00001$/), space: 'Conference room', from: '14:00', to: '18:00', hireDate: '2026-11-05' } });
+    await code(call('POST', S(w, `/bookings/${h.id}/invoices`), O, {}), 422, 'NOTHING_TO_INVOICE');             // already invoiced
+    expect((await ok(call('GET', S(w, `/bookings/${h.id}/invoices`), O))).items.map((x: any) => x.number)).toEqual([inv.number]);
+    const html = (await call('GET', u(w, `invoices/${inv.id}/print`), O)).body; expect(html).toContain('Walk-in Client'); expect(html).toContain('Conference room'); expect(html).toContain(h.number);
+    // a credit note brings the items back so the invoice can be made again, this time to the company
+    await ok(call('POST', u(w, `invoices/${inv.id}/credit`), OM, { reason: 'Wrong name' }));
+    const again = await ok(call('POST', S(w, `/bookings/${h.id}/invoices`), O, { companyId: co.id }), 201);
+    expect(again.billTo).toMatchObject({ name: co.name, ntn: '1234567-8' });
+    // billed to the company on credit: the amount leaves the hire's bill and becomes a receivable
+    const stay = await book(w, { arrival: '2026-11-05', departure: '2026-11-06' }); await checkIn(w, stay, '103');
+    const own = await ok(hire(w, s, { startTime: '19:00', endTime: '20:00', pricing: 'HOURLY', hostName: 'Acme rep' }), 201);
+    at('2026-11-05', '21:00'); await ok(call('POST', S(w, `/bookings/${own.id}/complete`), O, {}));
+    const billed = await ok(call('POST', S(w, `/bookings/${own.id}/bill-to-company`), O, { companyId: co.id }, key()), 201);
+    expect(billed.item).toMatchObject({ companyId: co.id, amount: { amount: '5800.00' }, confirmationNo: expect.stringMatching(/-CF00002$/), guest: 'Acme rep', status: 'OPEN' }); expect(billed.balance.amount).toBe('0.00');
+    await code(call('POST', S(w, `/bookings/${own.id}/bill-to-company`), O, { companyId: co.id }, key()), 422, 'NOTHING_TO_BILL');                // nothing left to bill
+    expect((await ok(call('GET', `/v1/companies/${co.id}/items?open=true`, O))).items.some((x: any) => x.id === billed.item.id)).toBe(true);
+    // a hire on a guest's stay is invoiced and billed through the stay, not this way
+    const onStay = await ok(hire(w, s, { billTo: 'STAY', reservationId: stay.id, date: '2026-11-06', startTime: '10:00', endTime: '11:00', pricing: 'HOURLY' }), 201);
+    await code(call('POST', S(w, `/bookings/${onStay.id}/invoices`), O, {}), 422, 'NOT_A_SEPARATE_BILL');
+    await code(call('POST', S(w, `/bookings/${onStay.id}/bill-to-company`), O, { companyId: co.id }, key()), 422, 'NOT_A_SEPARATE_BILL');
+    expect((await ok(call('GET', u(w, 'folio-check'), O))).ok).toBe(true);
+  });
 });

@@ -476,6 +476,7 @@ export const ur: Record<Key, string> = {
   'err.ALREADY_DELIVERED': 'یہ آرڈر مہمان کے بِل پر آ چکا ہے۔ بِل پر اندراج واپس کریں۔',
   // conference room
   'nav.spaces': 'کانفرنس روم', 'sp.v.calendar': 'کیلنڈر', 'sp.v.spaces': 'جگہیں اور قیمتیں', 'sp.newHire': 'نئی بکنگ', 'sp.nothing': 'اگلے دو ہفتوں میں کوئی بکنگ نہیں۔', 'sp.noSpaces': 'ابھی کوئی جگہ درج نہیں۔ مینیجر سے کہیں کہ "جگہیں اور قیمتیں" میں کانفرنس روم شامل کرے۔',
+  'sp.creditNote': 'کریڈٹ نوٹ',
   'sp.s.BOOKED': 'بک', 'sp.s.COMPLETED': 'مکمل', 'sp.s.CANCELLED': 'منسوخ', 'sp.people': '{n} افراد', 'sp.beforeTax': 'ٹیکس سے پہلے', 'sp.p.HOURLY': 'فی گھنٹہ', 'sp.p.HALF_DAY': 'آدھا دن (4 گھنٹے تک)', 'sp.p.FULL_DAY': 'پورا دن (12 گھنٹے تک)',
   'sp.onStay': '{guest} ({no}) کے قیام پر چارج', 'sp.ownBill': 'اپنا بل {no}', 'sp.complete': 'بکنگ مکمل — بل پر ڈالیں', 'sp.takePayment': 'ادائیگی لیں', 'sp.cancelWhy': 'منسوخی کی وجہ کیا ہے؟',
   'sp.space': 'جگہ', 'sp.event': 'تقریب کیا ہے؟', 'sp.host': 'بک کرانے والا', 'sp.phone': 'فون', 'sp.date': 'تاریخ', 'sp.people2': 'افراد', 'sp.from': 'سے', 'sp.to': 'تک',
@@ -485,6 +486,7 @@ export const ur: Record<Key, string> = {
   'err.TOO_LONG_FOR_HALF_DAY': 'آدھا دن 4 گھنٹے تک ہے۔ پورے دن کی قیمت لگائیں۔', 'err.TOO_LONG_FOR_FULL_DAY': 'پورا دن 12 گھنٹے تک ہے۔', 'err.TIME_RANGE_INVALID': 'بکنگ اسی دن شروع کے بعد ختم ہونی چاہیے۔',
   'err.TOO_SHORT': 'کم از کم بکنگ 30 منٹ کی ہے۔', 'err.DATE_IN_PAST': 'وہ تاریخ گزر چکی ہے۔', 'err.SPACE_INACTIVE': 'یہ جگہ کرائے پر نہیں دی جا رہی۔', 'err.STAY_NOT_ACTIVE': 'وہ قیام موجود نہیں یا آنے والا نہیں۔ الگ بل استعمال کریں۔',
   'err.BILL_HAS_PAYMENTS': 'اس بکنگ کے بل پر رقم لی جا چکی ہے۔ پہلے واپس کریں، پھر منسوخ کریں۔', 'err.ALREADY_COMPLETED': 'یہ بکنگ بل پر آ چکی ہے۔ بل پر چارج الٹائیں۔',
+  'err.NOT_A_SEPARATE_BILL': 'یہ بکنگ مہمان کے قیام پر ہے۔ قیام کا بل استعمال کریں۔', 'err.HIRE_NOT_DONE': 'پہلے بکنگ کو مکمل کریں تاکہ بل پر کچھ ہو۔',
   // staff, account, audit
   'nav.staff': 'عملہ', 'nav.audit2': 'آڈٹ ریکارڈ', 'acct.title': 'میرا اکاؤنٹ',
   'inv2.title': 'اپنا پاس ورڈ چنیں', 'inv2.help': 'کم از کم 12 حروف رکھیں۔ چند عام الفاظ ملا کر مضبوط پاس ورڈ بن جاتا ہے۔', 'inv2.new': 'نیا پاس ورڈ', 'inv2.again': 'نیا پاس ورڈ دوبارہ', 'inv2.set': 'پاس ورڈ محفوظ کریں', 'inv2.done': 'آپ کا پاس ورڈ محفوظ ہو گیا۔ اب سائن اِن کریں۔',

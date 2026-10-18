@@ -6,13 +6,14 @@ import { useAction } from '../lib/action.js';
 import { money } from '../lib/format.js';
 import { useAuth, useLive } from '../state.js';
 import { Badge, Chip, Empty, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
+import { BillSheet } from './BillToCompany.js';
 import { PaymentSheet } from './PaymentSheet.js';
 import type { Amount } from './types.js';
 
 interface Space { id: string; name: string; nameUr: string | null; capacity: number | null; bufferMinutes: number; hourly: Amount | null; halfDay: Amount | null; fullDay: Amount | null; active: boolean; version: number }
 interface Hire {
   id: string; number: string; space: string; eventName: string; hostName: string; hostPhone: string | null; attendees: number | null; note: string | null; date: string; startTime: string; endTime: string; pricing: string; hours: number; amount: Amount;
-  status: 'BOOKED' | 'COMPLETED' | 'CANCELLED'; billTo: 'STAY' | 'SEPARATE'; stay: { reservationId: string; confirmationNo: string; guest: string } | null; bill: { folioId: string; folioNo: string; balance: Amount; status: string } | null; company: { name: string } | null; cancelReason: string | null;
+  status: 'BOOKED' | 'COMPLETED' | 'CANCELLED'; billTo: 'STAY' | 'SEPARATE'; stay: { reservationId: string; confirmationNo: string; guest: string } | null; bill: { folioId: string; folioNo: string; balance: Amount; status: string } | null; company: { name: string } | null; invoices: Array<{ id: string; number: string; docType: string }>; cancelReason: string | null;
 }
 interface Stay { reservationId: string; confirmationNo: string; guest: string; room: string | null; status: string }
 const tone = (s: string) => (s === 'COMPLETED' ? 'inspected' : s === 'CANCELLED' ? 'neutral' : 'warn') as 'inspected' | 'neutral' | 'warn';
@@ -23,7 +24,7 @@ export function Spaces() {
   const { t } = useT();
   const { property, can } = useAuth();
   const base = `/v1/properties/${property!.id}/spaces`;
-  const [view, setView] = useState<'calendar' | 'spaces'>('calendar'); const [booking, setBooking] = useState(false); const [paying, setPaying] = useState<Hire | null>(null);
+  const [view, setView] = useState<'calendar' | 'spaces'>('calendar'); const [booking, setBooking] = useState(false); const [paying, setPaying] = useState<Hire | null>(null); const [billing, setBilling] = useState<Hire | null>(null);
   const cal = useLive<{ items: Hire[] }>(view === 'calendar' ? `${base}/bookings` : null, 30_000);
   const { busy, problem, run } = useAction();
   const go = async (h: Hire, tail: string, body: unknown = {}) => { if (await run(() => api('POST', `${base}/bookings/${h.id}/${tail}`, body))) cal.reload(); };
@@ -48,9 +49,14 @@ export function Spaces() {
                 <button className="primary" disabled={busy} onClick={() => go(h, 'complete')}>{t('sp.complete')}</button>
                 {h.bill && <button disabled={busy} onClick={() => setPaying(h)}>{t('sp.takePayment')}</button>}
                 <button className="link" disabled={busy} onClick={() => { const r = window.prompt(t('sp.cancelWhy')); if (r && r.trim().length >= 3) void go(h, 'cancel', { reason: r.trim() }); }}>{t('kt.cancel')}</button></div>}
-              {book && h.status === 'COMPLETED' && h.bill && h.bill.status === 'OPEN' && <div className="row"><button disabled={busy} onClick={() => setPaying(h)}>{t('sp.takePayment')}</button></div>}
+              {h.invoices.length > 0 && <div className="row">{h.invoices.map((x) => <a key={x.id} className="button" href={`/v1/properties/${property!.id}/invoices/${x.id}/print`} target="_blank" rel="noreferrer">{x.docType === 'CREDIT_NOTE' ? t('sp.creditNote') : t('inv.print')} {x.number}</a>)}</div>}
+              {book && h.status === 'COMPLETED' && h.bill && h.bill.status === 'OPEN' && <div className="row">
+                <button disabled={busy} onClick={() => setPaying(h)}>{t('sp.takePayment')}</button>
+                {can('invoice.issue') && <button disabled={busy} onClick={() => { void run(() => api('POST', `${base}/bookings/${h.id}/invoices`, {})).then((r) => { if (r) cal.reload(); }); }}>{t('inv.issue')}</button>}
+                {can('ar.bill') && !h.bill.balance.amount.startsWith('-') && h.bill.balance.amount !== '0.00' && <button disabled={busy} onClick={() => setBilling(h)}>{t('ar.bill')}</button>}</div>}
             </li>))}</ul></div>))}
       {booking && <NewHire base={base} onDone={() => { setBooking(false); cal.reload(); }} onClose={() => setBooking(false)} />}
+      {billing?.bill && <BillSheet endpoint={`${base}/bookings/${billing.id}/bill-to-company`} companyId={billing.company ? (billing.company as { id?: string }).id ?? null : null} balance={billing.bill.balance} onDone={() => { setBilling(null); cal.reload(); }} onClose={() => setBilling(null)} />}
       {paying?.bill && <PaymentSheet folioId={paying.bill.folioId} balance={paying.bill.balance} onDone={cal.reload} onClose={() => setPaying(null)} />}
     </section>
   );

@@ -42,15 +42,34 @@ export class ArService {
     });
   }
   private async billIn(trx: Trx, propertyId: string, reservationId: string, userId: string, i: z.infer<typeof S.BillToCompany>) {
-    const p = await this.folios.property(trx, propertyId);
     const res = await trx.selectFrom('reservation as r').innerJoin('guest as g', 'g.id', 'r.guest_id').select(['r.id', 'r.company_id', 'r.confirmation_no', 'g.full_name']).where('r.id', '=', reservationId).where('r.property_id', '=', propertyId).executeTakeFirst();
     if (!res) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Reservation not found' });
+    const folio = await this.folios.ensureGuestFolio(trx, propertyId, reservationId);
+    return this.billFolioIn(trx, { propertyId, folioId: folio.id, reservationId, defaultCompanyId: res.company_id, confirmationNo: res.confirmation_no, guestName: res.full_name, userId, i });
+  }
+  /** Bills a conference-room hire's own bill to a company on credit. */
+  async billHire(propertyId: string, bookingId: string, userId: string, key: string, i: z.infer<typeof S.BillToCompany>) {
+    const hash = hashRequest('POST', `/v1/properties/${propertyId}/spaces/bookings/${bookingId}/bill-to-company`, i);
+    return this.tdb.tx(async (trx) => {
+      const r = await this.idem.run(trx, key, hash, async () => {
+        const h = await trx.selectFrom('space_booking').select(['number', 'host_name', 'folio_id', 'company_id', 'bill_to', 'status']).where('id', '=', bookingId).where('property_id', '=', propertyId).executeTakeFirst();
+        if (!h) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Booking not found' });
+        if (h.bill_to !== 'SEPARATE' || !h.folio_id) throw fail(422, 'NOT_A_SEPARATE_BILL', 'This hire is on a guest’s stay. Bill the stay to the company instead.');
+        if (h.status !== 'COMPLETED') throw fail(409, 'HIRE_NOT_DONE', 'Mark the hire done first, so there is something on its bill.');
+        return { statusCode: 201, body: await this.billFolioIn(trx, { propertyId, folioId: h.folio_id, reservationId: null, defaultCompanyId: h.company_id, confirmationNo: h.number, guestName: h.host_name, userId, i }) };
+      });
+      return { ...r.body, replayed: r.replayed };
+    });
+  }
+  private async billFolioIn(trx: Trx, a: { propertyId: string; folioId: string; reservationId: string | null; defaultCompanyId: string | null; confirmationNo: string; guestName: string; userId: string; i: z.infer<typeof S.BillToCompany> }) {
+    const { propertyId, reservationId, userId, i } = a;
+    const p = await this.folios.property(trx, propertyId);
+    const res = { company_id: a.defaultCompanyId, confirmation_no: a.confirmationNo, full_name: a.guestName };
     const companyId = i.companyId ?? res.company_id;
     if (!companyId) throw fail(422, 'COMPANY_REQUIRED', 'Choose the company to bill');
     const company = await this.companies.row(trx, companyId, true);                                // serialises credit checks for this company
     if (company.status === 'ARCHIVED') throw fail(409, 'COMPANY_ARCHIVED', 'That company is archived');
-    const folio = await this.folios.ensureGuestFolio(trx, propertyId, reservationId);
-    const f = await this.folios.folioRow(trx, propertyId, folio.id, true);
+    const f = await this.folios.folioRow(trx, propertyId, a.folioId, true);
     if (f.status !== 'OPEN') throw fail(409, 'FOLIO_NOT_OPEN', 'This folio is closed');
     if (f.currency !== company.currency) throw fail(422, 'CURRENCY_MISMATCH', `The bill is in ${f.currency}; this company is billed in ${company.currency}`);
     const balance = BigInt(f.balance_minor);
@@ -185,7 +204,7 @@ export class ArService {
       SELECT i.id, i.company_id, c.name AS company_name, i.property_id, i.reservation_id, i.confirmation_no, i.guest_name, i.amount_minor::text AS amount, i.currency, i.item_date::text, i.due_date::text, p.business_date::text AS bd, i.note, i.override_reason,
         coalesce((SELECT sum(a.applied_minor) FROM ar_allocation a WHERE a.tenant_id = i.tenant_id AND a.item_id = i.id),0)::text AS applied,
         (v.item_id IS NOT NULL) AS voided, v.reason AS void_reason,
-        (SELECT array_agg(n.number ORDER BY n.number) FROM invoice n WHERE n.tenant_id = i.tenant_id AND n.reservation_id = i.reservation_id AND n.doc_type = 'TAX_INVOICE') AS invoices
+        (SELECT array_agg(n.number ORDER BY n.number) FROM invoice n WHERE n.tenant_id = i.tenant_id AND n.folio_id = i.folio_id AND n.doc_type = 'TAX_INVOICE') AS invoices
       FROM ar_item i JOIN company c ON c.tenant_id = i.tenant_id AND c.id = i.company_id JOIN property p ON p.tenant_id = i.tenant_id AND p.id = i.property_id LEFT JOIN ar_item_void v ON v.tenant_id = i.tenant_id AND v.item_id = i.id
       WHERE i.tenant_id = ${t} ${q.companyId ? sql`AND i.company_id = ${q.companyId}` : sql``} ${q.reservationId ? sql`AND i.reservation_id = ${q.reservationId}` : sql``} ${q.itemId ? sql`AND i.id = ${q.itemId}` : sql``}
       ORDER BY i.due_date, i.created_at LIMIT 500`.execute(trx);
