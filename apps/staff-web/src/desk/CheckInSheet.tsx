@@ -6,6 +6,7 @@ import { useAction } from '../lib/action.js';
 import { useStepUp } from '../lib/stepup.js';
 import { useAuth } from '../state.js';
 import { ErrorLine, Sheet } from '../ui/kit.js';
+import { ApprovalBox } from './ComplianceBits.js';
 import { RoomPicker } from './RoomPicker.js';
 import type { Line, ReservationDetail } from './types.js';
 
@@ -52,8 +53,8 @@ export function CheckInSheet({ res, line, onDone, onClose }: { res: ReservationD
   const { busy, problem, run } = useAction();
   const notReady = room && (room.hk === 'DIRTY' || room.hk === 'CLEANING');
 
-  const submit = async () => {
-    const body = { roomId: room?.id, allowNotReady: !!(override && notReady), occupants: occ.map((o, i) => occupantBody(o, i === 0)) };
+  const submit = async (approval?: string) => {
+    const body = { roomId: room?.id, allowNotReady: !!(override && notReady), occupants: occ.map((o, i) => occupantBody(o, i === 0)), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
     const r = await run(() => withStepUp(() => api('POST', `/v1/properties/${property!.id}/reservations/${res.id}/rooms/${line.id}/check-in`, body)));
     if (r) { onDone(); onClose(); }
   };
@@ -66,7 +67,8 @@ export function CheckInSheet({ res, line, onDone, onClose }: { res: ReservationD
       <h3>{t('ci.guests')}</h3>
       <OccupantsForm occupants={occ} onChange={setOcc} foreign={foreign} />
       <ErrorLine code={problem?.code} detail={problem?.detail} />
-      <div className="actions"><button className="primary" disabled={busy || !room || occ.some((o) => !o.fullName.trim() || !o.idNumber.trim()) || (!!notReady && !override)} onClick={submit}>{t('ci.confirm')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>
+      <ApprovalBox problem={problem} busy={busy} onApprove={(r) => void submit(r)} />
+      <div className="actions"><button className="primary" disabled={busy || !room || occ.some((o) => !o.fullName.trim() || !o.idNumber.trim()) || (!!notReady && !override)} onClick={() => void submit()}>{t('ci.confirm')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>
     </Sheet>
   );
 }

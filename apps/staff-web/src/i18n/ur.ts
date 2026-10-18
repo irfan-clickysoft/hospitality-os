@@ -447,4 +447,12 @@ export const ur: Record<Key, string> = {
   'err.NOT_ASSIGNED': 'پہلے مینیجر سے یہ کام سونپنے کو کہیں۔',
   'err.ISSUE_HAS_ORDER': 'اس اطلاع پر مرمتی کام پہلے سے موجود ہے۔',
   'err.ISSUE_CLOSED': 'یہ اطلاع پہلے ہی حل ہو چکی ہے۔',
+  // compliance
+  'nav.compliance': 'قواعد کی پابندی',
+  'cmp.tasks': 'کرنے کے کام', 'cmp.noTasks': 'کوئی کام باقی نہیں', 'cmp.done': 'ہو گیا', 'cmp.rules': 'قواعد', 'cmp.noRules': 'ابھی کوئی قاعدہ نہیں۔ جس مہمان یا قیام کو خاص توجہ چاہیے اس کے لیے قاعدہ شامل کریں۔', 'cmp.newRule': 'نیا قاعدہ',
+  'cmp.name': 'قاعدے کا نام', 'cmp.action': 'کیا ہوگا', 'cmp.nat': 'قومیتیں (کوڈ، جیسے AF IR)', 'cmp.notNat': 'ان قومیتوں کے سوا', 'cmp.minGuests': 'کم از کم اتنے مہمان', 'cmp.minNights': 'کم از کم اتنی راتیں',
+  'cmp.taskTitle': 'بنایا جانے والا کام', 'cmp.message': 'عملے کے لیے پیغام', 'cmp.messageUr': 'اردو میں پیغام (اختیاری)', 'cmp.activate': 'چالو کریں', 'cmp.disable': 'بند کریں',
+  'cmp.a.INFO': 'نوٹ', 'cmp.a.WARN': 'انتباہ', 'cmp.a.REQUIRE_APPROVAL': 'مینیجر کی منظوری', 'cmp.a.REQUIRE_TASK': 'کام', 'cmp.a.REQUIRE_DOCUMENT': 'دستاویز درکار', 'cmp.a.BLOCK_BOOKING': 'اجازت نہیں',
+  'cmp.st.BOOKING': 'بکنگ پر', 'cmp.st.CHECK_IN': 'چیک اِن پر', 'cmp.s.ACTIVE': 'چالو', 'cmp.s.DRAFT': 'مسودہ', 'cmp.s.DISABLED': 'بند',
+  'cmp.approved': 'منظور', 'cmp.reason': 'مینیجر کی منظوری کی وجہ', 'cmp.approve': 'منظور کریں اور آگے بڑھیں', 'cmp.askManager': 'اس کی منظوری مینیجر دے۔ مینیجر سے یہ اسکرین کھولنے کو کہیں۔',
 };

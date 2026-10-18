@@ -3,6 +3,7 @@ import { sql, type Transaction } from 'kysely';
 import type { z } from 'zod';
 import type { DB } from '@hos/db';
 import { addDays, hoursBeforeArrival, nightsOf } from '@hos/domain-types';
+import { ComplianceService } from '../compliance/compliance.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { CLOCK, type ClockLike } from '../common/clock.js';
 import { SecretBox } from '../common/secret-box.js';
@@ -37,6 +38,7 @@ export class FrontDeskService {
     @Inject(IdempotencyService) private readonly idem: IdempotencyService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(ComplianceService) private readonly compliance: ComplianceService,
     @Inject(CLOCK) private readonly clock: ClockLike,
   ) {}
 
@@ -92,7 +94,7 @@ export class FrontDeskService {
     });
   }
 
-  async checkInIn(trx: Trx, propertyId: string, id: string, lineId: string, userId: string, i: { roomId?: string; occupants: Occupant[]; allowNotReady: boolean }) {
+  async checkInIn(trx: Trx, propertyId: string, id: string, lineId: string, userId: string, i: { roomId?: string; occupants: Occupant[]; allowNotReady: boolean; complianceApproval?: { reason: string } }) {
     const p = await this.res.prop(trx, propertyId);
     const { res, lines } = await this.res.load(trx, propertyId, id, true);
     const line = lines.find((l) => l.id === lineId);
@@ -104,6 +106,12 @@ export class FrontDeskService {
     const guest = await this.guestOf(trx, res.guest_id);
     if (guest.do_not_rent) throw fail(422, 'GUEST_BLOCKED', 'This guest is flagged "do not rent". Ask a manager.');
     const occupants = this.checkOccupants(i.occupants, line, res.residency, p.business_date);
+
+    // compliance rules for the people actually arriving: blocked, held for approval, a document the main guest must show, tasks to do
+    const mainOcc = occupants.find((o) => o.primary)!;
+    const cctx = { propertyId, stage: 'CHECK_IN' as const, nationality: mainOcc.nationality ?? guest.nationality ?? null, residency: res.residency as 'RESIDENT' | 'NON_RESIDENT', guests: occupants.length, nights: nightsOf(line.arrival, line.departure).length, businessDate: bd };
+    const enforced = await this.compliance.enforce(trx, cctx, userId, id, i.complianceApproval);
+    this.compliance.assertDocuments(enforced.matches, mainOcc.idType);
 
     const current = await this.liveAssignment(trx, lineId);
     const roomId = i.roomId ?? current?.room_id;
@@ -131,7 +139,8 @@ export class FrontDeskService {
     const lateArrival = bd > line.arrival;
     await this.res.history(trx, propertyId, id, { lineId, action: 'CHECK_IN_DETAILS', details: { room: room.number, occupants: occupants.length, early, lateArrival } });
     await this.audit.record(trx, { action: 'frontdesk.check_in', resourceType: 'reservation', resourceId: id, propertyId, after: { room: room.number, occupants: occupants.length, early, lateArrival, notReadyOverride: room.hk_status === 'DIRTY' } });
-    return { room: { id: room.id, number: room.number }, earlyCheckIn: early, lateArrival, occupants: occupants.length };
+    const complianceHits = await this.compliance.record(trx, cctx, userId, id, enforced);
+    return { room: { id: room.id, number: room.number }, earlyCheckIn: early, lateArrival, occupants: occupants.length, compliance: complianceHits };
   }
 
   private async guestOf(trx: Trx, guestId: string) {
@@ -273,8 +282,8 @@ export class FrontDeskService {
       roomId = free.rows[0]?.id;
       if (!roomId) throw fail(409, 'NO_ROOM_READY', 'No clean, free room of this type is available right now. Check housekeeping, or choose another type.');
     }
-    const created = await this.res.createIn(trx, propertyId, userId, { guestId: i.guestId, guest: i.guest, lines: [{ quoteToken: token }], source: 'WALK_IN', notesInternal: i.notesInternal, specialRequests: i.specialRequests, companyId: i.companyId ?? undefined } as never);
-    const flags = await this.checkInIn(trx, propertyId, created.id, created.lines[0]!.id, userId, { roomId, occupants: i.occupants, allowNotReady: i.allowNotReady });
+    const created = await this.res.createIn(trx, propertyId, userId, { guestId: i.guestId, guest: i.guest, lines: [{ quoteToken: token }], source: 'WALK_IN', complianceApproval: i.complianceApproval, notesInternal: i.notesInternal, specialRequests: i.specialRequests, companyId: i.companyId ?? undefined } as never);
+    const flags = await this.checkInIn(trx, propertyId, created.id, created.lines[0]!.id, userId, { roomId, occupants: i.occupants, allowNotReady: i.allowNotReady, complianceApproval: i.complianceApproval });
     return { ...(await this.res.detail(trx, propertyId, created.id)), checkIn: flags };
   }
 

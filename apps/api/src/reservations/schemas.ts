@@ -13,6 +13,8 @@ export const CreateReservation = z.object({
   marketSegment: z.string().max(40).nullish(), externalRef: z.string().max(80).nullish(), companyId: uuid.nullish(),
   /** Hold the rooms as an OPTION that expires after this many minutes (no payment yet); omit to confirm now. */
   hold: z.object({ minutes: z.number().int().min(15).max(4320) }).optional(),
+  /** A manager's approval (with a reason) for a booking that a compliance rule holds for approval. */
+  complianceApproval: z.object({ reason: z.string().trim().min(3).max(300) }).optional(),
   notesInternal: text(2000), notesGuest: text(2000), specialRequests: text(2000),
 }).refine((v) => (v.guestId ? 1 : 0) + (v.guest ? 1 : 0) === 1, { message: 'provide either guestId or guest' });
 

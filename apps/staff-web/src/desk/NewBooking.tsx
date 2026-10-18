@@ -5,6 +5,8 @@ import type { Key } from '../i18n/en.js';
 import { useAction } from '../lib/action.js';
 import { addDays, money, newKey, shortDate, whatsappNumber } from '../lib/format.js';
 import { useAuth, useLive } from '../state.js';
+import { useStepUp } from '../lib/stepup.js';
+import { ApprovalBox, ComplianceNotes, type Hit } from './ComplianceBits.js';
 import { Badge, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 import { policyLines } from './policy.js';
 import type { Amount } from './types.js';
@@ -31,9 +33,11 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   const [q, setQ] = useState(''); const [hits, setHits] = useState<GuestHit[]>([]); const [guest, setGuest] = useState<GuestHit | null>(null);
   const [nf, setNf] = useState({ fullName: '', phone: '', nationality: 'PK' });
   const [hold, setHold] = useState(false); const [holdMin, setHoldMin] = useState(120); const [notes, setNotes] = useState(''); const [ext, setExt] = useState('');
-  const [result, setResult] = useState<{ id: string; confirmationNo: string; guarantee: { atRisk: boolean; depositRequired: Amount; deadline: string | null }; totalExTax: Amount } | null>(null);
+  const [result, setResult] = useState<{ id: string; confirmationNo: string; guarantee: { atRisk: boolean; depositRequired: Amount; deadline: string | null }; totalExTax: Amount; compliance?: Hit[] } | null>(null);
   const key = useMemo(newKey, []);
   const { busy, problem, run, clear } = useAction();
+  const withStepUp = useStepUp();
+  const lastBook = useState<{ g: { guestId?: string; guest?: Record<string, unknown> } } | null>(null);
   const departure = addDays(arrival, nights);
 
   const search = async () => {
@@ -46,9 +50,11 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
     return () => clearTimeout(h);
   }, [q, step]);
 
-  const book = async (g: { guestId?: string; guest?: Record<string, unknown> }) => {
-    const body = { ...g, source, lines: [{ quoteToken: chosen!.quoteToken }], ...(hold ? { hold: { minutes: holdMin } } : {}), ...(notes.trim() ? { notesInternal: notes.trim() } : {}), ...(ext.trim() ? { externalRef: ext.trim() } : {}) };
-    const r = await run(() => api<NonNullable<typeof result>>('POST', `${base}/reservations`, body, { 'idempotency-key': key }));
+  const book = async (g: { guestId?: string; guest?: Record<string, unknown> }, approval?: string) => {
+    lastBook[1]({ g });
+    const body = { ...g, source, lines: [{ quoteToken: chosen!.quoteToken }], ...(hold ? { hold: { minutes: holdMin } } : {}), ...(notes.trim() ? { notesInternal: notes.trim() } : {}), ...(ext.trim() ? { externalRef: ext.trim() } : {}), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
+    const call = () => api<NonNullable<typeof result>>('POST', `${base}/reservations`, body, { 'idempotency-key': key });
+    const r = await run(() => (approval ? withStepUp(call) : call()));
     if (r) { setResult(r); setStep('done'); }
   };
   const wa = result && guest ? whatsappNumber(guest.phone) : result ? whatsappNumber(nf.phone) : null;
@@ -101,6 +107,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
         <label>{t('bk.extRef')} ({t('common.optional')})<input value={ext} onChange={(e) => setExt(e.target.value)} dir="ltr" /></label>
         <label>{t('common.note')} ({t('common.optional')})<input value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
         <ErrorLine code={problem?.code === 'DUPLICATE_GUEST' ? undefined : problem?.code} detail={problem?.detail} />
+        <ApprovalBox problem={problem} busy={busy} onApprove={(reason) => lastBook[0] && void book(lastBook[0].g, reason)} />
         {problem?.code === 'DUPLICATE_GUEST' && <DuplicateChoice onUse={(g) => { setGuest(g); clear(); void book({ guestId: g.id }); }} onForce={() => void book({ guest: { fullName: nf.fullName.trim(), phone: nf.phone.trim() || undefined, nationality: nf.nationality.toUpperCase() || 'PK', allowDuplicate: true } })} base={base} phone={nf.phone} name={nf.fullName} />}
         <div className="actions"><button className="primary" disabled={busy} onClick={() => (guest ? book({ guestId: guest.id }) : book({ guest: { fullName: nf.fullName.trim(), ...(nf.phone.trim() ? { phone: nf.phone.trim() } : {}), nationality: nf.nationality.toUpperCase() || 'PK' } }))}>{hold ? t('bk.holdBtn') : t('bk.confirmBtn')}</button><button onClick={() => setStep('guest')}>{t('common.back')}</button></div>
       </>)}
@@ -108,6 +115,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
       {step === 'done' && result && (<>
         <p className="ok big" role="status">✓ {result.confirmationNo}</p>
         <p>{name} · {money(result.totalExTax)} {t('d.exTax')}</p>
+        <ComplianceNotes hits={result.compliance ?? []} />
         {result.guarantee.atRisk && <p className="warnbox">⚠ {t('rs.atRisk')} · {t('rs.depositNeeded')}: {money(result.guarantee.depositRequired)}</p>}
         <div className="actions">
           <button className="primary" onClick={() => onOpenReservation(result.id)}>{t('bk.open')}</button>

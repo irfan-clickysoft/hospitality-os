@@ -445,5 +445,13 @@ export const en = {
   'err.NOT_ASSIGNED': 'Ask a manager to assign this job first.',
   'err.ISSUE_HAS_ORDER': 'A repair job already exists for that report.',
   'err.ISSUE_CLOSED': 'That report is already resolved.',
+  // compliance
+  'nav.compliance': 'Compliance',
+  'cmp.tasks': 'Tasks to do', 'cmp.noTasks': 'Nothing to do', 'cmp.done': 'Done', 'cmp.rules': 'Rules', 'cmp.noRules': 'No rules yet. Add one for any guest or stay that needs special handling.', 'cmp.newRule': 'New rule',
+  'cmp.name': 'Rule name', 'cmp.action': 'What happens', 'cmp.nat': 'Nationalities (codes, e.g. AF IR)', 'cmp.notNat': 'Except nationalities', 'cmp.minGuests': 'At least this many guests', 'cmp.minNights': 'At least this many nights',
+  'cmp.taskTitle': 'Task to create', 'cmp.message': 'Message for staff', 'cmp.messageUr': 'Message in Urdu (optional)', 'cmp.activate': 'Turn on', 'cmp.disable': 'Turn off',
+  'cmp.a.INFO': 'Note', 'cmp.a.WARN': 'Warning', 'cmp.a.REQUIRE_APPROVAL': 'Manager approval', 'cmp.a.REQUIRE_TASK': 'Task', 'cmp.a.REQUIRE_DOCUMENT': 'Document needed', 'cmp.a.BLOCK_BOOKING': 'Not allowed',
+  'cmp.st.BOOKING': 'At booking', 'cmp.st.CHECK_IN': 'At check-in', 'cmp.s.ACTIVE': 'On', 'cmp.s.DRAFT': 'Draft', 'cmp.s.DISABLED': 'Off',
+  'cmp.approved': 'approved', 'cmp.reason': 'Reason for the manager’s approval', 'cmp.approve': 'Approve and continue', 'cmp.askManager': 'A manager must approve this. Ask one to open this screen.',
 } as const;
 export type Key = keyof typeof en;

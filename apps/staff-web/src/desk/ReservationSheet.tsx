@@ -12,6 +12,7 @@ import { CheckInSheet } from './CheckInSheet.js';
 import { CheckOutSheet } from './CheckOutSheet.js';
 import { PaymentSheet } from './PaymentSheet.js';
 import { RoomPicker } from './RoomPicker.js';
+import { ComplianceNotes, type Hit } from './ComplianceBits.js';
 import { OtaClaimPanel } from './OtaClaims.js';
 import { CompanyBillings } from './BillToCompany.js';
 import { InvoicePanel } from './Invoices.js';
@@ -26,6 +27,7 @@ export function ReservationSheet({ reservationId, businessDate, onChanged, onClo
   const res = useLive<ReservationDetail>(`${base}/reservations/${reservationId}`, 20_000);
   const folio = useLive<FolioView>(can('folio.view') ? `${base}/reservations/${reservationId}/folio` : null, 20_000);
   const [dialog, setDialog] = useState<Dialog>(null); const [tab, setTab] = useState<'stay' | 'folio' | 'history'>('stay');
+  const comp = useLive<{ hits: Array<Hit & { rule: string; stage: string; approved: boolean; message: string }>; tasks: Array<{ id: string; title: string; status: string }> }>(can('compliance.view') ? `${base}/reservations/${reservationId}/compliance` : null, 60_000);
   const refresh = () => { res.reload(); folio.reload(); onChanged?.(); };
   const r = res.data;
 
@@ -44,6 +46,8 @@ export function ReservationSheet({ reservationId, businessDate, onChanged, onClo
         {r.penalty.amount.amount !== '0.00' && <p className="warnbox">{t('rs.penalty')}: {money(r.penalty.amount)}{r.penalty.waived ? ` (${t('rs.waived')})` : ''}</p>}
         <div className="chips" role="tablist">{(['stay', 'folio', 'history'] as const).filter((x) => x !== 'folio' || can('folio.view')).map((x) => <button key={x} role="tab" aria-selected={tab === x} className={`chip${tab === x ? ' on' : ''}`} onClick={() => setTab(x)}>{t(`rs.tab.${x}` as Key)}</button>)}</div>
 
+        {tab === 'stay' && comp.data && <ComplianceNotes hits={comp.data.hits.map((h) => ({ name: h.rule, action: h.action, message: h.message, approved: h.approved }))} />}
+        {tab === 'stay' && comp.data && comp.data.tasks.filter((x) => x.status === 'OPEN').map((x) => <p key={x.id} className="warnbox">☐ {x.title}</p>)}
         {tab === 'stay' && r.lines.map((l) => <LineCard key={l.id} r={r} l={l} businessDate={businessDate} open={(kind) => setDialog({ kind, line: l })} />)}
         {tab === 'stay' && (r.notes.specialRequests || r.notes.internal || r.notes.guest) && (
           <div className="card inner small">{[r.notes.specialRequests, r.notes.guest, r.notes.internal].filter(Boolean).map((n, i) => <p key={i}>{n}</p>)}</div>

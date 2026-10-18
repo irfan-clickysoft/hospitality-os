@@ -5,6 +5,8 @@ import { useAction } from '../lib/action.js';
 import { addDays, money, newKey } from '../lib/format.js';
 import { useAuth, useLive } from '../state.js';
 import { ErrorLine, Sheet } from '../ui/kit.js';
+import { useStepUp } from '../lib/stepup.js';
+import { ApprovalBox } from './ComplianceBits.js';
 import { blankOccupant, OccupantsForm, occupantBody, type Occupant } from './CheckInSheet.js';
 import type { Amount, RackData } from './types.js';
 
@@ -19,6 +21,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
   const [name, setName] = useState(''); const [phone, setPhone] = useState(''); const [occ, setOcc] = useState<Occupant[]>([blankOccupant('', false)]);
   const [price, setPrice] = useState<{ total: Amount; plan: string } | null>(null); const [done, setDone] = useState<{ id: string; confirmationNo: string } | null>(null);
   const { busy, problem, run } = useAction();
+  const withStepUp = useStepUp();
   const types = rack.data?.roomTypes ?? [];
   const free = (id: string) => (types.find((x) => x.id === id)?.availability[0]?.available ?? 0);
   useEffect(() => { if (!typeId && types[0]) setTypeId((types.find((x) => free(x.id) > 0) ?? types[0]).id); }, [types]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -32,9 +35,10 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
     return () => { dead = true; };
   }, [typeId, nights, adults, foreign, base, businessDate]);
 
-  const submit = async () => {
-    const body = { guest: { fullName: name.trim(), ...(phone.trim() ? { phone: phone.trim() } : {}), nationality: foreign ? (occ[0]?.nationality || 'XX') : 'PK' }, roomTypeId: typeId, nights, adults, occupants: occ.map((o, i) => occupantBody(o, i === 0)) };
-    const r = await run(() => api<{ id: string; confirmationNo: string }>('POST', `${base}/front-desk/walk-ins`, body, { 'idempotency-key': key }));
+  const submit = async (approval?: string) => {
+    const body = { guest: { fullName: name.trim(), ...(phone.trim() ? { phone: phone.trim() } : {}), nationality: foreign ? (occ[0]?.nationality || 'XX') : 'PK' }, roomTypeId: typeId, nights, adults, occupants: occ.map((o, i) => occupantBody(o, i === 0)), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
+    const call = () => api<{ id: string; confirmationNo: string }>('POST', `${base}/front-desk/walk-ins`, body, { 'idempotency-key': key });
+    const r = await run(() => (approval ? withStepUp(call) : call()));
     if (r) setDone(r);
   };
   return (
@@ -50,7 +54,8 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
         <h3>{t('ci.guests')}</h3>
         <OccupantsForm occupants={occ} onChange={setOcc} foreign={foreign} />
         <ErrorLine code={problem?.code} detail={problem?.detail} />
-        <div className="actions"><button className="primary" disabled={busy || !price || name.trim().length < 2 || occ.some((o) => !o.fullName.trim() || !o.idNumber.trim())} onClick={submit}>{t('wi.go')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>
+        <ApprovalBox problem={problem} busy={busy} onApprove={(r) => void submit(r)} />
+        <div className="actions"><button className="primary" disabled={busy || !price || name.trim().length < 2 || occ.some((o) => !o.fullName.trim() || !o.idNumber.trim())} onClick={() => void submit()}>{t('wi.go')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>
       </>)}
     </Sheet>
   );

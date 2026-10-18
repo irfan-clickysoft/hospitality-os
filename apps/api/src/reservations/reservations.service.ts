@@ -8,6 +8,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { AuthorizationService } from '../authz/authorization.service.js';
 import { CLOCK, type ClockLike } from '../common/clock.js';
 import { TenantDb } from '../db/tenant-db.js';
+import { ComplianceService } from '../compliance/compliance.service.js';
 import { FolioService } from '../folio/folio.service.js';
 import { GuestsService } from '../guests/guests.service.js';
 import { residencyOf } from '../guests/schemas.js';
@@ -38,6 +39,7 @@ export class ReservationsService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
+    @Inject(ComplianceService) private readonly compliance: ComplianceService,
     @Inject(CLOCK) private readonly clock: ClockLike,
   ) {}
 
@@ -130,6 +132,10 @@ export class ReservationsService {
       throw new UnprocessableEntityException({ code: 'RESIDENCY_MISMATCH', message: `This guest is ${guest!.residency === 'RESIDENT' ? 'a resident (local)' : 'a non-resident (foreign)'} guest but the quote is for ${first.residency === 'RESIDENT' ? 'residents' : 'non-residents'}. Search again with the right residency.` });
     }
 
+    // 2b. compliance rules for this guest and stay: blocked, held for approval, or just noted
+    const cctx = { propertyId, stage: 'BOOKING' as const, nationality: guest!.nationality ?? null, residency: first.residency as 'RESIDENT' | 'NON_RESIDENT', guests: Math.max(...verified.map((v) => v.claims.adults + v.claims.children)), nights: Math.max(...verified.map((v) => nightsOf(v.claims.arrival, v.claims.departure).length)), businessDate: p.business_date };
+    const enforced = await this.compliance.enforce(trx, cctx, userId, null, i.complianceApproval);
+
     // 3. take the inventory atomically (rolls back everything if any night is full)
     const hold = !!i.hold;
     for (const v of verified) await this.takeInventory(trx, propertyId, { room_type_id: v.claims.roomTypeId, arrival: v.claims.arrival, departure: v.claims.departure }, hold ? 'held' : 'reserved');
@@ -171,7 +177,8 @@ export class ReservationsService {
       reservationId: res.id, confirmationNo, status, channel: first.channel, source: i.source, guestId: guest!.id, atRisk: needsGuarantee, depositRequiredMinor: res.deposit_required_minor, guaranteeDeadline: res.guarantee_deadline, currency: p.currency } });
     if (status === 'CONFIRMED') await this.outbox.publish(trx, { aggregateType: 'reservation', aggregateId: res.id, eventType: 'ReservationConfirmed', propertyId, payload: { reservationId: res.id, confirmationNo } });
     await this.inventoryEvents(trx, propertyId, verified.map((v) => v.claims.roomTypeId), 'reservation_created');
-    return this.detail(trx, propertyId, res.id);
+    const compliance = await this.compliance.record(trx, cctx, userId, res.id, enforced);
+    return { ...(await this.detail(trx, propertyId, res.id)), compliance };
   }
 
   private async insertNights(trx: Trx, propertyId: string, lineId: string, nights: Array<{ date: string; source: string; room: bigint; extras: bigint }>, discount: bigint) {
