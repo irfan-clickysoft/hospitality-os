@@ -12,6 +12,7 @@ import { CheckInSheet } from './CheckInSheet.js';
 import { CheckOutSheet } from './CheckOutSheet.js';
 import { PaymentSheet } from './PaymentSheet.js';
 import { RoomPicker } from './RoomPicker.js';
+import { InvoicePanel } from './Invoices.js';
 import { STATUS_TONE, type FolioView, type Line, type ReservationDetail } from './types.js';
 
 type Dialog = null | { kind: 'checkin' | 'checkout' | 'assign' | 'cancel' | 'noshow' | 'move' | 'pay' | 'deposit' | 'charge' | 'void' | 'refund'; line?: Line; paymentId?: string };
@@ -163,6 +164,7 @@ function FolioPanel({ f, r, open }: { f: FolioView | null; r: ReservationDetail;
       <h3>{t('fo.postings')}</h3>
       {f.postings.length === 0 ? <p className="muted small">{t('common.none')}</p> : (
         <ul className="plain small">{f.postings.map((p) => <li key={p.id} className={`row between${p.reversed ? ' struck' : ''}`}><span>{p.businessDate} · {p.description ?? p.txnCode}</span><span dir="ltr">{money(p.amount)}</span></li>)}</ul>)}
+      <InvoicePanel reservationId={r.id} finished={r.status === 'CHECKED_OUT'} />
     </div>
   );
 }

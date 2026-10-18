@@ -11,6 +11,7 @@ import { FolioService } from '../folio/folio.service.js';
 import { HousekeepingService } from '../housekeeping/housekeeping.service.js';
 import { HORIZON_DAYS, InventoryService } from '../inventory/inventory.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
+import { TaxService } from '../tax/tax.service.js';
 import { ReservationsService } from '../reservations/reservations.service.js';
 import { mapDbError } from '../common/db-errors.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
@@ -38,6 +39,7 @@ export class NightAuditService {
     @Inject(HousekeepingService) private readonly hk: HousekeepingService,
     @Inject(ReservationsService) private readonly res: ReservationsService,
     @Inject(InventoryService) private readonly inv: InventoryService,
+    @Inject(TaxService) private readonly tax: TaxService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
@@ -201,7 +203,7 @@ export class NightAuditService {
       }
       return { lines: lines.length, nightsPosted: nights, totalMinor: total.toString() };
     }
-    return { skipped: true, reason: 'TAX_ENGINE_NOT_CONFIGURED' };            // taxes arrive with the tax engine; the step keeps its place in the order
+    return this.tdb.tx(async (trx) => { const r = await this.tax.catchUp(trx, propertyId, bd, userId); return { postings: r.postings, taxMinor: r.taxMinor.toString(), configured: (await this.tax.rulesFor(trx, propertyId)).length > 0 }; });   // tax is worked out as each charge is posted; this adds it to anything posted before its rate existed
   }
 
   /** One transaction: freeze postings, catch up stragglers, snapshot the day, roll the date, open the next day's inventory and housekeeping. */
@@ -213,6 +215,7 @@ export class NightAuditService {
       if (open) throw fail(409, 'AUDIT_BLOCKED', 'A cashier session was opened while the audit was running. Close it first.');
       const lines = await trx.selectFrom('reservation_room').select(['id', 'reservation_id']).where('property_id', '=', propertyId).where('status', '=', 'CHECKED_IN').where('arrival', '<=', bd).execute();
       for (const l of lines) await this.folios.postRoomNights(trx, propertyId, l, bd, userId);   // guests who checked in after the charge step
+      await this.tax.catchUp(trx, propertyId, bd, userId);
       const prev = await trx.selectFrom('night_audit_run').select('completed_at').where('property_id', '=', propertyId).where('status', '=', 'COMPLETED').orderBy('business_date', 'desc').limit(1).executeTakeFirst();
       const run = await trx.selectFrom('night_audit_run').select('started_at').where('id', '=', runId).executeTakeFirstOrThrow();
       const since = prev?.completed_at ?? new Date(new Date(run.started_at).getTime() - 24 * 3_600_000);
@@ -223,7 +226,7 @@ export class NightAuditService {
       const horizon = await this.inv.ensureHorizon(trx, propertyId, next, addDays(next, HORIZON_DAYS));
       const hk = await this.hk.generateIn(trx, propertyId, userId);
       const summary = { businessDate: bd, nextBusinessDate: next, roomsSold: snap.roomsSold, roomsAvailable: snap.roomsAvailable, occupancyPct: snap.occupancyBp / 100, roomRevenue: fmt(snap.roomRevenue, p.currency), adr: fmt(snap.adr, p.currency),
-        revPar: fmt(snap.revpar, p.currency), arrivals: snap.arrivals, departures: snap.departures, inHouse: snap.inHouse, noShows: snap.noShows, guestLedger: fmt(snap.guestLedger, p.currency), inventoryDaysAdded: horizon, housekeeping: hk, taxes: 'NOT_CONFIGURED' };
+        revPar: fmt(snap.revpar, p.currency), arrivals: snap.arrivals, departures: snap.departures, inHouse: snap.inHouse, noShows: snap.noShows, guestLedger: fmt(snap.guestLedger, p.currency), inventoryDaysAdded: horizon, housekeeping: hk, tax: fmt(snap.tax, p.currency) };
       await trx.updateTable('night_audit_step').set({ status: 'DONE', finished_at: new Date(this.clock.now()), result: JSON.stringify({ rolledTo: next, ...summary }) }).where('run_id', '=', runId).where('step_key', '=', 'CLOSE_DAY').execute();
       await trx.updateTable('night_audit_run').set({ status: 'COMPLETED', completed_at: new Date(this.clock.now()), updated_at: new Date(this.clock.now()), summary: JSON.stringify(summary), error: null }).where('id', '=', runId).execute();
       await this.audit.record(trx, { action: 'night_audit.complete', resourceType: 'night_audit_run', resourceId: runId, propertyId, after: summary });
@@ -250,10 +253,13 @@ export class NightAuditService {
       SELECT p.txn_code, l.room_type_id, r.source, count(*)::int AS n, sum(p.amount_minor)::text AS amount
       FROM folio_posting p LEFT JOIN reservation_room l ON l.tenant_id = p.tenant_id AND l.id = p.reservation_room_id
         LEFT JOIN folio f ON f.tenant_id = p.tenant_id AND f.id = p.folio_id LEFT JOIN reservation r ON r.tenant_id = f.tenant_id AND r.id = f.reservation_id
-      WHERE p.tenant_id = ${t} AND p.property_id = ${propertyId} AND p.business_date = ${bd}::date AND p.payment_id IS NULL AND p.posting_type IN ('CHARGE','TAX','DISCOUNT','REVERSAL','ADJUSTMENT')
+      WHERE p.tenant_id = ${t} AND p.property_id = ${propertyId} AND p.business_date = ${bd}::date AND p.payment_id IS NULL AND p.txn_code <> 'TAX' AND p.posting_type IN ('CHARGE','DISCOUNT','REVERSAL','ADJUSTMENT')
       GROUP BY p.txn_code, l.room_type_id, r.source ORDER BY p.txn_code`.execute(trx);
     let room = 0n, fees = 0n, other = 0n;
     for (const r of rev.rows) { const a = BigInt(r.amount); if (['ROOM', 'ROOM_EXTRAS', 'ROOM_DISCOUNT'].includes(r.txn_code)) room += a; else if (r.txn_code === 'CANCEL_FEE' || r.txn_code === 'NOSHOW_FEE') fees += a; else other += a; }
+    const taxRows = await sql<{ tax_code: string; n: number; taxable: string; tax: string }>`SELECT tax_code, count(*)::int AS n, coalesce(sum(taxable_minor),0)::text AS taxable, coalesce(sum(amount_minor),0)::text AS tax FROM folio_posting
+      WHERE tenant_id = ${t} AND property_id = ${propertyId} AND business_date = ${bd}::date AND tax_code IS NOT NULL GROUP BY tax_code ORDER BY tax_code`.execute(trx);
+    const taxTotal = taxRows.rows.reduce((a, r) => a + BigInt(r.tax), 0n);
     const pay = await sql<{ txn_code: string; received: string }>`SELECT txn_code, (-sum(amount_minor))::text AS received FROM folio_posting WHERE tenant_id = ${t} AND property_id = ${propertyId} AND business_date = ${bd}::date
       AND (posting_type IN ('PAYMENT','DEPOSIT_RECEIVED','REFUND') OR (posting_type = 'REVERSAL' AND payment_id IS NOT NULL)) GROUP BY txn_code ORDER BY txn_code`.execute(trx);
     const ledger = (await sql<{ owed: string; held: string }>`SELECT coalesce(sum(balance_minor) FILTER (WHERE balance_minor > 0),0)::text AS owed, coalesce(-sum(balance_minor) FILTER (WHERE balance_minor < 0),0)::text AS held
@@ -277,9 +283,10 @@ export class NightAuditService {
     await trx.insertInto('daily_property_stats').values({ tenant_id: t, property_id: propertyId, business_date: bd, run_id: runId, currency: cur, rooms_total: rooms.total, rooms_out_of_order: rooms.ooo, rooms_available: available, rooms_sold: sold, occupancy_bp: occ,
       room_revenue_minor: room.toString(), fees_minor: fees.toString(), other_revenue_minor: other.toString(), adr_minor: adr.toString(), revpar_minor: revpar.toString(), arrivals: counts.arrivals ?? 0, departures: counts.departures ?? 0, in_house: counts.in_house ?? 0,
       no_shows: counts.no_shows ?? 0, cancellations: counts.cancellations ?? 0, guest_ledger_minor: ledger.owed, advance_deposits_minor: ledger.held, payments: JSON.stringify(Object.fromEntries(pay.rows.map((p) => [p.txn_code, p.received]))),
-      cashier_variance_minor: variance.v, details: JSON.stringify(lists) } as never).execute();
+      cashier_variance_minor: variance.v, details: JSON.stringify({ ...lists, tax: taxRows.rows.map((r) => ({ code: r.tax_code, postings: r.n, taxable: r.taxable, tax: r.tax })) }), tax_minor: taxTotal.toString() } as never).execute();
+    for (const r of taxRows.rows) await trx.insertInto('daily_revenue_line').values({ tenant_id: t, property_id: propertyId, business_date: bd, run_id: runId, txn_code: `TAX:${r.tax_code}`, room_type_id: null, source: null, posting_count: r.n, amount_minor: r.tax } as never).execute();
     for (const r of rev.rows) await trx.insertInto('daily_revenue_line').values({ tenant_id: t, property_id: propertyId, business_date: bd, run_id: runId, txn_code: r.txn_code, room_type_id: r.room_type_id, source: r.source, posting_count: r.n, amount_minor: r.amount } as never).execute();
-    return { roomsSold: sold, roomsAvailable: available, occupancyBp: occ, roomRevenue: room, adr, revpar, arrivals: counts.arrivals ?? 0, departures: counts.departures ?? 0, inHouse: counts.in_house ?? 0, noShows: counts.no_shows ?? 0, guestLedger: BigInt(ledger.owed) };
+    return { roomsSold: sold, roomsAvailable: available, occupancyBp: occ, roomRevenue: room, adr, revpar, arrivals: counts.arrivals ?? 0, departures: counts.departures ?? 0, inHouse: counts.in_house ?? 0, noShows: counts.no_shows ?? 0, guestLedger: BigInt(ledger.owed), tax: taxTotal };
   }
 
   // ───────────── reading ─────────────
@@ -309,11 +316,12 @@ export class NightAuditService {
       return {
         businessDate: s.business_date, runId: s.run_id, generatedAt: s.generated_at,
         occupancy: { roomsTotal: s.rooms_total, outOfOrder: s.rooms_out_of_order, roomsAvailable: s.rooms_available, roomsSold: s.rooms_sold, occupancyPct: s.occupancy_bp / 100 },
-        revenue: { room: fmt(s.room_revenue_minor, c), fees: fmt(s.fees_minor, c), other: fmt(s.other_revenue_minor, c), adr: fmt(s.adr_minor, c), revPar: fmt(s.revpar_minor, c), taxNote: 'Amounts exclude tax. Tax lines arrive with the tax engine.' },
+        revenue: { room: fmt(s.room_revenue_minor, c), fees: fmt(s.fees_minor, c), other: fmt(s.other_revenue_minor, c), adr: fmt(s.adr_minor, c), revPar: fmt(s.revpar_minor, c), note: 'Revenue figures exclude tax.' },
+        tax: { total: fmt(s.tax_minor, c), byCode: lines.filter((l) => l.txn_code.startsWith('TAX:')).map((l) => ({ code: l.txn_code.slice(4), postings: l.posting_count, tax: fmt(l.amount_minor, c) })) },
         movement: { arrivals: s.arrivals, departures: s.departures, inHouse: s.in_house, noShows: s.no_shows, cancellations: s.cancellations },
         ledger: { guestLedger: fmt(s.guest_ledger_minor, c), advanceDeposits: fmt(s.advance_deposits_minor, c) },
         paymentsByTender: Object.fromEntries(Object.entries(s.payments as Record<string, string>).map(([k, v]) => [k, fmt(v, c)])), cashierVariance: fmt(s.cashier_variance_minor, c),
-        revenueLines: lines.map((l) => ({ txnCode: l.txn_code, roomType: l.room_type, source: l.source, postings: l.posting_count, amount: fmt(l.amount_minor, c) })), lists: s.details,
+        revenueLines: lines.filter((l) => !l.txn_code.startsWith('TAX:')).map((l) => ({ txnCode: l.txn_code, roomType: l.room_type, source: l.source, postings: l.posting_count, amount: fmt(l.amount_minor, c) })), lists: s.details,
       };
     });
   }

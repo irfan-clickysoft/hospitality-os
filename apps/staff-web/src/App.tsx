@@ -9,6 +9,7 @@ import { Bookings } from './desk/Bookings.js';
 import { Cashier } from './desk/Cashier.js';
 import { NightAudit } from './desk/NightAudit.js';
 import { Rack } from './desk/Rack.js';
+import { Tax } from './desk/Tax.js';
 import { Today } from './desk/Today.js';
 import { StepUpProvider } from './lib/stepup.js';
 import { AuthProvider, useAuth, useWork, WorkProvider } from './state.js';
@@ -16,7 +17,7 @@ import { Spinner } from './ui/kit.js';
 import type { Key } from './i18n/en.js';
 import { errorText } from './i18n/index.js';
 
-type Tab = 'today' | 'rack' | 'bookings' | 'cashier' | 'audit' | 'mine' | 'board' | 'issues' | 'lost';
+type Tab = 'today' | 'rack' | 'bookings' | 'cashier' | 'audit' | 'tax' | 'mine' | 'board' | 'issues' | 'lost';
 
 function Shell() {
   const { t, locale, setLocale } = useT();
@@ -28,6 +29,7 @@ function Shell() {
     can('reservation.view') && { id: 'bookings' as Tab, label: 'nav.bookings' as Key },
     can('cashier.operate') && { id: 'cashier' as Tab, label: 'nav.cashier' as Key },
     can('nightaudit.run') && { id: 'audit' as Tab, label: 'nav.audit' as Key },
+    (can('tax.configure') || can('tax.approve')) && { id: 'tax' as Tab, label: 'nav.tax' as Key },
     can('housekeeping.update') && { id: 'mine' as Tab, label: 'nav.myRooms' as Key },
     can('housekeeping.view') && { id: 'board' as Tab, label: 'nav.board' as Key },
     can('housekeeping.view') && { id: 'issues' as Tab, label: 'nav.issues' as Key },
@@ -53,7 +55,7 @@ function Shell() {
       {work.pending.length > 0 && <div className="banner" role="status">{t('banner.pending', { n: work.pending.length })}</div>}
       {work.notices.length > 0 && <div className="banner warn" role="alert">{t('banner.dropped', { n: work.notices.length })} <small>({[...new Set(work.notices.map((n) => errorText(locale, n.code)))].join(' ')})</small> <button className="link" onClick={work.clearNotices}>{t('common.close')}</button></div>}
       <main key={property.id} className="content">
-        {tab === 'today' && <Today />}{tab === 'rack' && <Rack />}{tab === 'bookings' && <Bookings />}{tab === 'cashier' && <Cashier />}{tab === 'audit' && <NightAudit />}{tab === 'mine' && <MyRooms />}{tab === 'board' && <Board />}{tab === 'issues' && <Issues />}{tab === 'lost' && <LostFound />}
+        {tab === 'today' && <Today />}{tab === 'rack' && <Rack />}{tab === 'bookings' && <Bookings />}{tab === 'cashier' && <Cashier />}{tab === 'audit' && <NightAudit />}{tab === 'tax' && <Tax />}{tab === 'mine' && <MyRooms />}{tab === 'board' && <Board />}{tab === 'issues' && <Issues />}{tab === 'lost' && <LostFound />}
         {tabs.length === 0 && <p className="muted center">{t('err.PERMISSION_DENIED')}</p>}
       </main>
       <nav className="tabs" aria-label="main">

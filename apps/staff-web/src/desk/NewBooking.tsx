@@ -11,7 +11,7 @@ import type { Amount } from './types.js';
 
 interface Option {
   roomType: { id: string; code: string; name: string }; plan: { id: string; code: string; name: string; mealPlan: string }; roomsLeft: number; bookable: boolean; reasons: Array<{ code: string; message: string }>;
-  nights: Array<{ date: string; total: string }>; totalExTax: Amount; depositDue: Amount; policy: Parameters<typeof policyLines>[1]; quoteToken: string | null; discount: unknown;
+  nights: Array<{ date: string; total: string }>; totalExTax: Amount; taxes?: Array<{ code: string; ratePercent: number; tax: Amount }>; taxTotal?: Amount; totalIncTax?: Amount; depositDue: Amount; policy: Parameters<typeof policyLines>[1]; quoteToken: string | null; discount: unknown;
 }
 interface GuestHit { id: string; fullName: string; phone: string | null; email: string | null; nationality: string | null; residency: 'RESIDENT' | 'NON_RESIDENT'; vip: boolean }
 const SOURCES = ['PHONE', 'WHATSAPP', 'WEBSITE', 'CORPORATE', 'TRAVEL_AGENT', 'OTHER'] as const;
@@ -71,6 +71,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
             <div className="row between"><strong>{o.roomType.name}</strong><span className="muted small">{o.plan.name}</span></div>
             <div className="row between"><span className="big">{money(o.totalExTax)}</span><Badge tone="neutral">{t('bk.left', { n: o.roomsLeft })}</Badge></div>
             <p className="muted small">{o.nights.map((n) => `${shortDate(n.date, locale)}: ${money(n.total)}`).join(' · ')}</p>
+            {o.taxes && o.taxes.length > 0 && o.taxTotal && o.totalIncTax && <div className="small">{o.taxes.map((x) => <div key={x.code + x.ratePercent} className="row between muted"><span>{x.code} {x.ratePercent}%</span><span dir="ltr">{money(x.tax)}</span></div>)}<div className="row between"><strong>{t('bk.totalIncTax')}</strong><strong>{money(o.totalIncTax)}</strong></div></div>}
             {o.depositDue.amount !== '0.00' && <p className="small">{t('bk.deposit')}: {money(o.depositDue)}</p>}
             <ul className="small muted">{policyLines(t, o.policy).map((l) => <li key={l}>{l}</li>)}</ul>
             <div className="actions"><button className="primary" onClick={() => { setChosen(o); setStep('guest'); clear(); }}>{t('bk.select')}</button></div>

@@ -8,6 +8,8 @@ import { AuthorizationService } from '../authz/authorization.service.js';
 import { CLOCK, type ClockLike } from '../common/clock.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { OutboxService } from '../outbox/outbox.service.js';
+import { taxAs } from '../tax/engine.js';
+import { TaxService } from '../tax/tax.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import type * as S from './schemas.js';
 import { SYSTEM_CODES } from './txn-codes.js';
@@ -20,6 +22,10 @@ export interface PostArgs {
   folioId: string; propertyId: string; currency: string; type: 'CHARGE' | 'TAX' | 'DISCOUNT' | 'PAYMENT' | 'DEPOSIT_RECEIVED' | 'REFUND' | 'ADJUSTMENT' | 'REVERSAL';
   txnCode: string; amount: bigint; businessDate: string; sourceType: string; description?: string; quantity?: number; unitPrice?: bigint; sourceRef?: string;
   parentId?: string; reversesId?: string; paymentId?: string; sessionId?: string | null; lineId?: string; reasonCode?: string; note?: string; idempotencyKey?: string; userId?: string;
+  /** The code the posting is taxed as, when it differs from its own (a manual discount is taxed as the charge it reduces). */
+  taxAs?: string;
+  /** Set only on the reversal of a tax line, so tax reports net out. */
+  tax?: { code: string; versionId: string | null; rateBp: number | null; taxableMinor: bigint | null };
 }
 
 @Injectable()
@@ -28,6 +34,7 @@ export class FolioService {
     @Inject(TenantDb) private readonly tdb: TenantDb,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(TaxService) private readonly tax: TaxService,
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
     @Inject(CLOCK) private readonly clock: ClockLike,
   ) {}
@@ -71,7 +78,9 @@ export class FolioService {
       source_type: a.sourceType, source_ref: a.sourceRef ?? null, parent_posting_id: a.parentId ?? null, reverses_posting_id: a.reversesId ?? null, payment_id: a.paymentId ?? null,
       cashier_session_id: a.sessionId ?? null, reservation_room_id: a.lineId ?? null, reason_code: a.reasonCode ?? null, note: a.note ?? null, idempotency_key: a.idempotencyKey ?? null,
       created_by: a.userId ?? currentTenant().actorId ?? null,
+      tax_code: a.tax?.code ?? null, tax_version_id: a.tax?.versionId ?? null, tax_rate_bp: a.tax?.rateBp ?? null, taxable_minor: a.tax?.taxableMinor?.toString() ?? null,
     } as never).returning('id').executeTakeFirstOrThrow();
+    if (a.type === 'CHARGE' || a.type === 'DISCOUNT') await this.tax.applyToPosting(trx, { id: row.id, folioId: a.folioId, propertyId: a.propertyId, txnCode: a.taxAs ?? taxAs(a.txnCode), amount: a.amount, date: a.businessDate, lineId: a.lineId, currency: a.currency, userId: a.userId });
     return row.id;
   }
 
@@ -113,7 +122,7 @@ export class FolioService {
       const cur = res.currency;
       const lines = await trx.selectFrom('reservation_room').select(['id', 'status', 'arrival', 'departure', 'total_minor']).where('reservation_id', '=', reservationId).execute();
       const live = lines.filter((l) => l.status === 'CHECKED_IN');
-      const postings = folio ? await trx.selectFrom('folio_posting').selectAll().where('folio_id', '=', folio.id).orderBy('posted_at').orderBy('id').execute() : [];
+      const postings = folio ? await trx.selectFrom('folio_posting').selectAll().where('folio_id', '=', folio.id).orderBy('seq').execute() : [];
       const payments = folio ? await trx.selectFrom('payment').selectAll().where('folio_id', '=', folio.id).orderBy('created_at').execute() : [];
       const posted = new Set(postings.filter((x) => x.source_type === 'ROOM_NIGHT').map((x) => x.source_ref));
       const nights = live.length ? await trx.selectFrom('stay_night').select(['reservation_room_id', 'business_date', 'total_minor']).where('reservation_room_id', 'in', live.map((l) => l.id)).orderBy('business_date').execute() : [];
@@ -174,7 +183,7 @@ export class FolioService {
       if (amount <= 0n) throw fail(422, 'AMOUNT_INVALID', 'That discount rounds to nothing');
       if (prior + amount > BigInt(orig.amount_minor)) throw fail(422, 'DISCOUNT_TOO_LARGE', 'Discounts on this charge would exceed the charge');
       const id = await this.post(trx, { folioId, propertyId, currency: f.currency, type: 'DISCOUNT', txnCode: 'DISCOUNT', amount: -amount, businessDate: p.business_date, sourceType: 'MANUAL', parentId: postingId,
-        description: `Discount ${i.pct}% on ${orig.description ?? orig.txn_code}`, reasonCode: 'DISCOUNT', note: i.reason, userId });
+        description: `Discount ${i.pct}% on ${orig.description ?? orig.txn_code}`, reasonCode: 'DISCOUNT', note: i.reason, userId, taxAs: taxAs(orig.txn_code) });
       await this.audit.record(trx, { action: 'folio.discount', resourceType: 'folio', resourceId: folioId, propertyId, after: { postingId: id, parent: postingId, pct: i.pct, amount: amount.toString() }, reasonCode: 'DISCOUNT', note: i.reason });
       return { postingId: id, discount: fmt(amount, f.currency), balance: fmt((await this.folioRow(trx, propertyId, folioId)).balance_minor, f.currency) };
     });
@@ -189,16 +198,23 @@ export class FolioService {
       const orig = await trx.selectFrom('folio_posting').selectAll().where('id', '=', postingId).where('folio_id', '=', folioId).executeTakeFirst();
       if (!orig) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Posting not found' });
       if (['PAYMENT', 'DEPOSIT_RECEIVED', 'REFUND', 'REVERSAL'].includes(orig.posting_type)) throw fail(422, 'USE_PAYMENT_FLOW', 'Payments are cancelled by voiding or refunding the payment, not by reversing the posting');
-      const children = await trx.selectFrom('folio_posting').selectAll().where('parent_posting_id', '=', postingId).execute();
-      const all = [orig, ...children];
+      // the posting and everything that hangs off it, however deep (a discount's own tax hangs off the discount, which hangs off the charge)
+      const all = [orig]; const parentOf = new Map<string, string | null>([[orig.id, null]]);
+      for (let k = 0; k < all.length; k++) {
+        const kids = await trx.selectFrom('folio_posting').selectAll().where('parent_posting_id', '=', all[k]!.id).execute();
+        for (const kid of kids) { all.push(kid); parentOf.set(kid.id, all[k]!.id); }
+      }
       const already = await trx.selectFrom('folio_posting').select('reverses_posting_id').where('reverses_posting_id', 'in', all.map((x) => x.id)).execute();
       const doneIds = new Set(already.map((x) => x.reverses_posting_id));
       if (doneIds.has(orig.id)) throw fail(409, 'ALREADY_REVERSED', 'This posting was already reversed');
-      const ids: string[] = [];
+      const ids: string[] = []; const reversalOf = new Map<string, string>();
       for (const x of all) {
         if (doneIds.has(x.id)) continue;
-        ids.push(await this.post(trx, { folioId, propertyId, currency: f.currency, type: 'REVERSAL', txnCode: x.txn_code, amount: -BigInt(x.amount_minor), businessDate: p.business_date, sourceType: 'REVERSAL',
-          reversesId: x.id, parentId: x.id === orig.id ? undefined : ids[0], description: `Reversal: ${x.description ?? x.txn_code}`, reasonCode: 'REVERSAL', note: reason, userId, lineId: x.reservation_room_id ?? undefined }));
+        const parentReversal = parentOf.get(x.id) ? reversalOf.get(parentOf.get(x.id)!) : undefined;
+        const rid = await this.post(trx, { folioId, propertyId, currency: f.currency, type: 'REVERSAL', txnCode: x.txn_code, amount: -BigInt(x.amount_minor), businessDate: p.business_date, sourceType: 'REVERSAL',
+          reversesId: x.id, parentId: parentReversal, description: `Reversal: ${x.description ?? x.txn_code}`, reasonCode: 'REVERSAL', note: reason, userId, lineId: x.reservation_room_id ?? undefined,
+          ...(x.tax_code ? { tax: { code: x.tax_code, versionId: x.tax_version_id, rateBp: x.tax_rate_bp, taxableMinor: x.taxable_minor === null ? null : -BigInt(x.taxable_minor) } } : {}) });
+        ids.push(rid); reversalOf.set(x.id, rid);
       }
       await this.audit.record(trx, { action: 'folio.reverse', resourceType: 'folio', resourceId: folioId, propertyId, before: { postingId, txnCode: orig.txn_code, amount: orig.amount_minor }, after: { reversals: ids }, reasonCode: 'REVERSAL', note: reason });
       await this.outbox.publish(trx, { aggregateType: 'folio', aggregateId: folioId, eventType: 'FolioPostingReversed', propertyId, businessDate: p.business_date, payload: { folioId, postingId, reversals: ids, reason } });
@@ -253,8 +269,15 @@ export class FolioService {
     const p = await this.property(trx, propertyId);
     await this.folioRow(trx, propertyId, f.id, true);
     if (f.status === 'CLOSED') await trx.updateTable('folio').set({ status: 'OPEN', closed_at: null }).where('id', '=', f.id).execute();
-    for (const x of pen) if (!done.has(x.id)) await this.post(trx, { folioId: f.id, propertyId, currency: f.currency, type: 'REVERSAL', txnCode: x.txn_code, amount: -BigInt(x.amount_minor), businessDate: p.business_date,
-      sourceType: 'REVERSAL', reversesId: x.id, description: `Reversal: ${x.description}`, reasonCode: 'REINSTATED', note: reason, userId });
+    for (const x of pen) {
+      if (done.has(x.id)) continue;
+      const rid = await this.post(trx, { folioId: f.id, propertyId, currency: f.currency, type: 'REVERSAL', txnCode: x.txn_code, amount: -BigInt(x.amount_minor), businessDate: p.business_date,
+        sourceType: 'REVERSAL', reversesId: x.id, description: `Reversal: ${x.description}`, reasonCode: 'REINSTATED', note: reason, userId });
+      const taxLines = await trx.selectFrom('folio_posting').selectAll().where('parent_posting_id', '=', x.id).where('posting_type', '=', 'TAX').execute();      // the tax that was charged on the fee goes back with it
+      for (const t of taxLines) await this.post(trx, { folioId: f.id, propertyId, currency: f.currency, type: 'REVERSAL', txnCode: t.txn_code, amount: -BigInt(t.amount_minor), businessDate: p.business_date, sourceType: 'REVERSAL',
+        reversesId: t.id, parentId: rid, description: `Reversal: ${t.description}`, reasonCode: 'REINSTATED', note: reason, userId,
+        tax: { code: t.tax_code!, versionId: t.tax_version_id, rateBp: t.tax_rate_bp, taxableMinor: t.taxable_minor === null ? null : -BigInt(t.taxable_minor) } });
+    }
   }
 
   // ───────────── invariants ─────────────

@@ -70,7 +70,7 @@ describe('the night audit closes a day', () => {
     const run = await ok(audit(w));
     expect(run).toMatchObject({ businessDate: '2026-11-05', status: 'COMPLETED', resumedCount: 0 });
     expect(run.steps.map((x: any) => [x.key, x.status])).toEqual([['NO_SHOWS', 'DONE'], ['OPTIONS', 'DONE'], ['ROOM_CHARGES', 'DONE'], ['TAXES', 'DONE'], ['CLOSE_DAY', 'DONE']]);
-    expect(run.steps[3].result).toMatchObject({ skipped: true });
+    expect(run.steps[3].result).toMatchObject({ postings: 0, configured: false });                // no tax rates are configured, so nothing is added
     expect(run.steps[0].result).toMatchObject({ lines: 1 });
     expect(await bdOf(w)).toBe('2026-11-06');
 

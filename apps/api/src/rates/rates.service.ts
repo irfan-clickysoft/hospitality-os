@@ -12,6 +12,7 @@ import { TenantDb } from '../db/tenant-db.js';
 import { InventoryService } from '../inventory/inventory.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
+import { TaxService } from '../tax/tax.service.js';
 import { QuoteSigner } from './quote-signer.js';
 import type * as S from './schemas.js';
 
@@ -30,6 +31,7 @@ export class RatesService {
     @Inject(InventoryService) private readonly inv: InventoryService,
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
     @Inject(QuoteSigner) private readonly signer: QuoteSigner,
+    @Inject(TaxService) private readonly tax: TaxService,
     @Inject(CLOCK) private readonly clock: ClockLike,
   ) {}
 
@@ -356,6 +358,15 @@ export class RatesService {
           const discounted = i.discountPct > 0 ? q.subtotalMinor - (q.subtotalMinor * BigInt(Math.round(i.discountPct * 100))) / 10000n : q.subtotalMinor;
           const bookable = eligible && rooms >= 1 && discount.effect === 'ALLOW';
           const nightsHash = Buffer.from(q.nights.map((n) => `${n.date}:${n.totalMinor}`).join('|')).toString('base64url').slice(0, 64);
+          // tax on top of the price, worked out the way the ledger will: per night, on room and extras, less the discount's share of that night
+          const discountMinor = q.subtotalMinor - discounted;
+          const shares = discountMinor > 0n ? Money.ofMinor(discountMinor, cur).allocate(q.nights.map((n) => n.totalMinor)).map((m) => m.minor) : q.nights.map(() => 0n);
+          const taxLines = q.nights.flatMap((n, k) => [{ date: n.date, txnCode: 'ROOM', netMinor: n.roomMinor }, { date: n.date, txnCode: 'ROOM_EXTRAS', netMinor: n.totalMinor - n.roomMinor }, { date: n.date, txnCode: 'ROOM', netMinor: -shares[k]! }]);
+          const perDate = new Map<string, Array<{ txnCode: string; netMinor: bigint }>>();
+          for (const l of taxLines) perDate.set(l.date, [...(perDate.get(l.date) ?? []), l]);
+          const taxByCode = new Map<string, { code: string; rateBp: number; taxableMinor: bigint; taxMinor: bigint }>();
+          for (const [date, ls] of perDate) { const r = await this.tax.previewIn(trx, propertyId, { date, residency: i.residency, lines: ls }); for (const e of r.byCode) { const k = `${e.code}:${e.rateBp}`; const x = taxByCode.get(k) ?? { ...e, taxableMinor: 0n, taxMinor: 0n }; x.taxableMinor += e.taxableMinor; x.taxMinor += e.taxMinor; taxByCode.set(k, x); } }
+          const taxTotal = [...taxByCode.values()].reduce((a, e) => a + e.taxMinor, 0n);
           options.push({
             sortKey: discounted, roomOrder: types.indexOf(t),
             roomType: { id: t.id, code: t.code, name: t.name }, plan: { id: pr.id, code: pr.code, name: pr.name, mealPlan: pr.meal_plan },
@@ -363,6 +374,7 @@ export class RatesService {
             nights: q.nights.map((n) => ({ date: n.date, source: n.source, room: fmt(n.roomMinor, cur).amount, extras: fmt(n.totalMinor - n.roomMinor, cur).amount, total: fmt(n.totalMinor, cur).amount })),
             subtotal: fmt(q.subtotalMinor, cur), discount: i.discountPct > 0 ? { pct: i.discountPct, amount: fmt(q.subtotalMinor - discounted, cur).amount, status: discount.effect === 'ALLOW' ? 'APPLIED' : 'APPROVAL_REQUIRED' } : null,
             totalExTax: fmt(discounted, cur), taxNote: 'Amounts exclude tax. Taxes are added at the end of the quote and on the invoice.',
+            taxes: [...taxByCode.values()].map((e) => ({ code: e.code, ratePercent: e.rateBp / 100, taxable: fmt(e.taxableMinor, cur), tax: fmt(e.taxMinor, cur) })), taxTotal: fmt(taxTotal, cur), totalIncTax: fmt(discounted + taxTotal, cur),
             depositDue: fmt(q.depositDueMinor, cur), policy: q.policy,
             quoteToken: bookable ? this.signer.sign({ propertyId, planId: pr.id, roomTypeId: t.id, arrival: i.arrival, departure: i.departure, adults: i.adults, children: i.children, extraBeds: i.extraBeds,
               channel: i.channel, residency: i.residency, companyId: i.companyId ?? null, currency: cur, subtotalMinor: discounted.toString(), discountPct: i.discountPct, discountApproved: discount.effect === 'ALLOW',
