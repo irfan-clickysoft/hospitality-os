@@ -28,6 +28,8 @@ try {
   const prop = await admin.selectFrom('property').select(['id', 'business_date']).where('tenant_id', '=', tenant.id).where('code', '=', 'BLVD').executeTakeFirstOrThrow();
   const owner = await admin.selectFrom('staff_user').select('id').where('tenant_id', '=', tenant.id).orderBy('created_at').executeTakeFirstOrThrow();
   const hash = await app.get(PasswordService).hash(PASSWORD);
+  // the owner (created by seed:sunset with a one-time link) gets the same dev password so local work needs no invite step; set up the second factor under My account to use the sensitive screens
+  await admin.updateTable('staff_user').set({ password_hash: hash, status: 'ACTIVE' } as never).where('id', '=', owner.id).where('password_hash', 'is', null).execute();
   const ids: Record<string, string> = {};
   for (const m of TEAM) {
     let u = await admin.selectFrom('staff_user').select('id').where('tenant_id', '=', tenant.id).where('email', '=', m.email).executeTakeFirst();
@@ -51,6 +53,7 @@ try {
   });
   console.log(`\nDemo housekeeping team created for ${SLUG} / Sunset BnB Boulevard (password for all: ${PASSWORD}):`);
   for (const m of TEAM) console.log(`  ${m.email.padEnd(22)} ${m.role}`);
+  console.log(`  ${'owner@sunset.local'.padEnd(22)} group_owner (whole business; set up the second factor under My account)`);
   console.log('\nStart the API (pnpm --filter @hos/api dev) and the staff app (pnpm --filter @hos/staff-web dev), then open http://localhost:3001');
 } finally {
   await app.close(); await admin.destroy();
