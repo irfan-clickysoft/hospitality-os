@@ -14,6 +14,8 @@ import { CashierService } from './folio/cashier.service.js';
 import { FolioController } from './folio/folio.controller.js';
 import { FolioService } from './folio/folio.service.js';
 import { PaymentsService } from './folio/payments.service.js';
+import { NightAuditController } from './night-audit/night-audit.controller.js';
+import { NightAuditService } from './night-audit/night-audit.service.js';
 import { HousekeepingController } from './housekeeping/housekeeping.controller.js';
 import { HousekeepingService } from './housekeeping/housekeeping.service.js';
 import { FrontDeskController } from './front-desk/front-desk.controller.js';
@@ -29,8 +31,8 @@ import { TenantMiddleware } from './tenancy/tenant.middleware.js';
 
 @Module({
   imports: [DbModule, CoreServicesModule, IdentityModule, AuthzModule, InventoryModule],
-  controllers: [HealthController, PropertySetupController, RatesController, GuestsController, ReservationsController, FrontDeskController, FolioController, HousekeepingController, AuditController],
-  providers: [TenantMiddleware, PropertySetupService, RatesService, QuoteSigner, GuestsService, ReservationsService, FrontDeskService, FolioService, HousekeepingService, PaymentsService, CashierService, { provide: APP_FILTER, useClass: ProblemDetailsFilter }],
+  controllers: [HealthController, PropertySetupController, RatesController, GuestsController, ReservationsController, FrontDeskController, FolioController, HousekeepingController, NightAuditController, AuditController],
+  providers: [TenantMiddleware, PropertySetupService, RatesService, QuoteSigner, GuestsService, ReservationsService, FrontDeskService, FolioService, HousekeepingService, NightAuditService, PaymentsService, CashierService, { provide: APP_FILTER, useClass: ProblemDetailsFilter }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void { consumer.apply(TenantMiddleware).forRoutes('*'); }

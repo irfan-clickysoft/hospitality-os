@@ -80,8 +80,9 @@ export class HousekeepingService {
   }
 
   /** Daily generation (the night audit will call this). Repeatable: running it twice creates nothing new. */
-  async generate(propertyId: string, userId?: string) {
-    return this.tdb.tx(async (trx) => {
+  async generate(propertyId: string, userId?: string) { return this.tdb.tx((trx) => this.generateIn(trx, propertyId, userId)); }
+  async generateIn(trx: Trx, propertyId: string, userId?: string) {
+    {
       const p = await this.prop(trx, propertyId);
       const bd = p.business_date;
       const out = { stayovers: 0, skippedDnd: 0, arrivalPrep: 0, deepClean: 0, prioritised: 0 };
@@ -108,7 +109,7 @@ export class HousekeepingService {
       for (const b of back) if (await this.insertTask(trx, propertyId, { roomId: b.room_id, type: 'DEEP_CLEAN', date: bd, priority: 3, sourceKey: `DEEP_CLEAN:${b.room_id}:${bd}`, notes: 'Back from out-of-order', userId })) { out.deepClean++; await this.setRoomHk(trx, propertyId, b.room_id, 'DIRTY', 'BACK_IN_SERVICE'); }
       await this.audit.record(trx, { action: 'housekeeping.generate', resourceType: 'property', resourceId: propertyId, propertyId, after: out });
       return { businessDate: bd, ...out };
-    });
+    }
   }
 
   async createManual(propertyId: string, userId: string, i: z.infer<typeof S.CreateTask>) {
