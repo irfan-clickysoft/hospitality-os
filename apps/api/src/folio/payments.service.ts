@@ -10,6 +10,7 @@ import { TenantDb } from '../db/tenant-db.js';
 import { IdempotencyService, hashRequest } from '../idempotency/idempotency.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
+import { PaymentAccountsService } from '../payment-accounts/payment-accounts.service.js';
 import { FolioService, fmt, type Trx } from './folio.service.js';
 import type * as S from './schemas.js';
 
@@ -25,6 +26,7 @@ export class PaymentsService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
+    @Inject(PaymentAccountsService) private readonly accounts: PaymentAccountsService,
     @Inject(CLOCK) private readonly clock: ClockLike,
   ) {}
 
@@ -69,7 +71,8 @@ export class PaymentsService {
     const session = await this.openSession(trx, propertyId, userId);
     if (i.method === 'CASH' && !session) throw fail(409, 'NO_OPEN_SESSION', 'Open your cashier session before taking cash');
     const status = i.method === 'BANK_TRANSFER' ? 'PENDING_VERIFICATION' : 'CAPTURED';
-    const pay = await trx.insertInto('payment').values({ tenant_id: currentTenant().tenantId, property_id: propertyId, folio_id: folio.id, kind: i.kind, method: i.method, status, amount_minor: amount.toString(),
+    const accountId = await this.accounts.resolve(trx, propertyId, i.method, i.paymentAccountId, folio.currency);
+    const pay = await trx.insertInto('payment').values({ payment_account_id: accountId, tenant_id: currentTenant().tenantId, property_id: propertyId, folio_id: folio.id, kind: i.kind, method: i.method, status, amount_minor: amount.toString(),
       currency: folio.currency, reference: i.reference ?? null, card_last4: i.cardLast4 ?? null, approval_code: i.approvalCode ?? null, counterparty: i.counterparty ?? null, note: i.note ?? null,
       cashier_session_id: session?.id ?? null, business_date: p.business_date, created_by: userId } as never).returningAll().executeTakeFirstOrThrow();
     if (status === 'CAPTURED') await this.capture(trx, propertyId, pay, folio.currency, userId);
@@ -138,9 +141,9 @@ export class PaymentsService {
     return this.tdb.tx(async (trx) => {
       await this.folios.property(trx, propertyId);
       const rows = await trx.selectFrom('payment as p').innerJoin('folio as f', 'f.id', 'p.folio_id').leftJoin('reservation as r', 'r.id', 'f.reservation_id')
-        .select(['p.id', 'p.kind', 'p.method', 'p.amount_minor', 'p.currency', 'p.reference', 'p.counterparty', 'p.created_by', 'p.created_at', 'f.folio_no', 'r.confirmation_no'])
+        .leftJoin('payment_account as pa', 'pa.id', 'p.payment_account_id').select(['p.id', 'p.kind', 'p.method', 'p.amount_minor', 'p.currency', 'p.reference', 'p.counterparty', 'p.created_by', 'p.created_at', 'f.folio_no', 'r.confirmation_no', 'pa.name as account_name', 'pa.owner_type as account_owner'])
         .where('p.property_id', '=', propertyId).where('p.status', '=', 'PENDING_VERIFICATION').orderBy('p.created_at').execute();
-      return { items: rows.map((x) => ({ id: x.id, kind: x.kind, method: x.method, amount: fmt(x.amount_minor, x.currency), reference: x.reference, counterparty: x.counterparty, createdBy: x.created_by, createdAt: x.created_at, folioNo: x.folio_no, confirmationNo: x.confirmation_no })) };
+      return { items: rows.map((x) => ({ id: x.id, kind: x.kind, method: x.method, amount: fmt(x.amount_minor, x.currency), reference: x.reference, counterparty: x.counterparty, account: x.account_name ? { name: x.account_name, flagged: x.account_owner !== 'COMPANY' } : null, createdBy: x.created_by, createdAt: x.created_at, folioNo: x.folio_no, confirmationNo: x.confirmation_no })) };
     });
   }
 
@@ -200,7 +203,8 @@ export class PaymentsService {
     if (method === 'CASH' && !session) throw fail(409, 'NO_OPEN_SESSION', 'Open your cashier session to pay cash out');
     if (method !== 'CASH' && !i.counterparty) throw fail(422, 'COUNTERPARTY_REQUIRED', 'Enter the beneficiary (bank account / wallet) the refund goes to');
     const status = method === 'CASH' ? 'CAPTURED' : 'PENDING_VERIFICATION';
-    const pay = await trx.insertInto('payment').values({ tenant_id: currentTenant().tenantId, property_id: propertyId, folio_id: orig.folio_id, kind: 'REFUND', method, status, amount_minor: amount.toString(),
+    const accountId = await this.accounts.resolve(trx, propertyId, method, i.paymentAccountId, folio.currency);
+    const pay = await trx.insertInto('payment').values({ payment_account_id: accountId, tenant_id: currentTenant().tenantId, property_id: propertyId, folio_id: orig.folio_id, kind: 'REFUND', method, status, amount_minor: amount.toString(),
       currency: folio.currency, reference: i.reference ?? null, counterparty: i.counterparty ?? null, note: i.reason, refund_of_payment_id: paymentId, cashier_session_id: session?.id ?? null,
       business_date: p.business_date, created_by: userId } as never).returningAll().executeTakeFirstOrThrow();
     if (status === 'CAPTURED') await this.capture(trx, propertyId, pay, folio.currency, userId);

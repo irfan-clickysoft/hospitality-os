@@ -23,6 +23,7 @@ interface Overview {
   totals: { occupancyPct: number; roomsSold: number; roomsAvailable: number; roomRevenue: Amount; adr: Amount; revPar: Amount; arrivalsToday: number; departuresToday: number; inHouse: number };
   properties: Prop[]; salesBySource: Array<{ source: string; amount: Amount }>; salesByCompany: Array<{ companyId: string | null; company: string | null; amount: Amount }>;
   receivables: { asOf: string; totalOpen: Amount; buckets: Record<string, Amount> } | null;
+  accounts: { nonCompany: { accounts: number; in: Amount }; unassigned: { count: number; in: Amount } } | null;
   approvals: { companyReceiptsToVerify: number; companyReceiptsAmount: Amount; taxRatesAwaitingApproval: number };
 }
 const BUCKETS = ['current', 'd1_30', 'd31_60', 'd61_90', 'd90plus'] as const;
@@ -90,6 +91,11 @@ export function Management() {
       {d.receivables && !zero(d.receivables.totalOpen) && (
         <div className="card stack small"><div className="row between"><strong>{t('ar.receivable')}</strong><strong>{money(d.receivables.totalOpen)}</strong></div>
           {BUCKETS.map((b) => !zero(d.receivables!.buckets[b]) && <div key={b} className="row between"><span className="muted">{t(`ar.b.${b}` as Key)}</span><span dir="ltr">{money(d.receivables!.buckets[b]!)}</span></div>)}</div>)}
+
+      {d.accounts && (d.accounts.nonCompany.accounts > 0 || d.accounts.unassigned.count > 0) && (
+        <div className="card stack small"><strong>{t('nav.accounts')}</strong>
+          {d.accounts.nonCompany.accounts > 0 && <div className="row between"><span className="error">{t('pa.nonCompany')}</span><strong className="error">{money(d.accounts.nonCompany.in)}</strong></div>}
+          {d.accounts.unassigned.count > 0 && <div className="row between"><span>{t('pa.unassigned', { n: d.accounts.unassigned.count })}</span><strong>{money(d.accounts.unassigned.in)}</strong></div>}</div>)}
 
       <div className="card stack small"><strong>{t('mg.approvals')}</strong>
         {(() => {

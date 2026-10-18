@@ -7,6 +7,7 @@ import { money, newKey } from '../lib/format.js';
 import { useStepUp } from '../lib/stepup.js';
 import { useAuth, useLive } from '../state.js';
 import { Badge, Chip, Empty, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
+import { AccountPicker } from './AccountPicker.js';
 import type { Amount } from './types.js';
 
 interface Claim {
@@ -94,10 +95,10 @@ function ClaimSheetView({ id, onChanged, onClose }: { id: string; onChanged: () 
   const withStepUp = useStepUp();
   const base = `/v1/properties/${property!.id}/ota-receivables/${id}`;
   const h = useLive<History>(base, 30_000);
-  const [f, setF] = useState({ claimRef: '', amount: '', reference: '', reason: '' });
+  const [f, setF] = useState({ claimRef: '', amount: '', reference: '', reason: '', account: '' });
   const { busy, problem, run } = useAction();
   const c = h.data?.claim;
-  const act = async (tail: string, body: unknown, stepUp = false) => { if (await run(() => (stepUp ? withStepUp : (fn: () => Promise<unknown>) => fn())(() => api('POST', `${base}/${tail}`, body)))) { h.reload(); onChanged(); setF({ claimRef: '', amount: '', reference: '', reason: '' }); } };
+  const act = async (tail: string, body: unknown, stepUp = false) => { if (await run(() => (stepUp ? withStepUp : (fn: () => Promise<unknown>) => fn())(() => api('POST', `${base}/${tail}`, body)))) { h.reload(); onChanged(); setF({ claimRef: '', amount: '', reference: '', reason: '', account: '' }); } };
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
   return (
     <Sheet title={c ? `${c.guest} · ${c.confirmationNo}` : '…'} onClose={onClose}>
@@ -112,8 +113,8 @@ function ClaimSheetView({ id, onChanged, onClose }: { id: string; onChanged: () 
         </div>
         {can('ota.claim') && c.status === 'CLAIMABLE' && <div className="card inner stack"><label>{t('ota.claimRef')}<input value={f.claimRef} onChange={set('claimRef')} dir="ltr" /></label><button className="primary" disabled={busy} onClick={() => act('claimed', f.claimRef.trim() ? { claimRef: f.claimRef.trim() } : {})}>{t('ota.markSent')}</button></div>}
         {can('ota.claim') && (c.status === 'CLAIMED' || c.status === 'DISPUTED') && (
-          <div className="card inner stack"><div className="grid2"><label>{t('ar.amount')}<input inputMode="decimal" value={f.amount} placeholder={c.remaining.amount} onChange={set('amount')} dir="ltr" /></label><label>{t('ar.reference')}<input value={f.reference} onChange={set('reference')} dir="ltr" /></label></div>
-            <button className="primary" disabled={busy || f.reference.trim().length < 3} onClick={() => act('receive', { amount: f.amount.trim() || c.remaining.amount, reference: f.reference.trim() })}>{t('ota.recordReceived')}</button></div>)}
+          <div className="card inner stack"><AccountPicker method="BANK_TRANSFER" value={f.account} onChange={(id) => setF((x) => ({ ...x, account: id }))} /><div className="grid2"><label>{t('ar.amount')}<input inputMode="decimal" value={f.amount} placeholder={c.remaining.amount} onChange={set('amount')} dir="ltr" /></label><label>{t('ar.reference')}<input value={f.reference} onChange={set('reference')} dir="ltr" /></label></div>
+            <button className="primary" disabled={busy || f.reference.trim().length < 3} onClick={() => act('receive', { amount: f.amount.trim() || c.remaining.amount, reference: f.reference.trim(), ...(f.account ? { paymentAccountId: f.account } : {}) })}>{t('ota.recordReceived')}</button></div>)}
         {can('ota.claim') && ['CLAIMED', 'DISPUTED'].includes(c.status) && (
           <div className="card inner stack"><label>{t('common.reason')}<input value={f.reason} onChange={set('reason')} /></label>
             <div className="row">{c.status === 'CLAIMED' && <button disabled={busy || f.reason.trim().length < 3} onClick={() => act('dispute', { reason: f.reason.trim() })}>{t('ota.dispute')}</button>}

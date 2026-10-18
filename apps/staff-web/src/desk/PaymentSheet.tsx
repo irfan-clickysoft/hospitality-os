@@ -5,6 +5,7 @@ import type { Key } from '../i18n/en.js';
 import { useAction } from '../lib/action.js';
 import { money, newKey } from '../lib/format.js';
 import { useAuth } from '../state.js';
+import { AccountPicker } from './AccountPicker.js';
 import { ErrorLine, Sheet } from '../ui/kit.js';
 import type { Amount } from './types.js';
 
@@ -19,7 +20,7 @@ export function PaymentSheet({ reservationId, balance, defaultKind = 'PAYMENT', 
   const [method, setMethod] = useState<(typeof METHODS)[number]>('CASH'); const [kind, setKind] = useState(defaultKind); const [amount, setAmount] = useState(defaultKind === 'PAYMENT' ? owes : '');
   const [reference, setReference] = useState(''); const [approval, setApproval] = useState(''); const [last4, setLast4] = useState(''); const [counterparty, setCounterparty] = useState(''); const [note, setNote] = useState('');
   const { busy, problem, run } = useAction();
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState(false); const [account, setAccount] = useState('');
 
   const submit = async () => {
     const body: Record<string, unknown> = { kind, method, amount: amount.trim() };
@@ -27,6 +28,7 @@ export function PaymentSheet({ reservationId, balance, defaultKind = 'PAYMENT', 
     if (method === 'CARD_SLIP') { if (approval.trim()) body.approvalCode = approval.trim(); if (last4.trim()) body.cardLast4 = last4.trim(); }
     if (method === 'BANK_TRANSFER' && counterparty.trim()) body.counterparty = counterparty.trim();
     if (note.trim()) body.note = note.trim();
+    if (account && method !== 'CASH') body.paymentAccountId = account;
     const r = await run(() => api<{ payment: { status: string } }>('POST', `/v1/properties/${property!.id}/reservations/${reservationId}/payments`, body, { 'idempotency-key': key }));
     if (r) { if (r.payment.status === 'PENDING_VERIFICATION') setPending(true); else { onDone(); onClose(); } }
   };
@@ -37,6 +39,7 @@ export function PaymentSheet({ reservationId, balance, defaultKind = 'PAYMENT', 
         <div className="chips" role="group">{METHODS.map((m) => <button key={m} type="button" className={`chip${m === method ? ' on' : ''}`} aria-pressed={m === method} onClick={() => setMethod(m)}>{t(`pay.m.${m}` as Key)}</button>)}</div>
         <div className="chips" role="group">{(['PAYMENT', 'DEPOSIT'] as const).map((k) => <button key={k} type="button" className={`chip${k === kind ? ' on' : ''}`} aria-pressed={k === kind} onClick={() => setKind(k)}>{t(`pay.k.${k}` as Key)}</button>)}</div>
         <label>{t('pay.amount')}<input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} dir="ltr" autoFocus /></label>
+        {method !== 'CASH' && <AccountPicker method={method} value={account} onChange={setAccount} />}
         {method !== 'CASH' && <label>{method === 'CARD_SLIP' ? t('pay.rrn') : method === 'WALLET' ? t('pay.walletRef') : t('pay.bankRef')}<input value={reference} onChange={(e) => setReference(e.target.value)} dir="ltr" /></label>}
         {method === 'CARD_SLIP' && <div className="grid2"><label>{t('pay.approval')}<input value={approval} onChange={(e) => setApproval(e.target.value)} dir="ltr" /></label><label>{t('pay.last4')}<input inputMode="numeric" maxLength={4} value={last4} onChange={(e) => setLast4(e.target.value)} dir="ltr" /></label></div>}
         {method === 'BANK_TRANSFER' && <><label>{t('pay.bank')}<input value={counterparty} onChange={(e) => setCounterparty(e.target.value)} /></label><p className="muted small">{t('pay.bankNote')}</p></>}

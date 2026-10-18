@@ -453,5 +453,14 @@ export const en = {
   'cmp.a.INFO': 'Note', 'cmp.a.WARN': 'Warning', 'cmp.a.REQUIRE_APPROVAL': 'Manager approval', 'cmp.a.REQUIRE_TASK': 'Task', 'cmp.a.REQUIRE_DOCUMENT': 'Document needed', 'cmp.a.BLOCK_BOOKING': 'Not allowed',
   'cmp.st.BOOKING': 'At booking', 'cmp.st.CHECK_IN': 'At check-in', 'cmp.s.ACTIVE': 'On', 'cmp.s.DRAFT': 'Draft', 'cmp.s.DISABLED': 'Off',
   'cmp.approved': 'approved', 'cmp.reason': 'Reason for the manager’s approval', 'cmp.approve': 'Approve and continue', 'cmp.askManager': 'A manager must approve this. Ask one to open this screen.',
+  // payment accounts
+  'nav.accounts': 'Accounts', 'pa.account': 'Account it went into', 'pa.notCompany': 'not the company’s', 'pa.flagNote': 'This account is owned by {owner}, not the company. The payment is recorded and flagged in the accounts report.',
+  'pa.verifiedOnly': 'verified receipts only', 'pa.totalIn': 'Received into accounts', 'pa.nonCompany': 'Into accounts not owned by the company', 'pa.unassigned': '{n} receipts with no account named', 'pa.new': 'New account', 'pa.none': 'No payment accounts yet.',
+  'pa.k.BANK': 'Bank account', 'pa.k.CARD_CLEARING': 'Card machine', 'pa.k.WALLET': 'Wallet (JazzCash, Easypaisa…)', 'pa.k.GATEWAY': 'Online gateway',
+  'pa.kind': 'Kind', 'pa.bankName': 'Bank', 'pa.last4': 'Last 4 of the number', 'pa.title': 'Name the account is held in', 'pa.ownedBy': 'Owned by', 'pa.ownerName': 'Owner’s name',
+  'pa.owner.COMPANY': 'The company', 'pa.owner.PERSONAL': 'A person', 'pa.owner.OTHER': 'Someone else', 'pa.closed': 'closed', 'pa.close': 'Close account',
+  'err.PAYMENT_ACCOUNT_REQUIRED': 'Choose the account the money went into.',
+  'err.PAYMENT_ACCOUNT_INVALID': 'That account cannot take this kind of payment here.',
+  'err.OWNER_REQUIRED': 'Say whose account this is.',
 } as const;
 export type Key = keyof typeof en;

@@ -7,6 +7,7 @@ import { money } from '../lib/format.js';
 import { useStepUp } from '../lib/stepup.js';
 import { useAuth, useLive } from '../state.js';
 import { Badge, Empty, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
+import { AccountPicker } from './AccountPicker.js';
 import type { Billing, CompanyLite } from './BillToCompany.js';
 import type { Amount } from './types.js';
 
@@ -141,11 +142,11 @@ function CompanySheet({ id, onChanged, onClose }: { id: string; onChanged: () =>
 function ReceiptSheet({ company, onDone, onClose }: { company: Company; onDone: () => void; onClose: () => void }) {
   const { t } = useT();
   const today = new Date().toISOString().slice(0, 10);
-  const [f, setF] = useState({ method: 'BANK_TRANSFER', amount: '', reference: '', counterparty: '', receivedOn: today, withheld: '', withholdingRef: '' });
+  const [f, setF] = useState({ method: 'BANK_TRANSFER', amount: '', reference: '', counterparty: '', receivedOn: today, withheld: '', withholdingRef: '', account: '' });
   const { busy, problem, run } = useAction(); const [sent, setSent] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const go = async () => {
-    const body = { method: f.method, amount: f.amount.trim(), reference: f.reference.trim(), receivedOn: f.receivedOn, ...(f.counterparty.trim() ? { counterparty: f.counterparty.trim() } : {}), ...(f.withheld.trim() ? { withheld: f.withheld.trim(), withholdingRef: f.withholdingRef.trim() } : {}) };
+    const body = { method: f.method, amount: f.amount.trim(), reference: f.reference.trim(), receivedOn: f.receivedOn, ...(f.counterparty.trim() ? { counterparty: f.counterparty.trim() } : {}), ...(f.account ? { paymentAccountId: f.account } : {}), ...(f.withheld.trim() ? { withheld: f.withheld.trim(), withholdingRef: f.withholdingRef.trim() } : {}) };
     if (await run(() => api('POST', `/v1/companies/${company.id}/receipts`, body))) setSent(true);
   };
   if (sent) return (<Sheet title={t('ar.recordReceipt')} onClose={onDone}><p className="ok">✓ {t('ar.receiptSent')}</p><div className="actions"><button className="primary" onClick={onDone}>{t('common.close')}</button></div></Sheet>);
@@ -153,6 +154,7 @@ function ReceiptSheet({ company, onDone, onClose }: { company: Company; onDone: 
     <Sheet title={`${t('ar.recordReceipt')} · ${company.name}`} onClose={onClose}>
       <label>{t('ar.method')}<select value={f.method} onChange={set('method')}>{['BANK_TRANSFER', 'CHEQUE', 'WALLET'].map((m) => <option key={m} value={m}>{t(`ar.m.${m}` as Key)}</option>)}</select></label>
       <div className="grid2"><label>{t('ar.amount')}<input inputMode="decimal" value={f.amount} onChange={set('amount')} dir="ltr" /></label><label>{t('ar.receivedOn')}<input type="date" value={f.receivedOn} onChange={set('receivedOn')} dir="ltr" /></label></div>
+      <AccountPicker method={f.method} value={f.account} onChange={(id) => setF((x) => ({ ...x, account: id }))} />
       <label>{t('ar.reference')}<input value={f.reference} onChange={set('reference')} dir="ltr" /></label>
       <label>{t('ar.counterparty')}<input value={f.counterparty} onChange={set('counterparty')} /></label>
       <div className="grid2"><label>{t('ar.withheld')}<input inputMode="decimal" value={f.withheld} onChange={set('withheld')} dir="ltr" /></label><label>{t('ar.withholdingRef')}<input value={f.withholdingRef} onChange={set('withholdingRef')} dir="ltr" /></label></div>

@@ -13,6 +13,7 @@ import { CheckOutSheet } from './CheckOutSheet.js';
 import { PaymentSheet } from './PaymentSheet.js';
 import { RoomPicker } from './RoomPicker.js';
 import { ComplianceNotes, type Hit } from './ComplianceBits.js';
+import { AccountPicker } from './AccountPicker.js';
 import { OtaClaimPanel } from './OtaClaims.js';
 import { CompanyBillings } from './BillToCompany.js';
 import { InvoicePanel } from './Invoices.js';
@@ -182,17 +183,17 @@ function PaymentFixSheet({ kind, payment, onDone, onClose }: { kind: 'void' | 'r
   const { t } = useT();
   const { property } = useAuth();
   const withStepUp = useStepUp();
-  const [reason, setReason] = useState(''); const [amount, setAmount] = useState(payment.amount.amount); const [who, setWho] = useState(''); const key = useState(() => `ui-${crypto.randomUUID()}`)[0];
+  const [reason, setReason] = useState(''); const [amount, setAmount] = useState(payment.amount.amount); const [who, setWho] = useState(''); const [account, setAccount] = useState(''); const key = useState(() => `ui-${crypto.randomUUID()}`)[0];
   const { busy, problem, run } = useAction();
   const go = async () => {
     const base = `/v1/properties/${property!.id}/payments/${payment.id}`;
-    const x = await run(() => withStepUp(() => kind === 'void' ? api('POST', `${base}/void`, { reason: reason.trim() }) : api('POST', `${base}/refund`, { amount, reason: reason.trim(), ...(who.trim() ? { counterparty: who.trim() } : {}) }, { 'idempotency-key': key })));
+    const x = await run(() => withStepUp(() => kind === 'void' ? api('POST', `${base}/void`, { reason: reason.trim() }) : api('POST', `${base}/refund`, { amount, reason: reason.trim(), ...(who.trim() ? { counterparty: who.trim() } : {}), ...(account ? { paymentAccountId: account } : {}) }, { 'idempotency-key': key })));
     if (x) { onDone(); onClose(); }
   };
   return (
     <Sheet title={kind === 'void' ? t('fo.void') : t('fo.refund')} onClose={onClose}>
       <p className="muted">{money(payment.amount)} · {t(`pay.m.${payment.method}` as Key)}</p>
-      {kind === 'refund' && <><label>{t('pay.amount')}<input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} dir="ltr" /></label>{payment.method !== 'CASH' && <label>{t('fo.beneficiary')}<input value={who} onChange={(e) => setWho(e.target.value)} /></label>}</>}
+      {kind === 'refund' && <><label>{t('pay.amount')}<input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} dir="ltr" /></label>{payment.method !== 'CASH' && <AccountPicker method={payment.method} value={account} onChange={setAccount} />}{payment.method !== 'CASH' && <label>{t('fo.beneficiary')}<input value={who} onChange={(e) => setWho(e.target.value)} /></label>}</>}
       <label>{t('common.reason')}<input value={reason} onChange={(e) => setReason(e.target.value)} autoFocus /></label>
       <ErrorLine code={problem?.code} detail={problem?.detail} />
       <div className="actions"><button className="primary" disabled={busy || reason.trim().length < 3} onClick={go}>{t('act.confirm')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>

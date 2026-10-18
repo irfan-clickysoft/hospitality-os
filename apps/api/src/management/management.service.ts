@@ -2,6 +2,7 @@ import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { Money, addDays } from '@hos/domain-types';
 import { ArService } from '../companies/ar.service.js';
+import { PaymentAccountsService } from '../payment-accounts/payment-accounts.service.js';
 import { AuthorizationService } from '../authz/authorization.service.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
@@ -17,6 +18,7 @@ export class ManagementService {
     @Inject(TenantDb) private readonly tdb: TenantDb,
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
     @Inject(ArService) private readonly ar: ArService,
+    @Inject(PaymentAccountsService) private readonly accounts: PaymentAccountsService,
   ) {}
 
   async overview(userId: string, fromIn?: string, toIn?: string) {
@@ -112,6 +114,7 @@ export class ManagementService {
       const sold = per.reduce((a, x) => a + x.period.roomsSold, 0), avail = per.reduce((a, x) => a + x.period.roomsAvailable, 0);
       const rev = sumM((x) => x.period.roomRevenue);
       const receivables = await this.ar.aging();
+      const acc = tenantWide ? await this.accounts.summary(from, to) : null;
       return {
         from, to, currency: cur, scope: tenantWide ? 'ALL_PROPERTIES' : 'SOME_PROPERTIES',
         totals: { occupancyPct: pct(sold, avail), roomsSold: sold, roomsAvailable: avail, roomRevenue: fmt(rev, cur), adr: fmt(div(rev, BigInt(sold)), cur), revPar: fmt(div(rev, BigInt(avail)), cur),
@@ -119,6 +122,7 @@ export class ManagementService {
         properties: per,
         salesBySource: bySource.rows.map((r) => ({ source: r.source, amount: fmt(r.amt, cur) })),
         salesByCompany: byCompany.rows.map((r) => ({ companyId: r.company_id, company: r.name, amount: fmt(r.amt, cur) })),
+        accounts: acc ? { nonCompany: acc.nonCompany, unassigned: acc.unassigned } : null,
         receivables: tenantWide ? { asOf: receivables.asOf, totalOpen: receivables.totalOpen, buckets: receivables.totals } : null,
         approvals: { companyReceiptsToVerify: tenantWide ? arPending.rows[0]!.n : 0, companyReceiptsAmount: fmt(tenantWide ? arPending.rows[0]!.amt : '0', cur), taxRatesAwaitingApproval: taxDrafts },
       };

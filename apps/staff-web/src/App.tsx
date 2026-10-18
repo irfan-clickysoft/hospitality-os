@@ -12,6 +12,7 @@ import { OtaTab } from './desk/OtaClaims.js';
 import { Import } from './desk/Import.js';
 import { Maintenance } from './desk/Maintenance.js';
 import { Compliance } from './desk/Compliance.js';
+import { Accounts } from './desk/Accounts.js';
 import { Cashier } from './desk/Cashier.js';
 import { NightAudit } from './desk/NightAudit.js';
 import { Rack } from './desk/Rack.js';
@@ -23,7 +24,7 @@ import { Spinner } from './ui/kit.js';
 import type { Key } from './i18n/en.js';
 import { errorText } from './i18n/index.js';
 
-type Tab = 'today' | 'management' | 'rack' | 'bookings' | 'cashier' | 'companies' | 'ota' | 'maintenance' | 'compliance' | 'import' | 'audit' | 'tax' | 'mine' | 'board' | 'issues' | 'lost';
+type Tab = 'today' | 'management' | 'rack' | 'bookings' | 'cashier' | 'companies' | 'ota' | 'maintenance' | 'compliance' | 'accounts' | 'import' | 'audit' | 'tax' | 'mine' | 'board' | 'issues' | 'lost';
 
 function Shell() {
   const { t, locale, setLocale } = useT();
@@ -39,6 +40,7 @@ function Shell() {
     can('ota.claim') && { id: 'ota' as Tab, label: 'nav.ota' as Key },
     can('maintenance.view') && { id: 'maintenance' as Tab, label: 'nav.maintenance' as Key },
     can('compliance.view') && { id: 'compliance' as Tab, label: 'nav.compliance' as Key },
+    can('paymentaccount.view') && { id: 'accounts' as Tab, label: 'nav.accounts' as Key },
     can('data.import') && { id: 'import' as Tab, label: 'nav.import' as Key },
     can('nightaudit.run') && { id: 'audit' as Tab, label: 'nav.audit' as Key },
     (can('tax.configure') || can('tax.approve')) && { id: 'tax' as Tab, label: 'nav.tax' as Key },
@@ -67,7 +69,7 @@ function Shell() {
       {work.pending.length > 0 && <div className="banner" role="status">{t('banner.pending', { n: work.pending.length })}</div>}
       {work.notices.length > 0 && <div className="banner warn" role="alert">{t('banner.dropped', { n: work.notices.length })} <small>({[...new Set(work.notices.map((n) => errorText(locale, n.code)))].join(' ')})</small> <button className="link" onClick={work.clearNotices}>{t('common.close')}</button></div>}
       <main key={property.id} className="content">
-        {tab === 'today' && <Today />}{tab === 'management' && <Management />}{tab === 'rack' && <Rack />}{tab === 'bookings' && <Bookings />}{tab === 'cashier' && <Cashier />}{tab === 'companies' && <Companies />}{tab === 'ota' && <OtaTab />}{tab === 'import' && <Import />}{tab === 'maintenance' && <Maintenance />}{tab === 'compliance' && <Compliance />}{tab === 'audit' && <NightAudit />}{tab === 'tax' && <Tax />}{tab === 'mine' && <MyRooms />}{tab === 'board' && <Board />}{tab === 'issues' && <Issues />}{tab === 'lost' && <LostFound />}
+        {tab === 'today' && <Today />}{tab === 'management' && <Management />}{tab === 'rack' && <Rack />}{tab === 'bookings' && <Bookings />}{tab === 'cashier' && <Cashier />}{tab === 'companies' && <Companies />}{tab === 'ota' && <OtaTab />}{tab === 'import' && <Import />}{tab === 'maintenance' && <Maintenance />}{tab === 'compliance' && <Compliance />}{tab === 'accounts' && <Accounts />}{tab === 'audit' && <NightAudit />}{tab === 'tax' && <Tax />}{tab === 'mine' && <MyRooms />}{tab === 'board' && <Board />}{tab === 'issues' && <Issues />}{tab === 'lost' && <LostFound />}
         {tabs.length === 0 && <p className="muted center">{t('err.PERMISSION_DENIED')}</p>}
       </main>
       <nav className="tabs" aria-label="main">

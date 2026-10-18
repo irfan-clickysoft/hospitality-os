@@ -7,6 +7,7 @@ import { CompaniesService, fail, fmt, type Trx } from '../companies/companies.se
 import { TenantDb } from '../db/tenant-db.js';
 import { FolioService } from '../folio/folio.service.js';
 import { IdempotencyService, hashRequest } from '../idempotency/idempotency.service.js';
+import { PaymentAccountsService } from '../payment-accounts/payment-accounts.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import type * as S from './schemas.js';
@@ -24,6 +25,7 @@ export class OtaService {
     @Inject(IdempotencyService) private readonly idem: IdempotencyService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(PaymentAccountsService) private readonly accounts: PaymentAccountsService,
   ) {}
 
   async row(trx: Trx, propertyId: string, id: string, lock = false) {
@@ -40,8 +42,8 @@ export class OtaService {
     return { id: r.id, propertyId: r.property_id, reservationId: r.reservation_id, confirmationNo: r.confirmation_no, otaRef: r.ota_ref, source: r.source, guest: r.guest_name, kind: r.kind, status: r.status,
       amount: fmt(r.amount_minor, c), received: fmt(r.received_minor, c), writtenOff: fmt(r.written_off_minor, c), remaining: fmt(remaining, c), claimRef: r.claim_ref, claimedOn: r.claimed_on, incurredOn: r.incurred_on, ageDays: age, note: r.note, version: r.version };
   }
-  private async event(trx: Trx, id: string, action: string, bd: string, userId: string, e: { amount?: bigint; reference?: string | null; note?: string | null } = {}) {
-    await trx.insertInto('ota_receivable_event').values({ tenant_id: currentTenant().tenantId, receivable_id: id, action, amount_minor: e.amount?.toString() ?? null, reference: e.reference ?? null, note: e.note ?? null, business_date: bd, actor_id: userId } as never).execute();
+  private async event(trx: Trx, id: string, action: string, bd: string, userId: string, e: { amount?: bigint; reference?: string | null; note?: string | null; accountId?: string | null } = {}) {
+    await trx.insertInto('ota_receivable_event').values({ payment_account_id: e.accountId ?? null, tenant_id: currentTenant().tenantId, receivable_id: id, action, amount_minor: e.amount?.toString() ?? null, reference: e.reference ?? null, note: e.note ?? null, business_date: bd, actor_id: userId } as never).execute();
   }
 
   // ───────────── moving a fee off the guest's bill ─────────────
@@ -108,7 +110,8 @@ export class OtaService {
       const remaining = BigInt(r.amount_minor) - BigInt(r.received_minor) - BigInt(r.written_off_minor);
       if (amt <= 0n) throw fail(422, 'AMOUNT_INVALID', 'The amount must be more than zero');
       if (amt > remaining) throw fail(422, 'AMOUNT_TOO_LARGE', 'That is more than is still owed', { remaining: fmt(remaining, r.currency) });
-      await this.event(trx, id, 'RECEIVE', i.receivedOn ?? bd, userId, { amount: amt, reference: i.reference, note: i.note });
+      const accountId = await this.accounts.resolve(trx, propertyId, 'BANK_TRANSFER', i.paymentAccountId, r.currency);
+      await this.event(trx, id, 'RECEIVE', i.receivedOn ?? bd, userId, { amount: amt, reference: i.reference, note: i.note, accountId });
       const done = amt === remaining;
       return { received_minor: (BigInt(r.received_minor) + amt).toString(), status: done ? (BigInt(r.written_off_minor) > 0n ? 'WRITTEN_OFF' : 'RECEIVED') : r.status };
     });

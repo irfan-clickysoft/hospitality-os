@@ -14,13 +14,13 @@ export const ReversePosting = z.object({ reason });
 export const RecordPayment = z.object({
   kind: z.enum(['PAYMENT', 'DEPOSIT']).default('PAYMENT'), method: z.enum(['CASH', 'BANK_TRANSFER', 'CARD_SLIP', 'WALLET']), amount: money,
   reference: z.string().trim().min(3).max(80).nullish(), cardLast4: z.string().regex(/^\d{4}$/).nullish(), approvalCode: z.string().trim().max(40).nullish(),
-  counterparty: z.string().trim().max(80).nullish(), note: z.string().max(300).nullish(),
+  counterparty: z.string().trim().max(80).nullish(), note: z.string().max(300).nullish(), paymentAccountId: z.string().uuid().nullish(),
 });
 export const VerifyPayment = z.object({ approve: z.boolean(), note: z.string().trim().max(300).nullish() });
 export const VoidPayment = z.object({ reason });
 export const RefundPayment = z.object({
   amount: money, reason, method: z.enum(['CASH', 'BANK_TRANSFER', 'CARD_SLIP', 'WALLET']).optional(),
-  counterparty: z.string().trim().max(120).nullish(), reference: z.string().trim().max(80).nullish(),
+  counterparty: z.string().trim().max(120).nullish(), reference: z.string().trim().max(80).nullish(), paymentAccountId: z.string().uuid().nullish(),
 });
 export const OpenSession = z.object({ openingFloat: money.default('0'), registerName: z.string().trim().min(1).max(60).default('Front desk') });
 export const CashDrop = z.object({ amount: money, note: z.string().max(200).nullish() });

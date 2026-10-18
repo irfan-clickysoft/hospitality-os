@@ -5,7 +5,7 @@ import { businessDate } from '../property-setup/schemas.js';
 const note = z.string().trim().min(3).max(300);
 export const ClaimFee = z.object({ kind: z.enum(['NO_SHOW', 'LATE_CANCELLATION', 'OTHER']), amount: money.optional(), note: z.string().trim().max(300).nullish() });
 export const MarkClaimed = z.object({ claimRef: z.string().trim().max(80).nullish(), claimedOn: businessDate.optional() });
-export const Receive = z.object({ amount: money, reference: z.string().trim().min(3).max(80), receivedOn: businessDate.optional(), note: z.string().trim().max(300).nullish() });
+export const Receive = z.object({ paymentAccountId: z.string().uuid().nullish(), amount: money, reference: z.string().trim().min(3).max(80), receivedOn: businessDate.optional(), note: z.string().trim().max(300).nullish() });
 export const Dispute = z.object({ reason: note });
 export const Resolve = z.object({ note });
 export const WriteOff = z.object({ amount: money.optional(), reason: note });

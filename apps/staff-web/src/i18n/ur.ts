@@ -455,4 +455,13 @@ export const ur: Record<Key, string> = {
   'cmp.a.INFO': 'نوٹ', 'cmp.a.WARN': 'انتباہ', 'cmp.a.REQUIRE_APPROVAL': 'مینیجر کی منظوری', 'cmp.a.REQUIRE_TASK': 'کام', 'cmp.a.REQUIRE_DOCUMENT': 'دستاویز درکار', 'cmp.a.BLOCK_BOOKING': 'اجازت نہیں',
   'cmp.st.BOOKING': 'بکنگ پر', 'cmp.st.CHECK_IN': 'چیک اِن پر', 'cmp.s.ACTIVE': 'چالو', 'cmp.s.DRAFT': 'مسودہ', 'cmp.s.DISABLED': 'بند',
   'cmp.approved': 'منظور', 'cmp.reason': 'مینیجر کی منظوری کی وجہ', 'cmp.approve': 'منظور کریں اور آگے بڑھیں', 'cmp.askManager': 'اس کی منظوری مینیجر دے۔ مینیجر سے یہ اسکرین کھولنے کو کہیں۔',
+  // payment accounts
+  'nav.accounts': 'کھاتے', 'pa.account': 'رقم جس کھاتے میں گئی', 'pa.notCompany': 'کمپنی کا نہیں', 'pa.flagNote': 'یہ کھاتہ {owner} کا ہے، کمپنی کا نہیں۔ ادائیگی درج ہوگی اور کھاتوں کی رپورٹ میں نشان زد ہوگی۔',
+  'pa.verifiedOnly': 'صرف تصدیق شدہ وصولیاں', 'pa.totalIn': 'کھاتوں میں وصول', 'pa.nonCompany': 'ان کھاتوں میں جو کمپنی کے نہیں', 'pa.unassigned': '{n} وصولیاں جن کا کھاتہ درج نہیں', 'pa.new': 'نیا کھاتہ', 'pa.none': 'ابھی کوئی ادائیگی کھاتہ نہیں۔',
+  'pa.k.BANK': 'بینک اکاؤنٹ', 'pa.k.CARD_CLEARING': 'کارڈ مشین', 'pa.k.WALLET': 'والٹ (جیز کیش، ایزی پیسہ…)', 'pa.k.GATEWAY': 'آن لائن گیٹ وے',
+  'pa.kind': 'قسم', 'pa.bankName': 'بینک', 'pa.last4': 'نمبر کے آخری 4 ہندسے', 'pa.title': 'اکاؤنٹ کس نام پر ہے', 'pa.ownedBy': 'ملکیت', 'pa.ownerName': 'مالک کا نام',
+  'pa.owner.COMPANY': 'کمپنی', 'pa.owner.PERSONAL': 'کوئی شخص', 'pa.owner.OTHER': 'کوئی اور', 'pa.closed': 'بند', 'pa.close': 'کھاتہ بند کریں',
+  'err.PAYMENT_ACCOUNT_REQUIRED': 'وہ کھاتہ چنیں جس میں رقم گئی۔',
+  'err.PAYMENT_ACCOUNT_INVALID': 'یہ کھاتہ یہاں اس قسم کی ادائیگی نہیں لے سکتا۔',
+  'err.OWNER_REQUIRED': 'بتائیں یہ کھاتہ کس کا ہے۔',
 };

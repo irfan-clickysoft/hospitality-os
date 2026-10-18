@@ -7,6 +7,7 @@ import { AuthorizationService } from '../authz/authorization.service.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { FolioService } from '../folio/folio.service.js';
 import { IdempotencyService, hashRequest } from '../idempotency/idempotency.service.js';
+import { PaymentAccountsService } from '../payment-accounts/payment-accounts.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { CompaniesService, fail, fmt, type Trx } from './companies.service.js';
@@ -24,6 +25,7 @@ export class ArService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
+    @Inject(PaymentAccountsService) private readonly accounts: PaymentAccountsService,
   ) {}
 
   private async requirePermission(userId: string, permission: string, propertyId: string) {
@@ -114,9 +116,10 @@ export class ArService {
       const amount = Money.parse(i.amount, c.currency).minor; const withheld = Money.parse(i.withheld, c.currency).minor;
       if (amount <= 0n) throw fail(422, 'AMOUNT_INVALID', 'The amount must be more than zero');
       if (withheld > 0n && !i.withholdingRef) throw fail(422, 'WITHHOLDING_REF_REQUIRED', 'Enter the certificate or challan number for the tax withheld');
+      const accountId = await this.accounts.resolve(trx, null, i.method, i.paymentAccountId, c.currency);
       let r;
       try {
-        r = await trx.insertInto('ar_receipt').values({ tenant_id: currentTenant().tenantId, company_id: companyId, method: i.method, amount_minor: amount.toString(), withheld_minor: withheld.toString(), withholding_ref: i.withholdingRef || null,
+        r = await trx.insertInto('ar_receipt').values({ payment_account_id: accountId, tenant_id: currentTenant().tenantId, company_id: companyId, method: i.method, amount_minor: amount.toString(), withheld_minor: withheld.toString(), withholding_ref: i.withholdingRef || null,
           currency: c.currency, reference: i.reference, counterparty: i.counterparty || null, received_on: i.receivedOn, apply_to: sql`${i.applyTo}::uuid[]` as never, note: i.note || null, created_by: userId } as never).returningAll().executeTakeFirstOrThrow();
       } catch (e) { if ((e as { code?: string }).code === '23505') throw fail(409, 'DUPLICATE_REFERENCE', 'This reference was already recorded for the company'); throw e; }
       await this.audit.record(trx, { action: 'ar.receipt_record', resourceType: 'ar_receipt', resourceId: r.id, after: { companyId, method: i.method, amount: amount.toString(), withheld: withheld.toString(), reference: i.reference } });

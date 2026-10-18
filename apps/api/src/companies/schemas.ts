@@ -28,7 +28,7 @@ export const RecordReceipt = z.object({
   receivedOn: businessDate, note: text(300).nullish(),
   /** Tax the company withheld from this payment. It settles what is owed too, and needs the certificate or challan number. */
   withheld: money.default('0'), withholdingRef: text(80).nullish(),
-  applyTo: z.array(uuid).max(200).default([]),
+  applyTo: z.array(uuid).max(200).default([]), paymentAccountId: uuid.nullish(),
 });
 export const VerifyReceipt = z.object({ approve: z.boolean(), note: text(300).nullish() });
 export const StatementQuery = z.object({ from: businessDate.optional(), to: businessDate.optional() });
