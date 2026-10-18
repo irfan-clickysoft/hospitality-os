@@ -401,4 +401,11 @@ export const ur: Record<Key, string> = {
   'err.DUPLICATE_REFERENCE': 'یہ حوالہ اس کمپنی کے لیے پہلے درج ہو چکا ہے۔',
   'err.WITHHOLDING_REF_REQUIRED': 'روکے گئے ٹیکس کا سرٹیفکیٹ یا چالان نمبر لکھیں۔',
   'err.NOT_PENDING': 'یہ تصدیق کا منتظر نہیں۔',
+  // management
+  'nav.management': 'انتظامیہ',
+  'mg.days': 'پچھلے {n} دن', 'mg.closedOnly': 'صرف بند ہو چکے دن', 'mg.today': 'آج، تمام پراپرٹیز', 'mg.properties': 'پراپرٹی کے لحاظ سے', 'mg.todayNow': 'آج', 'mg.todayLine': '{a} آ رہے · {d} جا رہے · {h} ٹھہرے ہوئے',
+  'mg.coming': 'اگلے 14 دن', 'mg.comingLine': '{n} بکنگز · {nights} راتیں', 'mg.atRisk': 'خطرے میں (غیر ضمانت شدہ)', 'mg.ota': 'ڈپازٹ سے محفوظ Booking.com', 'mg.otaLine': '{n} میں سے {g} · نئی بکنگز کا {pct}% ادا',
+  'mg.feesRecovered': 'نو شو اور دیر سے منسوخی کی فیس', 'mg.issues': 'کھلے کمرے کے مسائل', 'mg.issuesLine': '{n} · سب سے پرانا {h} گھنٹے',
+  'mg.approvals': 'منظوری کے منتظر', 'mg.payVerify': 'تصدیق طلب بینک ٹرانسفر', 'mg.sessionReview': 'جائزہ طلب کیشیئر سیشن', 'mg.arVerify': 'تصدیق طلب کمپنی ادائیگیاں', 'mg.taxApprove': 'منظوری طلب ٹیکس شرحیں', 'mg.nothingPending': 'کچھ منتظر نہیں',
+  'mg.bySource': 'ذریعے کے لحاظ سے آمدنی', 'mg.byCompany': 'سرِفہرست کمپنیاں',
 };

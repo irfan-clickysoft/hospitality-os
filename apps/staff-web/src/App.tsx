@@ -7,6 +7,7 @@ import { Issues } from './screens/Issues.js';
 import { LostFound } from './screens/LostFound.js';
 import { Bookings } from './desk/Bookings.js';
 import { Companies } from './desk/Companies.js';
+import { Management } from './desk/Management.js';
 import { Cashier } from './desk/Cashier.js';
 import { NightAudit } from './desk/NightAudit.js';
 import { Rack } from './desk/Rack.js';
@@ -18,13 +19,14 @@ import { Spinner } from './ui/kit.js';
 import type { Key } from './i18n/en.js';
 import { errorText } from './i18n/index.js';
 
-type Tab = 'today' | 'rack' | 'bookings' | 'cashier' | 'companies' | 'audit' | 'tax' | 'mine' | 'board' | 'issues' | 'lost';
+type Tab = 'today' | 'management' | 'rack' | 'bookings' | 'cashier' | 'companies' | 'audit' | 'tax' | 'mine' | 'board' | 'issues' | 'lost';
 
 function Shell() {
   const { t, locale, setLocale } = useT();
   const { me, property, properties, setPropertyId, can, logout, offlineBoot } = useAuth();
   const work = useWork();
   const tabs = useMemo(() => [
+    can('management.view') && { id: 'management' as Tab, label: 'nav.management' as Key },
     can('reservation.view') && { id: 'today' as Tab, label: 'nav.today' as Key },
     can('reservation.view') && { id: 'rack' as Tab, label: 'nav.rack' as Key },
     can('reservation.view') && { id: 'bookings' as Tab, label: 'nav.bookings' as Key },
@@ -57,7 +59,7 @@ function Shell() {
       {work.pending.length > 0 && <div className="banner" role="status">{t('banner.pending', { n: work.pending.length })}</div>}
       {work.notices.length > 0 && <div className="banner warn" role="alert">{t('banner.dropped', { n: work.notices.length })} <small>({[...new Set(work.notices.map((n) => errorText(locale, n.code)))].join(' ')})</small> <button className="link" onClick={work.clearNotices}>{t('common.close')}</button></div>}
       <main key={property.id} className="content">
-        {tab === 'today' && <Today />}{tab === 'rack' && <Rack />}{tab === 'bookings' && <Bookings />}{tab === 'cashier' && <Cashier />}{tab === 'companies' && <Companies />}{tab === 'audit' && <NightAudit />}{tab === 'tax' && <Tax />}{tab === 'mine' && <MyRooms />}{tab === 'board' && <Board />}{tab === 'issues' && <Issues />}{tab === 'lost' && <LostFound />}
+        {tab === 'today' && <Today />}{tab === 'management' && <Management />}{tab === 'rack' && <Rack />}{tab === 'bookings' && <Bookings />}{tab === 'cashier' && <Cashier />}{tab === 'companies' && <Companies />}{tab === 'audit' && <NightAudit />}{tab === 'tax' && <Tax />}{tab === 'mine' && <MyRooms />}{tab === 'board' && <Board />}{tab === 'issues' && <Issues />}{tab === 'lost' && <LostFound />}
         {tabs.length === 0 && <p className="muted center">{t('err.PERMISSION_DENIED')}</p>}
       </main>
       <nav className="tabs" aria-label="main">

@@ -399,5 +399,12 @@ export const en = {
   'err.DUPLICATE_REFERENCE': 'This reference was already recorded for the company.',
   'err.WITHHOLDING_REF_REQUIRED': 'Enter the certificate or challan number for the tax withheld.',
   'err.NOT_PENDING': 'This is not waiting for verification.',
+  // management
+  'nav.management': 'Management',
+  'mg.days': 'Last {n} days', 'mg.closedOnly': 'closed days only', 'mg.today': 'Today, all properties', 'mg.properties': 'By property', 'mg.todayNow': 'Today', 'mg.todayLine': '{a} arriving · {d} leaving · {h} in house',
+  'mg.coming': 'Next 14 days', 'mg.comingLine': '{n} bookings · {nights} nights', 'mg.atRisk': 'At risk (unguaranteed)', 'mg.ota': 'Booking.com secured by deposit', 'mg.otaLine': '{g} of {n} · {pct}% of new bookings paid',
+  'mg.feesRecovered': 'No-show and late-cancel fees', 'mg.issues': 'Open room issues', 'mg.issuesLine': '{n} · oldest {h} h',
+  'mg.approvals': 'Waiting for approval', 'mg.payVerify': 'Bank transfers to verify', 'mg.sessionReview': 'Cashier sessions to review', 'mg.arVerify': 'Company payments to verify', 'mg.taxApprove': 'Tax rates to approve', 'mg.nothingPending': 'Nothing waiting',
+  'mg.bySource': 'Revenue by source', 'mg.byCompany': 'Top companies',
 } as const;
 export type Key = keyof typeof en;
