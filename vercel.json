@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm --filter @hos/staff-web build",
+  "outputDirectory": "apps/staff-web/dist",
+  "rewrites": [
+    { "source": "/((?!v1/|assets/).*)", "destination": "/index.html" }
+  ]
+}
