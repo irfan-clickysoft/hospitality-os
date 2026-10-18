@@ -429,5 +429,21 @@ export const en = {
   'imp.e.NAME_REQUIRED': 'name missing', 'imp.e.NAME_TOO_LONG': 'name too long', 'imp.e.PHONE_INVALID': 'phone not valid', 'imp.e.EMAIL_INVALID': 'email not valid', 'imp.e.NATIONALITY_UNKNOWN': 'country not recognised (use a two-letter code like PK)',
   'imp.e.NOTES_TOO_LONG': 'notes too long', 'imp.e.SAME_AS_ROW_N': 'same as row {n}', 'imp.e.CREDIT_LIMIT_INVALID': 'credit limit not valid', 'imp.e.TERMS_INVALID': 'payment terms not valid',
   'imp.e.NTN_TOO_LONG': 'NTN too long', 'imp.e.STRN_TOO_LONG': 'STRN too long', 'imp.e.ADDRESS_TOO_LONG': 'address too long', 'imp.e.CONTACT_TOO_LONG': 'contact too long', 'imp.e.PHONE_TOO_LONG': 'phone too long',
+  // maintenance
+  'nav.maintenance': 'Repairs', 'mg.repairs': 'Repairs', 'mg.repairsLine': '{a} open · {o} overdue · {c} to check',
+  'mt.new': 'New repair job', 'mt.title': 'What is wrong', 'mt.category': 'Kind', 'mt.priority': 'How urgent', 'mt.area': 'Place (if not a room)', 'mt.dueDate': 'Fix by', 'mt.assignTo': 'Technician', 'mt.unassigned': 'not assigned',
+  'mt.takeOut': 'The room cannot be sold until it is fixed', 'mt.from': 'Out from', 'mt.backOn': 'Expected back', 'mt.outOfOrder': 'The room is out of order for this job. It goes back on sale when the work is checked.',
+  'mt.f.ACTIVE': 'Open jobs', 'mt.f.MINE': 'My jobs', 'mt.f.DONE': 'Finished',
+  'mt.s.OPEN': 'New', 'mt.s.ASSIGNED': 'Assigned', 'mt.s.IN_PROGRESS': 'In progress', 'mt.s.WAITING': 'Waiting', 'mt.s.DONE': 'To check', 'mt.s.VERIFIED': 'Checked', 'mt.s.CANCELLED': 'Cancelled',
+  'mt.c.PLUMBING': 'Plumbing', 'mt.c.ELECTRICAL': 'Electrical', 'mt.c.AC': 'AC', 'mt.c.FURNITURE': 'Furniture', 'mt.c.APPLIANCE': 'Appliance', 'mt.c.CLEANLINESS': 'Cleanliness', 'mt.c.SAFETY': 'Safety', 'mt.c.OTHER': 'Other',
+  'mt.p.1': 'Urgent', 'mt.p.2': 'High', 'mt.p.3': 'Normal', 'mt.p.4': 'Low',
+  'mt.assign': 'Assign', 'mt.start': 'Start work', 'mt.wait': 'Waiting for parts', 'mt.finish': 'Finished', 'mt.verify': 'Work is fine', 'mt.reopen': 'Not fixed', 'mt.cancel': 'Cancel job',
+  'mt.noteLabel': 'What was done / why', 'mt.cost': 'Cost', 'mt.vendor': 'Bought from / done by',
+  'mt.e.CREATE': 'Reported', 'mt.e.ASSIGN': 'Assigned', 'mt.e.START': 'Started', 'mt.e.WAIT': 'Waiting', 'mt.e.DONE': 'Finished', 'mt.e.VERIFY': 'Checked', 'mt.e.REOPEN': 'Sent back', 'mt.e.CANCEL': 'Cancelled', 'mt.e.NOTE': 'Note',
+  'err.NOT_A_TECHNICIAN': 'That person cannot be given repair work.',
+  'err.NOT_YOUR_JOB': 'This job is assigned to someone else.',
+  'err.NOT_ASSIGNED': 'Ask a manager to assign this job first.',
+  'err.ISSUE_HAS_ORDER': 'A repair job already exists for that report.',
+  'err.ISSUE_CLOSED': 'That report is already resolved.',
 } as const;
 export type Key = keyof typeof en;

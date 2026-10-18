@@ -317,7 +317,11 @@ export class PropertySetupService {
       const d = await this.authz.check(userId, { permission: 'inventory.overbook', scope: { propertyId } });
       if (d.effect !== 'ALLOW') throw new ForbiddenException({ code: 'PERMISSION_DENIED', message: 'Acknowledging an oversell needs the overbooking permission' });
     }
-    return this.tdb.tx(async (trx) => {
+    return this.tdb.tx((trx) => this.createBlockIn(trx, propertyId, userId, i));
+  }
+  /** Inside the caller's transaction (a work order takes a room out of order atomically). The caller has checked the oversell permission. */
+  async createBlockIn(trx: Trx, propertyId: string, userId: string, i: z.infer<typeof S.CreateBlock>) {
+    {
       const p = await this.prop(trx, propertyId);
       if (p.status !== 'LIVE') throw new UnprocessableEntityException({ code: 'PROPERTY_NOT_LIVE', message: 'Blocks apply once the property is live' });
       if (i.startDate < p.business_date) throw new UnprocessableEntityException({ code: 'DATE_IN_PAST', message: `A block must start on or after the business date (${p.business_date})` });
@@ -332,7 +336,7 @@ export class PropertySetupService {
       await this.audit.record(trx, { action: 'room_block.create', resourceType: 'room_block', resourceId: b.id, propertyId, after: { ...this.blockDto(b), oversoldDates: r.oversoldDates }, reasonCode: i.acknowledgeOversell ? 'OVERSELL_ACKNOWLEDGED' : undefined, note: i.reason });
       await this.outbox.publish(trx, { aggregateType: 'room_type', aggregateId: room.room_type_id, eventType: 'InventoryChanged', propertyId, payload: { reason: 'block_created', from: i.startDate, to: i.endDate } });
       return { ...this.blockDto(b), oversoldDates: r.oversoldDates };
-    });
+    }
   }
   async listBlocks(propertyId: string, includeCancelled = false) {
     return this.tdb.tx(async (trx) => {
@@ -344,7 +348,10 @@ export class PropertySetupService {
   }
   /** Ends a block early (room returns to inventory from `endDate`) or cancels it entirely when endDate <= startDate. */
   async endBlock(propertyId: string, id: string, endDate: string | null) {
-    return this.tdb.tx(async (trx) => {
+    return this.tdb.tx((trx) => this.endBlockIn(trx, propertyId, id, endDate));
+  }
+  async endBlockIn(trx: Trx, propertyId: string, id: string, endDate: string | null) {
+    {
       const p = await this.prop(trx, propertyId);
       const b = await trx.selectFrom('room_block').selectAll().where('id', '=', id).where('property_id', '=', propertyId).where('cancelled_at', 'is', null).executeTakeFirst();
       if (!b) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Active block not found' });
@@ -360,7 +367,7 @@ export class PropertySetupService {
       await this.audit.record(trx, { action: newEnd === null ? 'room_block.cancel' : 'room_block.shorten', resourceType: 'room_block', resourceId: id, propertyId, before: this.blockDto(b), after: this.blockDto(after) });
       await this.outbox.publish(trx, { aggregateType: 'room_type', aggregateId: room.room_type_id, eventType: 'InventoryChanged', propertyId, payload: { reason: 'block_released', from } });
       return this.blockDto(after);
-    });
+    }
   }
 
   // ───────────────────────── availability ─────────────────────────

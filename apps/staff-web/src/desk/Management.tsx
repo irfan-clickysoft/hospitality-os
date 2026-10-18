@@ -15,6 +15,7 @@ interface Prop {
   cash: { openSessions: number; awaitingReview: number; variance: Amount };
   approvals: { paymentsToVerify: number; paymentsToVerifyAmount: Amount; sessionsToReview: number };
   issues: { open: number; oldestHours: number };
+  maintenance: { active: number; overdue: number; waiting: number; urgent: number; toCheck: number };
   revenueProtection: { otaConfirmed: number; otaGuaranteed: number; otaAtRisk: number; depositConversionPct: number; otaCreated: number; feesNet: Amount; otaReceivable: Amount; otaWrittenOff: Amount };
 }
 interface Overview {
@@ -82,6 +83,7 @@ export function Management() {
           {!zero(p.revenueProtection.otaWrittenOff) && <div className="row between"><span>{t('mg.otaLost')}</span><strong className="error">{money(p.revenueProtection.otaWrittenOff)}</strong></div>}
           {!zero(p.revenueProtection.feesNet) && <div className="row between"><span>{t('mg.feesRecovered')}</span><strong>{money(p.revenueProtection.feesNet)}</strong></div>}
           {(p.cash.openSessions > 0 || !zero(p.cash.variance)) && <div className="row between"><span>{t('cash.variance')}</span><strong className={!zero(p.cash.variance) ? 'error' : ''}>{money(p.cash.variance)}</strong></div>}
+          {(p.maintenance.active > 0 || p.maintenance.toCheck > 0) && <div className="row between"><span>{t('mg.repairs')}</span><span className={p.maintenance.overdue || p.maintenance.urgent ? 'error' : ''}>{t('mg.repairsLine', { a: p.maintenance.active, o: p.maintenance.overdue, c: p.maintenance.toCheck })}</span></div>}
           {p.issues.open > 0 && <div className="row between"><span>{t('mg.issues')}</span><span>{t('mg.issuesLine', { n: p.issues.open, h: p.issues.oldestHours })}</span></div>}
         </div>))}
 
