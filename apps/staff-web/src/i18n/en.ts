@@ -492,5 +492,18 @@ export const en = {
   'err.PASSWORDS_DIFFER': 'The two passwords are not the same.',
   'err.WEAK_PASSWORD': 'That password is too easy to guess. Use at least 12 characters.',
   'err.INVALID_TOKEN': 'This link is not valid any more. Ask for a new one.',
+  // reports
+  'nav.reports': 'Reports', 'rp.help': 'Each download is a spreadsheet file (CSV) that opens in Excel. Pick the period first.', 'rp.from': 'From', 'rp.to': 'To', 'rp.download': 'Download', 'rp.group': 'All properties',
+  'rp.r.daily-summary': 'Daily summary', 'rp.d.daily-summary': 'Occupancy, ADR, RevPAR, revenue, tax and movement for each closed day.',
+  'rp.r.revenue-by-code': 'Revenue by code', 'rp.d.revenue-by-code': 'Each day’s revenue by charge code, room type and booking source (excluding tax).',
+  'rp.r.payments': 'Payments register', 'rp.d.payments': 'Every payment, deposit and refund with method, reference, account and who recorded it.',
+  'rp.r.invoices': 'Invoice register', 'rp.d.invoices': 'Tax invoices and credit notes issued, with amounts and tax.',
+  'rp.r.tax-liability': 'Tax collected', 'rp.d.tax-liability': 'Tax collected by code and rate, with the amount it was charged on.',
+  'rp.r.open-folios': 'Open bills', 'rp.d.open-folios': 'Every bill with a balance right now.',
+  'rp.r.in-house': 'In-house list', 'rp.d.in-house': 'Guests in the house now, with room, dates and bill balance.',
+  'rp.r.ar-aging': 'Company receivables ageing', 'rp.d.ar-aging': 'What each company owes, by how late it is.',
+  'rp.r.payment-accounts': 'Payment accounts', 'rp.d.payment-accounts': 'Money in and out of each account, with accounts that are not the company’s marked.',
+  'err.RANGE_TOO_LONG': 'Choose a shorter period (at most 400 days).',
+  'rp.badPeriod': 'Check the dates: the end cannot be before the start.',
 } as const;
 export type Key = keyof typeof en;
