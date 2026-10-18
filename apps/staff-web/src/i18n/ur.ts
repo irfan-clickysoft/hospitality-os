@@ -419,4 +419,16 @@ export const ur: Record<Key, string> = {
   'ota.e.CREATE': 'دعویٰ بنا', 'ota.e.CLAIM': 'OTA کو بھیجا', 'ota.e.RECEIVE': 'رقم وصول ہوئی', 'ota.e.DISPUTE': 'تنازع', 'ota.e.RESOLVE': 'تنازع حل', 'ota.e.WRITE_OFF': 'معاف کیا', 'ota.e.VOID': 'واپس لیا',
   'err.NOT_AN_OTA_BOOKING': 'صرف OTA کی بکنگ پر OTA سے دعویٰ ہو سکتا ہے۔',
   'err.NOTHING_TO_CLAIM': 'اس بِل میں کچھ واجب الادا نہیں۔',
+  // data import
+  'nav.import': 'درآمد',
+  'imp.k.guests': 'مہمان', 'imp.k.companies': 'کمپنیاں',
+  'imp.help': 'ایکسل سے خانے کاپی کر کے نیچے پیسٹ کریں، یا CSV فائل کھولیں۔ سرخی والی قطار ناموں سے پہچانی جاتی ہے؛ ورنہ کالم دکھائی گئی ترتیب میں لیے جاتے ہیں۔ جب تک آپ درآمد نہ دبائیں کچھ محفوظ نہیں ہوتا۔',
+  'imp.file': 'CSV فائل کھولیں', 'imp.template': 'خالی شیٹ ڈاؤن لوڈ کریں', 'imp.paste': 'خانے یہاں پیسٹ کریں…',
+  'imp.read': '{n} قطاریں پڑھی گئیں', 'imp.headers': 'سرخیاں پہچان لی گئیں', 'imp.noHeaders': 'سرخی کی قطار نہیں — دکھائی گئی ترتیب لی گئی', 'imp.ignored': 'نظرانداز کالم: {cols}',
+  'imp.fill': 'جو مہمان پہلے سے موجود ہیں ان میں صرف خالی چیزیں بھریں (ای میل، قومیت، نوٹ)',
+  'imp.check': 'جانچیں', 'imp.import': '{n} نئے درآمد کریں', 'imp.willDo': 'درآمد کرنے پر: {n} نئے شامل ہوں گے', 'imp.done': 'درآمد ہو گیا: {n} شامل', 'imp.filled': '{n} بھرے گئے',
+  'imp.s.NEW': 'نیا', 'imp.s.EXISTS': 'پہلے سے موجود', 'imp.s.DUPLICATE_IN_FILE': 'دہرایا ہوا', 'imp.s.INVALID': 'مسئلہ', 'imp.row': 'قطار {n}',
+  'imp.e.NAME_REQUIRED': 'نام موجود نہیں', 'imp.e.NAME_TOO_LONG': 'نام بہت لمبا', 'imp.e.PHONE_INVALID': 'فون درست نہیں', 'imp.e.EMAIL_INVALID': 'ای میل درست نہیں', 'imp.e.NATIONALITY_UNKNOWN': 'ملک پہچانا نہیں گیا (دو حرفی کوڈ لکھیں جیسے PK)',
+  'imp.e.NOTES_TOO_LONG': 'نوٹ بہت لمبا', 'imp.e.SAME_AS_ROW_N': 'قطار {n} جیسا', 'imp.e.CREDIT_LIMIT_INVALID': 'ادھار کی حد درست نہیں', 'imp.e.TERMS_INVALID': 'ادائیگی کی مدت درست نہیں',
+  'imp.e.NTN_TOO_LONG': 'این ٹی این بہت لمبا', 'imp.e.STRN_TOO_LONG': 'STRN بہت لمبا', 'imp.e.ADDRESS_TOO_LONG': 'پتہ بہت لمبا', 'imp.e.CONTACT_TOO_LONG': 'رابطہ بہت لمبا', 'imp.e.PHONE_TOO_LONG': 'فون بہت لمبا',
 };

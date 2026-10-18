@@ -417,5 +417,17 @@ export const en = {
   'ota.e.CREATE': 'Claim created', 'ota.e.CLAIM': 'Sent to OTA', 'ota.e.RECEIVE': 'Money received', 'ota.e.DISPUTE': 'Disputed', 'ota.e.RESOLVE': 'Dispute resolved', 'ota.e.WRITE_OFF': 'Written off', 'ota.e.VOID': 'Taken back',
   'err.NOT_AN_OTA_BOOKING': 'Only a booking from an OTA can be claimed from the OTA.',
   'err.NOTHING_TO_CLAIM': 'There is nothing owing on this bill.',
+  // data import
+  'nav.import': 'Import',
+  'imp.k.guests': 'Guests', 'imp.k.companies': 'Companies',
+  'imp.help': 'Copy the cells from Excel and paste them below, or open a CSV file. A heading row is recognised by its names; otherwise the columns are taken in the order shown. Nothing is saved until you press Import.',
+  'imp.file': 'Open a CSV file', 'imp.template': 'Download a blank sheet', 'imp.paste': 'Paste the cells here…',
+  'imp.read': '{n} rows read', 'imp.headers': 'headings recognised', 'imp.noHeaders': 'no heading row — using the order shown', 'imp.ignored': 'ignored columns: {cols}',
+  'imp.fill': 'For guests already in the system, fill in only what is blank (email, nationality, notes)',
+  'imp.check': 'Check', 'imp.import': 'Import {n} new', 'imp.willDo': 'If you import: {n} new will be added', 'imp.done': 'Imported: {n} added', 'imp.filled': '{n} filled in',
+  'imp.s.NEW': 'New', 'imp.s.EXISTS': 'Already there', 'imp.s.DUPLICATE_IN_FILE': 'Repeated', 'imp.s.INVALID': 'Problem', 'imp.row': 'Row {n}',
+  'imp.e.NAME_REQUIRED': 'name missing', 'imp.e.NAME_TOO_LONG': 'name too long', 'imp.e.PHONE_INVALID': 'phone not valid', 'imp.e.EMAIL_INVALID': 'email not valid', 'imp.e.NATIONALITY_UNKNOWN': 'country not recognised (use a two-letter code like PK)',
+  'imp.e.NOTES_TOO_LONG': 'notes too long', 'imp.e.SAME_AS_ROW_N': 'same as row {n}', 'imp.e.CREDIT_LIMIT_INVALID': 'credit limit not valid', 'imp.e.TERMS_INVALID': 'payment terms not valid',
+  'imp.e.NTN_TOO_LONG': 'NTN too long', 'imp.e.STRN_TOO_LONG': 'STRN too long', 'imp.e.ADDRESS_TOO_LONG': 'address too long', 'imp.e.CONTACT_TOO_LONG': 'contact too long', 'imp.e.PHONE_TOO_LONG': 'phone too long',
 } as const;
 export type Key = keyof typeof en;

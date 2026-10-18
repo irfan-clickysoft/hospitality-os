@@ -77,15 +77,17 @@ export class CompaniesService {
 
   async create(userId: string, i: z.infer<typeof S.CreateCompany>) {
     if (i.creditLimit !== '0') this.requireFreshMfa();
-    return this.tdb.tx(async (trx) => {
-      let c;
-      try {
-        c = await trx.insertInto('company').values({ tenant_id: currentTenant().tenantId, name: i.name, ntn: i.ntn || null, strn: i.strn || null, address: i.address || null, contact_name: i.contactName || null,
-          contact_phone: i.contactPhone || null, contact_email: i.contactEmail || null, credit_limit_minor: Money.parse(i.creditLimit, 'PKR').minor.toString(), terms_days: i.termsDays, notes: i.notes || null, created_by: userId } as never).returningAll().executeTakeFirstOrThrow();
-      } catch (e) { if ((e as { code?: string }).code === '23505') throw fail(409, 'DUPLICATE', `A company called "${i.name}" already exists`); throw e; }
-      await this.audit.record(trx, { action: 'company.create', resourceType: 'company', resourceId: c.id, after: { name: i.name, creditLimit: i.creditLimit, termsDays: i.termsDays } });
-      return this.view(c, { owed: 0n, overdue: 0n });
-    });
+    return this.tdb.tx((trx) => this.createIn(trx, userId, i));
+  }
+  /** Inside the caller's transaction (the bulk import creates many at once). The caller has already checked the second factor for a non-zero limit. */
+  async createIn(trx: Trx, userId: string, i: z.infer<typeof S.CreateCompany>) {
+    let c;
+    try {
+      c = await trx.insertInto('company').values({ tenant_id: currentTenant().tenantId, name: i.name, ntn: i.ntn || null, strn: i.strn || null, address: i.address || null, contact_name: i.contactName || null,
+        contact_phone: i.contactPhone || null, contact_email: i.contactEmail || null, credit_limit_minor: Money.parse(i.creditLimit, 'PKR').minor.toString(), terms_days: i.termsDays, notes: i.notes || null, created_by: userId } as never).returningAll().executeTakeFirstOrThrow();
+    } catch (e) { if ((e as { code?: string }).code === '23505') throw fail(409, 'DUPLICATE', `A company called "${i.name}" already exists`); throw e; }
+    await this.audit.record(trx, { action: 'company.create', resourceType: 'company', resourceId: c.id, after: { name: i.name, creditLimit: i.creditLimit, termsDays: i.termsDays } });
+    return this.view(c, { owed: 0n, overdue: 0n });
   }
 
   async update(userId: string, id: string, i: z.infer<typeof S.UpdateCompany>) {
