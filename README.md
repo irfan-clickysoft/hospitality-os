@@ -44,18 +44,21 @@ Not yet: reservations, rack, front desk, folio, payments, tax engine, night audi
 **Slice 22 (report downloads):** a **Reports** tab with spreadsheet downloads (CSV, opens in Excel) for any period up to 400 days: daily summary (occupancy, ADR, RevPAR, revenue, tax, movement), revenue by code / room type / source, the payments register (method, reference, account and its owner, who recorded it), the invoice register, tax collected, open bills and the in-house list; and, across the business, company receivables ageing and the payment-accounts report (accounts that are not the company's are marked). Same permissions as seeing the figures on screen. Cells are safe to open: anything that starts like a formula (a guest named `=HYPERLINK(…)`) is defused, Urdu names open correctly, amounts are plain decimals and dates are `YYYY-MM-DD`. Needs no migration. Not yet built: scheduled e-mailed reports, PDF layouts, and a general report builder.
 
 ## Run it on your Mac (no cloud needed)
-Requires Node 22, pnpm 10 (`corepack enable`), and Docker Desktop (or a local PostgreSQL 16).
+Requires Node 22+, pnpm 10 (`corepack enable`), and Docker Desktop (or a local PostgreSQL 16). `psql` need not be installed: the scripts fall back to the one inside the database container.
 ```bash
 pnpm install
+pnpm build                                                                     # builds the shared packages (@hos/db, @hos/auth, …) the apps import
 docker compose up -d db                                                        # PostgreSQL 16 on localhost:5432
 PGSUPERUSER_URL=postgres://postgres:postgres@localhost:5432/postgres bash scripts/bootstrap-db.sh
-cp .env.example .env                                                           # then set APP_ENCRYPTION_KEY (command in the file)
-pnpm db:migrate                                                                # applies SQL migrations to hos_dev
-pnpm --filter @hos/api seed:sunset                                             # Sunset: Boulevard 9, Creek 10, Ramna 8 rooms; prints the owner invite token
-pnpm --filter @hos/api seed:sunset-rates                                       # PLACEHOLDER rate plans (BAR + International +25%) for the three properties
-pnpm --filter @hos/api dev                                                     # API on http://localhost:3000
+cp .env.example .env                                                           # then put a real key in APP_ENCRYPTION_KEY (command in the file)
+bash scripts/reset-dev.sh                                                      # applies migrations, seeds Sunset + demo staff (safe to re-run: it wipes dev data)
+pnpm --filter @hos/api dev                                                     # API on http://localhost:3000 (terminal 1)
+pnpm --filter @hos/staff-web dev                                               # staff app on http://localhost:3001 (terminal 2)
 ```
-Then set the owner's password with the `curl` command the seed prints, log in at `POST /v1/auth/login`, and call `GET /v1/properties`.
+Open http://localhost:3001 and sign in with company code `sunset`, password `sunset-demo-passphrase`, and `owner@sunset.local` (whole business), `manager@`, `hira@` (front desk), `sana@`, `bilal@`, `ayesha@` (housekeeping). The owner sets up the second factor under **My account**. For placeholder rate plans run `pnpm --filter @hos/api seed:sunset-rates`.
+
+**Port 5432 already in use** (another PostgreSQL on the machine)? Put `HOS_DB_PORT=5433` in `.env`, change `5432` to `5433` in the three `DATABASE_URL_*` lines, and use `localhost:5433` in the bootstrap command.
+
 Tests: `pnpm typecheck && pnpm test` (uses the `hos_test` and `hos_api_test` databases created by the bootstrap script).
 If you use a local PostgreSQL without Docker, install the contrib extensions (`btree_gist`, `pgcrypto`, `pg_trgm`, `citext`) and run the bootstrap with a superuser URL.
 The per-type room split in the Sunset seed is a placeholder — correct it after the observation week.
