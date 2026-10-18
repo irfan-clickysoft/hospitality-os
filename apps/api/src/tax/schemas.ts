@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { businessDate, uuid } from '../property-setup/schemas.js';
 
 const code = z.string().trim().toUpperCase().regex(/^[A-Z0-9_-]{2,30}$/, 'letters, digits, - and _ (2–30)');
-export const TXN_CODES = ['ROOM', 'ROOM_EXTRAS', 'FNB', 'LAUNDRY', 'TRANSPORT', 'MINIBAR', 'MISC', 'CANCEL_FEE', 'NOSHOW_FEE'] as const;
+export const TXN_CODES = ['ROOM', 'ROOM_EXTRAS', 'FNB', 'HALL', 'LAUNDRY', 'TRANSPORT', 'MINIBAR', 'MISC', 'CANCEL_FEE', 'NOSHOW_FEE'] as const;
 export const VersionBody = z.object({
   /** Basis points: 1600 = 16.00%. */
   rateBp: z.number().int().min(0).max(10000),

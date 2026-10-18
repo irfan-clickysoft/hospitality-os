@@ -59,9 +59,19 @@ export class PaymentsService {
       return { ...r.body, replayed: r.replayed };
     });
   }
+  /** Takes a payment on any open bill by its id — the bill of a conference-room hire has no reservation. */
+  async recordOnFolio(propertyId: string, folioId: string, userId: string, key: string, i: z.infer<typeof S.RecordPayment>) {
+    const hash = hashRequest('POST', `/v1/properties/${propertyId}/folios/${folioId}/payments`, i);
+    return this.tdb.tx(async (trx) => {
+      const r = await this.idem.run(trx, key, hash, async () => ({ statusCode: 201, body: await this.recordOnFolioIn(trx, propertyId, await this.folios.folioRow(trx, propertyId, folioId), userId, i) }));
+      return { ...r.body, replayed: r.replayed };
+    });
+  }
   private async recordIn(trx: Trx, propertyId: string, reservationId: string, userId: string, i: z.infer<typeof S.RecordPayment>) {
+    return this.recordOnFolioIn(trx, propertyId, await this.folios.ensureGuestFolio(trx, propertyId, reservationId), userId, i);
+  }
+  private async recordOnFolioIn(trx: Trx, propertyId: string, folio: { id: string; status: string; currency: string }, userId: string, i: z.infer<typeof S.RecordPayment>) {
     const p = await this.folios.property(trx, propertyId);
-    const folio = await this.folios.ensureGuestFolio(trx, propertyId, reservationId);
     await this.folios.folioRow(trx, propertyId, folio.id, true);
     if (folio.status !== 'OPEN') throw fail(409, 'FOLIO_NOT_OPEN', 'This folio is closed');
     const amount = Money.parse(i.amount, folio.currency).minor;

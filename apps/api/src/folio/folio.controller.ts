@@ -45,6 +45,13 @@ export class FolioController {
     reply.status(r.replayed ? 200 : 201);
     return r;
   }
+  /** The same, for a bill that has no reservation (a conference-room hire). */
+  @Post('folios/:folioId/payments') @RequirePermission('payment.take', P)
+  async payFolio(@Param('propertyId', uuid()) pid: string, @Param('folioId', uuid()) id: string, @Headers('idempotency-key') key: string | undefined, @Body() body: unknown, @Res({ passthrough: true }) reply: FastifyReply) {
+    const r = await this.payments.recordOnFolio(pid, id, me(), needKey(key), parse(S.RecordPayment, body));
+    reply.status(r.replayed ? 200 : 201);
+    return r;
+  }
   @Get('payments/pending') @RequirePermission('payment.verify', P)
   pending(@Param('propertyId', uuid()) pid: string) { return this.payments.pending(pid); }
   @Post('payments/:paymentId/verify') @RequirePermission('payment.verify', P) @HttpCode(200)
