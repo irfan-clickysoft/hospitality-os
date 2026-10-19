@@ -7,8 +7,8 @@ import { runWithTenant } from '../tenancy/tenant-context.js';
 import { PROPERTIES } from './sunset-data.js';
 
 /**
- * Seeds the Sunset pilot for local development: one tenant, three properties (Boulevard 9 rooms, Creek 10, Ramna 8) with the room types each one sells (see sunset-data.ts).
- * The split of rooms across types is a PLACEHOLDER (counts per property and the types are real; the per-type split must be corrected after the observation week).
+ * Seeds the Sunset pilot for local development: one tenant, three properties (Boulevard 9 rooms, Creek 10, Ramna 8) with the room types each one sells (see sunset-data.ts),
+ * with how many rooms of each type are on which floor (from the owner). The room NUMBERS are placeholders (101, 102… in order) until the owner says which number is which room.
  * Safe to run once per database; it refuses if the tenant slug already exists.
  */
 const OWNER_EMAIL = process.env.SEED_OWNER_EMAIL ?? 'owner@sunset.local';
@@ -22,11 +22,11 @@ try {
     for (const p of PROPERTIES) {
       const prop = await svc.createProperty({ legalEntityId: t.legalEntityId, code: p.code, name: p.name, timezone: p.tz, currency: 'PKR' });
       let n = p.firstRoom;
+      const floors = new Map<string, string>();
+      for (const [i, name] of p.floorOrder.entries()) floors.set(name, (await svc.createFloor(prop.id, { name, sortOrder: i, buildingId: null })).id);
       for (const [i, ty] of p.types.entries()) {
-        const floor = await svc.createFloor(prop.id, { name: ty.floor, sortOrder: i, buildingId: null }).catch(() => null);
         const rt = await svc.createRoomType(prop.id, { code: ty.code, name: ty.name, maxAdults: ty.maxAdults, maxChildren: 1, maxOccupancy: ty.maxOccupancy, baseOccupancy: Math.min(2, ty.maxOccupancy), defaultOverbookLimit: 0, sortOrder: i });
-        await svc.bulkRooms(prop.id, { roomTypeId: rt.id, floorId: floor?.id ?? null, from: n, to: n + ty.rooms - 1, prefix: '', smoking: false, accessible: false });
-        n += ty.rooms;
+        for (const [floor, count] of ty.floors) { await svc.bulkRooms(prop.id, { roomTypeId: rt.id, floorId: floors.get(floor)!, from: n, to: n + count - 1, prefix: '', smoking: false, accessible: false }); n += count; }
       }
       const live = await svc.goLive(prop.id, {});
       console.log(`✔ ${p.name} (${p.city}): ${n - p.firstRoom} rooms, live from ${live.businessDate}`);
