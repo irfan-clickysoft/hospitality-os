@@ -13,7 +13,7 @@ page.on('pageerror', (e) => { console.log('PAGEERROR', e.message); fail.push('pa
 await page.goto(BASE);
 await page.getByLabel(/Company code|کمپنی کوڈ/).fill('sunset');
 await page.getByLabel(/Email|ای میل/).fill('owner@sunset.local');
-await page.getByLabel(/Password|پاس ورڈ/).fill('sunset-demo-passphrase');
+await page.getByLabel(/Password|پاس ورڈ/).fill((process.env.E2E_PASSWORD ?? 'sunset-demo-passphrase'));
 await page.locator('form button.primary').click();
 await page.locator('nav.tabs').waitFor();
 
@@ -137,7 +137,7 @@ check('menu item added', true);
   const ph = await pctx.newPage();
   ph.on('pageerror', (e) => { console.log('PAGEERROR', e.message); fail.push('pageerror ' + e.message); });
   await ph.goto(BASE);
-  await ph.getByLabel(/Company code|کمپنی کوڈ/).fill('sunset'); await ph.getByLabel(/Email|ای میل/).fill('owner@sunset.local'); await ph.getByLabel(/Password|پاس ورڈ/).fill('sunset-demo-passphrase');
+  await ph.getByLabel(/Company code|کمپنی کوڈ/).fill('sunset'); await ph.getByLabel(/Email|ای میل/).fill('owner@sunset.local'); await ph.getByLabel(/Password|پاس ورڈ/).fill((process.env.E2E_PASSWORD ?? 'sunset-demo-passphrase'));
   await ph.locator('form button.primary').click(); await ph.locator('nav.tabs').waitFor();
   const visible = async () => (await ph.locator('nav.tabs button:visible').allTextContents());
   check('a section picker is shown', await ph.locator('select.groupsel').isVisible());

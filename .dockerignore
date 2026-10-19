@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/.turbo
+.git
+.github
+.env
+.env.*
+!.env.example
+coverage
+docs
+*.md
+!README.md
+apps/staff-web/e2e

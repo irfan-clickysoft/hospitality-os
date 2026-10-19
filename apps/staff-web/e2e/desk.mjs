@@ -13,7 +13,7 @@ async function login(ctx, email) {
   await page.goto(BASE);
   await page.getByLabel(/Company code/).fill('sunset');
   await page.getByLabel(/^Email/).fill(email);
-  await page.getByLabel(/^Password/).fill('sunset-demo-passphrase');
+  await page.getByLabel(/^Password/).fill((process.env.E2E_PASSWORD ?? 'sunset-demo-passphrase'));
   await page.locator('form button.primary').click();
   await page.locator('nav.tabs').waitFor();
   return page;
