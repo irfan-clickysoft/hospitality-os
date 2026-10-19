@@ -59,6 +59,8 @@ Not yet: reservations, rack, front desk, folio, payments, tax engine, night audi
 
 **Slice 30 (Rates screen, real room numbers and extras):** a **Rates** tab (Money section; for whoever manages rates) so prices are changed on screen, not by a developer: per room type the nightly price, an optional weekend price (blank = same as weekday), the extra-adult and extra-child price and how many adults and people it sleeps; the extra-mattress price for the plan; which days count as the weekend; and, for the international plan, the percentage above (or below) the local price. Saving is audited like any rate change. The seed now carries the real room numbers and floors, the extra-person and extra-mattress prices, and an international plan equal to the local price. The *weekend price not set* line is gone from the Setup check, since one price all week is the owner's decision. Needs no migration; run `bash scripts/reset-dev.sh` to rebuild.
 
+**Slice 31 (rooms screen):** a **Rooms** tab (Management section; whoever manages the property) listing rooms by floor with their type, where a room's **number, type, floor, notes, accessible/smoking flags** can be corrected and a room **retired** (not while guests are assigned or blocks are open), and a new room **added**. Renumbering is new in the API (`PATCH /rooms/:id` accepts `number`; numbers stay unique per property; audited); past bills and invoices keep the number they were made with. This is how the Ramna numbers are corrected without a developer. Needs no migration.
+
 ## Run it on your Mac (no cloud needed)
 Requires Node 22+, pnpm 10 (`corepack enable`), and Docker Desktop (or a local PostgreSQL 16). `psql` need not be installed: the scripts fall back to the one inside the database container.
 ```bash

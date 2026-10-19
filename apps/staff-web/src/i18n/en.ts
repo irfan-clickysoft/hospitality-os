@@ -479,6 +479,10 @@ export const en = {
   'nav.rates': 'Rates', 'rt.weekend': 'Which days are the weekend?', 'rt.weekendHelp': 'Rooms with a weekend price use it on these nights.', 'rt.price': 'Price per night', 'rt.weekendPrice': 'Weekend price', 'rt.sameAsWeekday': 'same as weekday',
   'rt.extraAdult': 'Extra adult', 'rt.extraChild': 'Extra child', 'rt.maxAdults': 'Most adults', 'rt.maxPeople': 'Most people', 'rt.extraBed': 'Extra bed (per night, whole plan)', 'rt.save': 'Save prices', 'rt.taxNote': 'Prices are before tax. Tax is added from the approved tax setup.',
   'rt.derived': 'This plan is worked out from “{parent}”.', 'rt.percent': 'Percent above (or below, with a minus) the other plan', 'rt.fixedDerive': 'This plan adds a fixed amount to the other plan; change that under setup.',
+  // rooms screen
+  'nav.rooms': 'Rooms', 'rm.add': 'Add a room', 'rm.edit': 'Edit', 'rm.save': 'Save', 'rm.noFloor': 'No floor', 'rm.retired': 'Out of use', 'rm.number': 'Room number', 'rm.type': 'Room type', 'rm.floor': 'Floor', 'rm.accessible': 'Accessible room', 'rm.smoking': 'Smoking room', 'rm.inUse': 'In use (untick to retire the room)',
+  'rm.note': 'Changing a number does not change past bills or invoices. A room with guests assigned cannot be retired.',
+  'err.DUPLICATE_ROOM': 'Another room already has that number.', 'err.ROOM_IN_USE': 'This room has current or future guests assigned. Move them first.', 'err.ROOM_HAS_BLOCKS': 'Cancel this room’s blocks before retiring it.',
   // conference room
   'nav.spaces': 'Conference room', 'sp.v.calendar': 'Calendar', 'sp.v.spaces': 'Spaces and prices', 'sp.newHire': 'New hire', 'sp.nothing': 'No hires in the next two weeks.', 'sp.noSpaces': 'No space is set up yet. Ask a manager to add the conference room under Spaces and prices.',
   'sp.creditNote': 'Credit note',

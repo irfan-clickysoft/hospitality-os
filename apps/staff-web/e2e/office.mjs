@@ -87,6 +87,21 @@ check('room sleeps 4', (await again.getByLabel('Most people').inputValue()) === 
 await page.getByRole('button', { name: 'Sat' }).click(); await page.waitForTimeout(500);
 await page.screenshot({ path: `${OUT}/25-rates.png` });
 
+// 3d. rooms: correct a room number and see it in the list
+await page.locator('nav.tabs button', { hasText: /^Rooms$/ }).click();
+await page.getByRole('heading', { name: 'Floor 1' }).waitFor();
+await page.locator('li.card', { hasText: '205' }).getByRole('button', { name: 'Edit' }).click();
+await page.getByLabel('Room number').fill('206');
+await page.getByRole('button', { name: 'Save', exact: true }).click();
+await page.locator('li.card', { hasText: '206' }).waitFor();
+check('room renumbered', await page.locator('li.card', { hasText: '205' }).count() === 0);
+await page.getByRole('button', { name: 'Add a room' }).click();
+await page.getByLabel('Room number').fill('301');
+await page.getByRole('button', { name: 'Save', exact: true }).click();
+await page.locator('li.card', { hasText: '301' }).waitFor();
+check('room added', true);
+await page.screenshot({ path: `${OUT}/26-rooms.png` });
+
 // 3b. tax: the owner's matrix is there as drafts waiting for approval
 await page.locator('nav.tabs button', { hasText: /^Tax$/ }).click();
 await page.getByText('SRB-ST15', { exact: false }).first().waitFor();

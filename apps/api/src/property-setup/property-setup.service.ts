@@ -285,7 +285,7 @@ export class PropertySetupService {
       const before = await trx.selectFrom('room').selectAll().where('id', '=', id).where('property_id', '=', propertyId).executeTakeFirst();
       if (!before) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room not found' });
       const m: Record<string, unknown> = { version: sql`version + 1` };
-      const map: Record<string, string> = { roomTypeId: 'room_type_id', floorId: 'floor_id', capacityOverride: 'capacity_override', bedConfig: 'bed_config', smoking: 'smoking', accessible: 'accessible', notes: 'notes', status: 'status' };
+      const map: Record<string, string> = { number: 'number', roomTypeId: 'room_type_id', floorId: 'floor_id', capacityOverride: 'capacity_override', bedConfig: 'bed_config', smoking: 'smoking', accessible: 'accessible', notes: 'notes', status: 'status' };
       for (const [k, col] of Object.entries(map)) if ((i as Record<string, unknown>)[k] !== undefined) m[col] = (i as Record<string, unknown>)[k];
       if (i.status === 'INACTIVE' && before.status === 'ACTIVE') {
         const open = await trx.selectFrom('room_block').select('id').where('room_id', '=', id).where('cancelled_at', 'is', null).where('end_date', '>', p.business_date).executeTakeFirst();
@@ -293,7 +293,9 @@ export class PropertySetupService {
         const assigned = await trx.selectFrom('room_assignment').select('id').where('room_id', '=', id).where('status', 'in', ['ASSIGNED', 'IN_HOUSE']).executeTakeFirst();
         if (assigned) throw new ConflictException({ code: 'ROOM_IN_USE', message: 'This room has current or future guests assigned. Move them first.' });
       }
-      const after = await trx.updateTable('room').set(m as never).where('id', '=', id).where('version', '=', i.version).returningAll().executeTakeFirst();
+      let after;
+      try { after = await trx.updateTable('room').set(m as never).where('id', '=', id).where('version', '=', i.version).returningAll().executeTakeFirst(); }
+      catch (e) { if ((e as { code?: string }).code === '23505') throw new ConflictException({ code: 'DUPLICATE_ROOM', message: `Another room already has the number ${i.number}` }); throw e; }
       if (!after) throw stale();
       if (i.connectingRoomId !== undefined) {
         await this.linkConnecting(trx, propertyId, id, i.connectingRoomId, before.connecting_room_id);

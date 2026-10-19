@@ -35,7 +35,7 @@ export const BulkRooms = z.object({
   prefix: z.string().max(4).regex(/^[A-Za-z0-9-]*$/).default(''), smoking: z.boolean().default(false), accessible: z.boolean().default(false),
 }).refine((v) => v.to >= v.from && v.to - v.from < 200, { message: 'range must be ascending and at most 200 rooms' });
 export const UpdateRoom = z.object({
-  roomTypeId: uuid.optional(), floorId: uuid.nullish(), capacityOverride: z.number().int().min(1).max(30).nullish(), bedConfig: z.string().max(120).nullish(),
+  number: roomNumber.optional(), roomTypeId: uuid.optional(), floorId: uuid.nullish(), capacityOverride: z.number().int().min(1).max(30).nullish(), bedConfig: z.string().max(120).nullish(),
   smoking: z.boolean().optional(), accessible: z.boolean().optional(), connectingRoomId: uuid.nullish(), notes: z.string().max(1000).nullish(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(), version: z.number().int(),
 });
