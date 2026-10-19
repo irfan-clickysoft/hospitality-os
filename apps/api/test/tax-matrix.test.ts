@@ -131,4 +131,25 @@ describe('the owner’s tax matrix', () => {
     const lines = (await folioOf(w, b)).postings.filter((p: any) => p.type === 'TAX').map((p: any) => [p.description, p.amount.amount]);
     expect(lines).toEqual([['SRB-ST15 15%', '150.00'], ['SRB-ST8D 8%', '80.00']]);
   });
+
+  it('cancellation and no-show fees carry the regular 15%; a booking cancelled free of charge has no fee and no tax, so everything paid comes back', async () => {
+    const w = await sunset(); await applyMatrix(w, 'SRB');
+    at('2026-11-05', '10:00'); await setBd(w, '2026-11-05');
+    const deposit = (b: { id: string }) => ok(call('POST', u(w, `reservations/${b.id}/payments`), O, { method: 'CARD_SLIP', amount: '12000', kind: 'DEPOSIT', cardLast4: '4242', reference: `RRN${++n}`, approvalCode: `A${n}` }, key()), 201);
+    const late = await book(w, { arrival: '2026-11-06', departure: '2026-11-07' }); await deposit(late);                  // inside the 72 hours
+    await ok(call('POST', u(w, `reservations/${late.id}/cancel`), O, { reason: 'Late change of plan' }));
+    const f1 = await folioOf(w, late);
+    expect(f1.postings.map((p: any) => [p.txnCode, p.amount.amount])).toEqual([['DEPOSIT', '-12000.00'], ['CANCEL_FEE', '12000.00'], ['TAX', '1800.00']]);
+    expect(f1.folio.balance.amount).toBe('1800.00');                                                                       // the 15% on the fee is still owed after the deposit is applied
+    const early = await book(w, { arrival: '2026-11-20', departure: '2026-11-21' }); await deposit(early);                 // well outside the 72 hours
+    await ok(call('POST', u(w, `reservations/${early.id}/cancel`), O, { reason: 'Plans changed' }));
+    const f2 = await folioOf(w, early);
+    expect(f2.postings.map((p: any) => p.txnCode)).toEqual(['DEPOSIT']);                                                   // no fee, no tax
+    expect(f2.folio.balance.amount).toBe('-12000.00');                                                                     // the whole deposit is due back to the guest
+    // a no-show is charged the same way
+    const ns = await book(w, { arrival: '2026-11-05', departure: '2026-11-06' });
+    await setBd(w, '2026-11-06'); at('2026-11-06', '03:00');
+    await ok(call('POST', u(w, `reservations/${ns.id}/no-show`), O, { reason: 'Did not arrive' }));
+    expect((await folioOf(w, ns)).postings.map((p: any) => [p.txnCode, p.amount.amount])).toEqual([['NOSHOW_FEE', '12000.00'], ['TAX', '1800.00']]);
+  });
 });

@@ -33,8 +33,9 @@ export const roomsOf = (p: PropertyDef) => p.types.reduce((a, ty) => a + ty.floo
 
 /**
  * The tax matrix the owner gave (rates as a percentage of the base price). Entered as drafts by seed:sunset-tax; approval is a separate step.
- * Not in the matrix, therefore untaxed until the owner says otherwise: extra bed/person (ROOM_EXTRAS is taxed here as part of accommodation — to be confirmed),
- * minibar, miscellaneous, cancellation and no-show fees. Karachi laundry is exempt in-house (no rate).
+ * Cancellation and no-show fees are taxed at the regular 15% (owner's answer): a booking cancelled free of charge has no fee and so no tax, and the guest is refunded in full;
+ * with a fee, the tax is added on the fee. Extra bed/person (ROOM_EXTRAS) is taxed here as part of accommodation — to be confirmed. Not in the matrix, therefore untaxed
+ * until the owner says otherwise: minibar and miscellaneous. Karachi laundry is exempt in-house (no rate).
  */
 export interface TaxCodeDef { code: string; name: string; rateBp: number; appliesTo: string[] }
 export interface ReviewDef { txnCode: string; kind: 'WHT_REVIEW' | 'VENDOR_VERIFICATION'; message: string }
@@ -42,11 +43,11 @@ export interface TaxAreaDef { jurisdiction: string; authority: string; propertyC
 export const TAX_MATRIX: TaxAreaDef[] = [
   { jurisdiction: 'FBR-ICT', authority: 'Federal Board of Revenue (FBR), Islamabad', propertyCodes: ['RAMNA'], reviews: [{ txnCode: 'TRANSPORT_THIRDPARTY', kind: 'WHT_REVIEW', message: 'Third-party transport: review withholding tax before paying the vendor.' }],
     codes: [
-      { code: 'ICT-ST15', name: 'Islamabad sales tax on services 15%', rateBp: 1500, appliesTo: ['ROOM', 'ROOM_EXTRAS', 'FNB', 'HALL', 'TRANSPORT_OWNED', 'TRANSPORT_THIRDPARTY', 'LAUNDRY'] },
+      { code: 'ICT-ST15', name: 'Islamabad sales tax on services 15%', rateBp: 1500, appliesTo: ['ROOM', 'ROOM_EXTRAS', 'FNB', 'HALL', 'TRANSPORT_OWNED', 'TRANSPORT_THIRDPARTY', 'LAUNDRY', 'CANCEL_FEE', 'NOSHOW_FEE'] },
       { code: 'ICT-ST5D', name: 'Islamabad sales tax on food paid digitally 5%', rateBp: 500, appliesTo: ['FNB_DIGITAL'] }] },
   { jurisdiction: 'SRB', authority: 'Sindh Revenue Board (SRB), Karachi', propertyCodes: ['BLVD', 'CREEK'], reviews: [{ txnCode: 'TRANSPORT_THIRDPARTY', kind: 'VENDOR_VERIFICATION', message: 'Third-party transport: verify the vendor (registration) before paying.' }],
     codes: [
-      { code: 'SRB-ST15', name: 'Sindh sales tax on services 15%', rateBp: 1500, appliesTo: ['ROOM', 'ROOM_EXTRAS', 'FNB', 'HALL'] },
+      { code: 'SRB-ST15', name: 'Sindh sales tax on services 15%', rateBp: 1500, appliesTo: ['ROOM', 'ROOM_EXTRAS', 'FNB', 'HALL', 'CANCEL_FEE', 'NOSHOW_FEE'] },
       { code: 'SRB-ST8D', name: 'Sindh sales tax 8% (food paid digitally, transport)', rateBp: 800, appliesTo: ['FNB_DIGITAL', 'TRANSPORT_OWNED', 'TRANSPORT_THIRDPARTY'] }] },
 ];
 
