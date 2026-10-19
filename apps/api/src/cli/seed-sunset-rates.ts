@@ -5,12 +5,12 @@ import { createDb, resolveTenantBySlug, withTenant } from '@hos/db';
 import { RatesService } from '../rates/rates.service.js';
 import { runWithTenant } from '../tenancy/tenant-context.js';
 import { loadConfig } from '../config.js';
-import { PROPERTIES } from './sunset-data.js';
+import { EXTRAS, INTERNATIONAL_UPLIFT_BP, PROPERTIES } from './sunset-data.js';
 
 /**
- * Adds the rate plans to the seeded Sunset tenant: BAR (local) with the owner's rate card per room type (sunset-data.ts), and INTL (+25%).
- * NOT yet given, so left neutral or marked placeholder: the weekend price (none: every night is the card price), extra adult / child / bed (0),
- * and the +25% international uplift (placeholder). Safe to re-run: skips properties that already have a BAR plan.
+ * Adds the rate plans to the seeded Sunset tenant: BAR (local) with the owner's rate card per room type (sunset-data.ts), and INTL (international guests, +0% for now).
+ * Weekend and weekday prices are the same (no weekend price). Extra person (breakfast included) and extra mattress are the owner's prices; the international plan is
+ * +0% for now (foreign and local guests pay the same) so it can be changed later. Safe to re-run: skips properties that already have a BAR plan.
  */
 const SLUG = process.env.SEED_TENANT_SLUG ?? 'sunset';
 const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn'] });
@@ -28,14 +28,14 @@ try {
       if (!def) { console.log(`• ${p.name}: not in the rate card, skipped`); continue; }
       const types = await withTenant(db, t.id, (trx) => trx.selectFrom('room_type').select(['id', 'code']).where('property_id', '=', p.id).execute());
       const bar = await rates.createPlan(p.id, { code: 'BAR', name: 'Best Available Rate (local)', mealPlan: 'ROOM_ONLY', audience: 'PUBLIC', residency: 'RESIDENT',
-        channels: ['DIRECT', 'PHONE', 'WALKIN', 'OTA', 'CORPORATE', 'AGENT'], companyIds: [], minLos: 1, minAdvanceDays: 0, extraBed: '0', extraAdultMeal: '0', extraChildMeal: '0',
+        channels: ['DIRECT', 'PHONE', 'WALKIN', 'OTA', 'CORPORATE', 'AGENT'], companyIds: [], minLos: 1, minAdvanceDays: 0, extraBed: EXTRAS.extraBed, extraAdultMeal: '0', extraChildMeal: '0',
         cancellationRule: { freeUntilHoursBefore: 72, feeType: 'NIGHTS', feeValue: 1 }, noShowRule: { feeType: 'NIGHTS', feeValue: 1 }, depositRule: { type: 'NIGHTS', value: 1, dueWithinHours: 24 }, sortOrder: 0 });
-      await rates.setBaseRates(p.id, bar.id, { items: types.map((ty) => ({ roomTypeId: ty.id, amount: def.types.find((x) => x.code === ty.code)!.price, extraAdult: '0', extraChild: '0' })) });
-      await rates.createPlan(p.id, { code: 'INTL', name: 'International guests (+25%)', mealPlan: 'ROOM_ONLY', audience: 'PUBLIC', residency: 'NON_RESIDENT',
-        channels: ['DIRECT', 'PHONE', 'WALKIN', 'OTA', 'CORPORATE', 'AGENT'], companyIds: [], minLos: 1, minAdvanceDays: 0, extraBed: '0', extraAdultMeal: '0', extraChildMeal: '0',
+      await rates.setBaseRates(p.id, bar.id, { items: types.map((ty) => ({ roomTypeId: ty.id, amount: def.types.find((x) => x.code === ty.code)!.price, extraAdult: EXTRAS.extraAdult, extraChild: EXTRAS.extraChild })) });
+      await rates.createPlan(p.id, { code: 'INTL', name: 'International guests', mealPlan: 'ROOM_ONLY', audience: 'PUBLIC', residency: 'NON_RESIDENT',
+        channels: ['DIRECT', 'PHONE', 'WALKIN', 'OTA', 'CORPORATE', 'AGENT'], companyIds: [], minLos: 1, minAdvanceDays: 0, extraBed: EXTRAS.extraBed, extraAdultMeal: '0', extraChildMeal: '0',
         cancellationRule: { freeUntilHoursBefore: 72, feeType: 'NIGHTS', feeValue: 1 }, noShowRule: { feeType: 'NIGHTS', feeValue: 1 }, depositRule: { type: 'NIGHTS', value: 1, dueWithinHours: 24 }, sortOrder: 1,
-        derive: { parentPlanId: bar.id, type: 'PERCENT', value: 2500, roundTo: '100' } });
-      console.log(`✔ ${p.name}: BAR from the rate card + INTL (+25% placeholder)`);
+        derive: { parentPlanId: bar.id, type: 'PERCENT', value: INTERNATIONAL_UPLIFT_BP, roundTo: '100' } });
+      console.log(`✔ ${p.name}: BAR from the rate card + INTL (same as local for now)`);
     }
   });
 } finally { await db.destroy(); await app.close(); }

@@ -475,6 +475,10 @@ export const en = {
   'kt.payDigital': 'The guest will pay digitally (card, wallet or bank) — taxed at the digital rate', 'kt.digital': 'digital',
   'cr.title': 'Charges to review', 'cr.none': 'No charges are waiting for review.', 'cr.k.WHT_REVIEW': 'Withholding-tax review', 'cr.k.VENDOR_VERIFICATION': 'Vendor verification', 'cr.done': 'Mark reviewed', 'cr.note': 'What did you check? (kept on record)',
   'err.ALREADY_DONE': 'This review is already closed.',
+  // rates screen
+  'nav.rates': 'Rates', 'rt.weekend': 'Which days are the weekend?', 'rt.weekendHelp': 'Rooms with a weekend price use it on these nights.', 'rt.price': 'Price per night', 'rt.weekendPrice': 'Weekend price', 'rt.sameAsWeekday': 'same as weekday',
+  'rt.extraAdult': 'Extra adult', 'rt.extraChild': 'Extra child', 'rt.maxAdults': 'Most adults', 'rt.maxPeople': 'Most people', 'rt.extraBed': 'Extra bed (per night, whole plan)', 'rt.save': 'Save prices', 'rt.taxNote': 'Prices are before tax. Tax is added from the approved tax setup.',
+  'rt.derived': 'This plan is worked out from “{parent}”.', 'rt.percent': 'Percent above (or below, with a minus) the other plan', 'rt.fixedDerive': 'This plan adds a fixed amount to the other plan; change that under setup.',
   // conference room
   'nav.spaces': 'Conference room', 'sp.v.calendar': 'Calendar', 'sp.v.spaces': 'Spaces and prices', 'sp.newHire': 'New hire', 'sp.nothing': 'No hires in the next two weeks.', 'sp.noSpaces': 'No space is set up yet. Ask a manager to add the conference room under Spaces and prices.',
   'sp.creditNote': 'Credit note',
@@ -495,7 +499,7 @@ export const en = {
   'rd.ENTITY_NTN': 'Company NTN entered (goes on every tax invoice)', 'rd.ENTITY_STRN': 'Company STRN entered (goes on every tax invoice)', 'rd.STAFF_MFA': 'Staff without a second factor: {n}',
   'rd.TAX_JURISDICTION': 'Tax area chosen for this property (until then charges are not taxed)', 'rd.TAX_RATES': 'Approved tax rate in force for this property’s tax area (until then charges are not taxed)',
   'rd.RATES': 'Nightly price for every room type (room types without one: {n})', 'rd.ROOMTYPE_EMPTY': 'Room types that have no rooms yet: {n}', 'rd.EXTRAS': 'Extra-person prices (room types where an extra person is free: {n})',
-  'rd.WEEKEND': 'Separate weekend price (without one, every night costs the same). Weekend days: {d}', 'rd.PAYMENT_ACCOUNTS': 'A payment account to receive money into', 'rd.MENU': 'Kitchen menu has items', 'rd.SPACES': 'Conference room set up with prices',
+ 'rd.PAYMENT_ACCOUNTS': 'A payment account to receive money into', 'rd.MENU': 'Kitchen menu has items', 'rd.SPACES': 'Conference room set up with prices',
   // staff, account, audit
   'nav.staff': 'Staff', 'nav.audit2': 'Audit trail', 'acct.title': 'My account',
   'inv2.title': 'Choose your password', 'inv2.help': 'Use at least 12 characters. A few ordinary words together make a strong password.', 'inv2.new': 'New password', 'inv2.again': 'New password again', 'inv2.set': 'Save password', 'inv2.done': 'Your password is saved. You can sign in now.',

@@ -40,7 +40,8 @@ try {
     if (!has) await admin.insertInto('role_assignment').values({ tenant_id: tenant.id, user_id: u.id, role_id: role.id, ...(m.role === 'accountant' ? { scope_type: 'TENANT', scope_id: null } : { scope_type: 'PROPERTY', scope_id: prop.id }), limits: '{}' } as never).execute();
     ids[m.email] = u.id;
   }
-  const rooms = await admin.selectFrom('room').select(['id', 'number']).where('property_id', '=', prop.id).orderBy('number').execute();
+  // rooms in type order (cheapest type first): the first four stay clean, so the front-desk demo always has a clean Standard room to sell
+  const rooms = await admin.selectFrom('room').innerJoin('room_type', 'room_type.id', 'room.room_type_id').select(['room.id as id', 'room.number as number']).where('room.property_id', '=', prop.id).orderBy('room_type.sort_order').orderBy('room.number').execute();
   const hk = app.get(HousekeepingService);
   await runWithTenant({ tenantId: tenant.id, actorId: owner.id, requestId: 'seed-demo-staff' }, async () => {
     const existing = await admin.selectFrom('housekeeping_task').select('id').where('property_id', '=', prop.id).executeTakeFirst();

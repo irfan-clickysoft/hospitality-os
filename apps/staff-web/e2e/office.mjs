@@ -68,6 +68,25 @@ await page.getByRole('link', { name: /Print.*INV-/ }).waitFor();
 check('invoice shows with a print link', true);
 await page.screenshot({ path: `${OUT}/21-hire-done.png` });
 
+// 3c. rates: the owner sets a weekend price, an extra-adult price and how many people a type sleeps; they are still there after a reload
+await page.locator('nav.tabs button', { hasText: /^Rates$/ }).click();
+await page.getByText('Price per night').first().waitFor();
+const first = page.locator('li.card', { hasText: 'Standard Room' });
+await first.getByLabel('Weekend price').fill('15000');
+await first.getByLabel('Extra adult').fill('3000');
+await first.getByLabel('Most people').fill('4');
+await page.getByRole('button', { name: 'Save prices' }).click();
+await page.waitForTimeout(800);
+await page.reload(); await page.locator('nav.tabs').waitFor();
+await page.locator('nav.tabs button', { hasText: /^Rates$/ }).click();
+const again = page.locator('li.card', { hasText: 'Standard Room' });
+await again.getByLabel('Weekend price').waitFor();
+check('weekend price kept', (await again.getByLabel('Weekend price').inputValue()) === '15000.00');
+check('extra adult kept', (await again.getByLabel('Extra adult').inputValue()) === '3000.00');
+check('room sleeps 4', (await again.getByLabel('Most people').inputValue()) === '4');
+await page.getByRole('button', { name: 'Sat' }).click(); await page.waitForTimeout(500);
+await page.screenshot({ path: `${OUT}/25-rates.png` });
+
 // 3b. tax: the owner's matrix is there as drafts waiting for approval
 await page.locator('nav.tabs button', { hasText: /^Tax$/ }).click();
 await page.getByText('SRB-ST15', { exact: false }).first().waitFor();

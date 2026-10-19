@@ -54,8 +54,6 @@ export class ReadinessService {
         if (noRooms) add({ code: 'ROOMTYPE_EMPTY', status: 'NOTE', count: noRooms, ...base });
         const zeroExtras = types.rows.filter((x) => x.amount && x.extra_adult !== null && BigInt(x.extra_adult) === 0n).length;
         add({ code: 'EXTRAS', status: zeroExtras === 0 ? 'OK' : 'NOTE', count: zeroExtras, ...base });
-        const anyWeekend = types.rows.some((x) => x.weekend !== null);
-        add({ code: 'WEEKEND', status: anyWeekend ? 'OK' : 'NOTE', detail: (p.weekend_days as number[] | null)?.join(','), ...base });
 
         const accts = (await sql<{ n: string }>`SELECT count(*)::text AS n FROM payment_account WHERE tenant_id = ${t} AND (property_id = ${p.id} OR property_id IS NULL) AND status = 'ACTIVE'`.execute(trx)).rows[0]!.n;
         add({ code: 'PAYMENT_ACCOUNTS', status: Number(accts) > 0 ? 'OK' : 'ACTION', ...base });

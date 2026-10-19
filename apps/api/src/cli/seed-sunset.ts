@@ -8,7 +8,7 @@ import { PROPERTIES } from './sunset-data.js';
 
 /**
  * Seeds the Sunset pilot for local development: one tenant, three properties (Boulevard 9 rooms, Creek 10, Ramna 8) with the room types each one sells (see sunset-data.ts),
- * with how many rooms of each type are on which floor (from the owner). The room NUMBERS are placeholders (101, 102… in order) until the owner says which number is which room.
+ * with the real room numbers and floors (from the owner).
  * Safe to run once per database; it refuses if the tenant slug already exists.
  */
 const OWNER_EMAIL = process.env.SEED_OWNER_EMAIL ?? 'owner@sunset.local';
@@ -21,15 +21,15 @@ try {
   await runWithTenant({ tenantId: t.tenantId, actorId: t.ownerUserId, requestId: 'seed-sunset' }, async () => {
     for (const p of PROPERTIES) {
       const prop = await svc.createProperty({ legalEntityId: t.legalEntityId, code: p.code, name: p.name, timezone: p.tz, currency: 'PKR' });
-      let n = p.firstRoom;
       const floors = new Map<string, string>();
       for (const [i, name] of p.floorOrder.entries()) floors.set(name, (await svc.createFloor(prop.id, { name, sortOrder: i, buildingId: null })).id);
+      let count = 0;
       for (const [i, ty] of p.types.entries()) {
         const rt = await svc.createRoomType(prop.id, { code: ty.code, name: ty.name, maxAdults: ty.maxAdults, maxChildren: 1, maxOccupancy: ty.maxOccupancy, baseOccupancy: Math.min(2, ty.maxOccupancy), defaultOverbookLimit: 0, sortOrder: i });
-        for (const [floor, count] of ty.floors) { await svc.bulkRooms(prop.id, { roomTypeId: rt.id, floorId: floors.get(floor)!, from: n, to: n + count - 1, prefix: '', smoking: false, accessible: false }); n += count; }
+        for (const [floor, numbers] of ty.floors) for (const number of numbers) { await svc.createRoom(prop.id, { roomTypeId: rt.id, number, floorId: floors.get(floor)!, smoking: false, accessible: false }); count++; }
       }
       const live = await svc.goLive(prop.id, {});
-      console.log(`✔ ${p.name} (${p.city}): ${n - p.firstRoom} rooms, live from ${live.businessDate}`);
+      console.log(`✔ ${p.name} (${p.city}): ${count} rooms, live from ${live.businessDate}`);
     }
   });
   console.log(`\nTenant "${SLUG}" created.\nOwner: ${OWNER_EMAIL}\nOne-time invite token (valid 7 days):\n  ${t.ownerInviteToken}\n`);
