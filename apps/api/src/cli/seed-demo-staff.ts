@@ -10,7 +10,12 @@ import { runWithTenant } from '../tenancy/tenant-context.js';
  * Development only. Adds a housekeeping team, a front-desk agent and a property admin to the seeded Sunset Boulevard property, with a shared dev password, and queues a few rooms so the staff app has
  * something to show. Run after `seed:sunset`. Refuses to run in production.
  */
-if (process.env.NODE_ENV === 'production') throw new Error('seed-demo-staff is for local development only');
+// Local development uses a well-known dev password. A hosted TEST copy (HOS_TEST_COPY=1) may create the same demo users, but only with a password the host chose: it must come from DEMO_PASSWORD
+// and be at least 12 characters, never the built-in default. Real (production) businesses never get demo users.
+if (process.env.NODE_ENV === 'production') {
+  if (process.env.HOS_TEST_COPY !== '1') throw new Error('seed-demo-staff is for local development and hosted test copies only');
+  if ((process.env.DEMO_PASSWORD ?? '').length < 12) throw new Error('a hosted test copy needs DEMO_PASSWORD (at least 12 characters, chosen by you)');
+}
 const SLUG = process.env.SEED_TENANT_SLUG ?? 'sunset';
 const PASSWORD = process.env.DEMO_PASSWORD ?? 'sunset-demo-passphrase';
 const TEAM = [
@@ -54,10 +59,10 @@ try {
       await hk.createManual(prop.id, owner.id, { roomId: room.id, taskType: type, priority, notes: priority === 1 ? 'VIP arriving this afternoon' : null, assignTo: who ? ids[who] : undefined });
     }
   });
-  console.log(`\nDemo housekeeping team created for ${SLUG} / Sunset BnB Boulevard (password for all: ${PASSWORD}):`);
+  console.log(`\nDemo housekeeping team created for ${SLUG} / Sunset BnB Boulevard (password for all: ${process.env.NODE_ENV === 'production' ? 'the DEMO_PASSWORD you set' : PASSWORD}):`);
   for (const m of TEAM) console.log(`  ${m.email.padEnd(22)} ${m.role}`);
   console.log(`  ${'owner@sunset.local'.padEnd(22)} group_owner (whole business; set up the second factor under My account)`);
-  console.log('\nStart the API (pnpm --filter @hos/api dev) and the staff app (pnpm --filter @hos/staff-web dev), then open http://localhost:3001');
+  if (process.env.NODE_ENV !== 'production') console.log('\nStart the API (pnpm --filter @hos/api dev) and the staff app (pnpm --filter @hos/staff-web dev), then open http://localhost:3001');
 } finally {
   await app.close(); await admin.destroy();
 }
