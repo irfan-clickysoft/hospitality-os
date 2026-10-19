@@ -76,6 +76,14 @@ Not yet: reservations, rack, front desk, folio, payments, tax engine, night audi
 **Slice 43 (the gate, and the printable registration card):** a **Gate** tab for gate security (Urdu or English, built for a phone): today's **expected arrivals with the name shortened** ("Sara K.") and nothing else about the guest, who is **at the property now**, and a **log** of visitors, vehicles, deliveries and contractors coming in and going out (name or vehicle number, phone, a purpose, whom they are visiting, and at most the last four characters of an ID shown, never the whole number); gone-out entries move to today's list; every entry is audited. The front desk and managers see the gate too. New demo user `gate@sunset.local` (Urdu). Separately, a guest's room line now has a **Registration card** button that opens a printable card (booking, room, dates, every guest with their ID type and number and nationality, signature lines for the guest and the front desk); ID numbers print masked unless someone with the right (and a fresh second factor) asks for the full numbers, which is recorded like viewing them on screen. The phone header no longer wraps the property name onto three lines. Migration `0024`; run `pnpm --filter @hos/api roles:sync` (gate permissions added to the front desk and manager roles). Not built: gate-pass codes for guests' visitors, photos, and exporting the gate log.
 
 ## Run it on your Mac (no cloud needed)
+**Quickest way:** open Terminal, go **into** the project folder, then run one command (it installs, builds, sets up the database in Docker, loads the demo business, starts everything and opens the browser):
+```bash
+cd ~/hospitality-os          # the folder you cloned; every command below must be run from inside it
+git pull                     # get the latest
+bash scripts/start-local.sh  # first run takes a few minutes; Ctrl-C stops it; run it again any time to start (your data is kept)
+```
+Needs Node 22+ and Docker Desktop (open and running). Do not run `pnpm` commands from your home folder: pnpm must be run inside the project (it also picks the right pnpm version from the project, `pnpm@10`). The manual steps are below if you prefer them.
+
 Requires Node 22+, pnpm 10 (`corepack enable`), and Docker Desktop (or a local PostgreSQL 16). `psql` need not be installed: the scripts fall back to the one inside the database container.
 ```bash
 pnpm install
