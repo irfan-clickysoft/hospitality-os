@@ -80,11 +80,19 @@ describe('the cash safe and the weekly handover to head office', () => {
     await code(hand('29900', { receivedByName: 'x' }), 400, 'VALIDATION_FAILED');
     const part = await ok(hand('20000', { note: 'Rest kept for a supplier payment' }), 201);
     expect(part.balance.amount).toBe('9900.00');
+    at('2026-11-05', '11:00');                                                                                         // a later handover, later in the day
     const done = await ok(call('POST', SAFE(w, '/handovers'), as(T.tenantId, gm.id, { mfa: true }), { amount: '9900', receivedByName: 'M Hamza', safeBefore: '9900' }), 201);
     expect(done.balance.amount).toBe('0.00');
     const after = await ok(call('GET', SAFE(w), O));
     expect(after.handedOver.amount).toBe('29900.00');
     expect(after.handovers.map((x: any) => [x.amount.amount, x.difference.amount, x.receivedBy])).toEqual([['9900.00', '0.00', 'M Hamza'], ['20000.00', '-9900.00', 'M Hamza']]);
+    // the printed receipt: the handover, both names, the envelopes since the previous handover, signature lines, escaped
+    const rc = await call('GET', SAFE(w, `/handovers/${part.id}/print`), O);
+    expect(rc.statusCode).toBe(200); expect(rc.headers['content-type']).toContain('text/html'); expect(rc.headers['content-security-policy']).toContain("default-src 'none'");
+    expect(rc.body).toContain('CASH HANDOVER TO HEAD OFFICE'); expect(rc.body).toContain('M Hamza'); expect(rc.body).toContain('20,000.00'); expect(rc.body).toContain('Register 1'); expect(rc.body).toContain('Register 2'); expect(rc.body).toContain('Rest kept for a supplier payment');
+    const rc2 = await call('GET', SAFE(w, `/handovers/${done.id}/print`), O); expect(rc2.body).toContain('Envelopes closed since');                      // the second receipt starts after the first handover
+    expect(rc2.body).not.toContain('Register 1');
+    await code(call('GET', SAFE(w, `/handovers/${part.id}/print`), desk.h), 403, 'PERMISSION_DENIED');
     // handovers are for good: the table refuses edits
     await expect(adminDb.updateTable('cash_handover').set({ amount_minor: '1' }).where('id', '=', part.id).execute()).rejects.toThrow();
   });

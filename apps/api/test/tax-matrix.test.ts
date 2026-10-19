@@ -72,7 +72,7 @@ beforeAll(async () => {
 });
 
 describe('the owner’s tax matrix', () => {
-  it('Karachi (SRB): rooms, cash food and the conference room at 15%; digital food and transport at 8%; laundry exempt; codes not in the matrix untaxed', async () => {
+  it('Karachi (SRB): rooms, cash food and the conference room at 15%; digital food and transport at 8%; laundry exempt; minibar and miscellaneous at 15%', async () => {
     const w = await sunset(); await applyMatrix(w, 'SRB');
     at('2026-11-05', '10:00'); await setBd(w, '2026-11-05');
     const b = await book(w, { arrival: '2026-11-05', departure: '2026-11-07' }); await checkIn(w, b, '101'); const f = await fid(w, b);
@@ -82,7 +82,8 @@ describe('the owner’s tax matrix', () => {
     expect(await t('TRANSPORT_OWNED')).toEqual([['SRB-ST8D', 80]]);
     expect(await t('TRANSPORT_THIRDPARTY')).toEqual([['SRB-ST8D', 80]]);
     expect(await t('LAUNDRY')).toEqual([]);                                                                  // exempt in-house
-    expect(await t('MINIBAR')).toEqual([]);                                                                  // not in the matrix: untaxed until the owner says otherwise
+    expect(await t('MINIBAR')).toEqual([['SRB-ST15', 150]]);                                                 // confirmed by the owner: 15%
+    expect(await t('MISC')).toEqual([['SRB-ST15', 150]]);
     // conference room hire and the room nights
     const s = await ok(call('POST', u(w, 'spaces'), O, { name: 'Conference room', hourly: '5000' }), 201);
     const h = await ok(call('POST', u(w, 'spaces/bookings'), O, { spaceId: s.id, eventName: 'Board', hostName: 'Mr Khan', date: '2026-11-05', startTime: '14:00', endTime: '16:00', pricing: 'HOURLY', billTo: 'SEPARATE' }), 201);

@@ -488,6 +488,7 @@ export const en = {
   'safe.envelopes': 'Envelopes (by day and register)', 'safe.variance': 'difference', 'safe.handovers': 'Handed over so far', 'safe.inSafe': 'The safe should hold', 'safe.amount': 'Amount handed over', 'safe.receivedBy': 'Received by', 'safe.title2': 'Role',
   'safe.why': 'Why is it less than the whole safe?', 'safe.count': 'Count the cash and the envelopes with the person receiving it. This is recorded for good.', 'safe.confirm': 'Record handover',
   'err.SAFE_CHANGED': 'The safe balance has changed since you looked. Check the new balance and try again.', 'err.HANDOVER_EXCEEDS_SAFE': 'That is more cash than the envelopes say the safe holds.',
+  'safe.print': 'Print receipt',
   // conference room
   'nav.spaces': 'Conference room', 'sp.v.calendar': 'Calendar', 'sp.v.spaces': 'Spaces and prices', 'sp.newHire': 'New hire', 'sp.nothing': 'No hires in the next two weeks.', 'sp.noSpaces': 'No space is set up yet. Ask a manager to add the conference room under Spaces and prices.',
   'sp.creditNote': 'Credit note',

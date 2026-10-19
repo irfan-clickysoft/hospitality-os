@@ -34,7 +34,7 @@ export function CashSafe() {
         <ul className="plain small">{s.envelopes.slice(0, 14).map((e, i) => <li key={`${e.date}${e.register}${i}`} className="row between"><span>{e.date} · {e.register}</span><span>{money(e.amount)}{e.variance.amount !== '0.00' ? <span className="muted"> ({t('safe.variance')} {money(e.variance)})</span> : null}</span></li>)}</ul>)}
       <h3>{t('safe.handovers')}</h3>
       {s.handovers.length === 0 ? <p className="muted small">{t('common.none')}</p> : (
-        <ul className="plain small">{s.handovers.map((h) => <li key={h.id} className="stack"><div className="row between"><span>{h.date} · {h.receivedBy}{h.receivedByTitle ? ` (${h.receivedByTitle})` : ''}</span><strong>{money(h.amount)}</strong></div>{h.note && <span className="muted">{h.note}</span>}</li>)}</ul>)}
+        <ul className="plain small">{s.handovers.map((h) => <li key={h.id} className="stack"><div className="row between"><span>{h.date} · {h.receivedBy}{h.receivedByTitle ? ` (${h.receivedByTitle})` : ''}</span><strong>{money(h.amount)}</strong></div>{h.note && <span className="muted">{h.note}</span>}<a className="link" href={`${base}/handovers/${h.id}/print`} target="_blank" rel="noreferrer">{t('safe.print')}</a></li>)}</ul>)}
       {dlg && <Handover base={base} balance={s.balance} onDone={() => { setDlg(false); safe.reload(); }} onClose={() => setDlg(false)} />}
     </div>
   );

@@ -490,6 +490,7 @@ export const ur: Record<Key, string> = {
   'safe.envelopes': 'لفافے (دن اور رجسٹر کے مطابق)', 'safe.variance': 'فرق', 'safe.handovers': 'اب تک حوالے کیا گیا', 'safe.inSafe': 'تجوری میں ہونا چاہیے', 'safe.amount': 'حوالے کی گئی رقم', 'safe.receivedBy': 'وصول کنندہ', 'safe.title2': 'عہدہ',
   'safe.why': 'پوری تجوری سے کم کیوں؟', 'safe.count': 'وصول کرنے والے کے ساتھ نقدی اور لفافے گنیں۔ یہ ہمیشہ کے لیے درج ہوتا ہے۔', 'safe.confirm': 'حوالگی درج کریں',
   'err.SAFE_CHANGED': 'آپ کے دیکھنے کے بعد تجوری کا بیلنس بدل گیا ہے۔ نیا بیلنس دیکھ کر دوبارہ کوشش کریں۔', 'err.HANDOVER_EXCEEDS_SAFE': 'یہ لفافوں کے مطابق تجوری میں موجود نقدی سے زیادہ ہے۔',
+  'safe.print': 'رسید پرنٹ کریں',
   // conference room
   'nav.spaces': 'کانفرنس روم', 'sp.v.calendar': 'کیلنڈر', 'sp.v.spaces': 'جگہیں اور قیمتیں', 'sp.newHire': 'نئی بکنگ', 'sp.nothing': 'اگلے دو ہفتوں میں کوئی بکنگ نہیں۔', 'sp.noSpaces': 'ابھی کوئی جگہ درج نہیں۔ مینیجر سے کہیں کہ "جگہیں اور قیمتیں" میں کانفرنس روم شامل کرے۔',
   'sp.creditNote': 'کریڈٹ نوٹ',
