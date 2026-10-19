@@ -1,4 +1,5 @@
 import type { Key } from './en.js';
+import { uxUr } from './ux.js';
 
 /** اردو — same keys as English; the compiler rejects a missing or extra key. */
 export const ur: Record<Key, string> = {
@@ -545,4 +546,5 @@ export const ur: Record<Key, string> = {
   'rp.r.payment-accounts': 'ادائیگی کھاتے', 'rp.d.payment-accounts': 'ہر کھاتے میں آنے جانے والی رقم، اور جو کھاتے کمپنی کے نہیں ان پر نشان۔',
   'err.RANGE_TOO_LONG': 'کم مدت چنیں (زیادہ سے زیادہ 400 دن)۔',
   'rp.badPeriod': 'تاریخیں دیکھیں: آخری تاریخ شروع سے پہلے نہیں ہو سکتی۔',
+  ...uxUr,
 };

@@ -1,0 +1,40 @@
+/** One small set of outline icons (24×24, 2px stroke). Always decorative: the meaning is in the label next to them. */
+const P = {
+  today: 'M3 11l9-8 9 8M5 10v10h14V10M10 20v-6h4v6',
+  reservations: 'M4 5h16v14H4zM4 10h16M9 5v14',
+  calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+  rooms: 'M3 18v-7a3 3 0 013-3h12a3 3 0 013 3v7M3 15h18M3 18v2M21 18v2M7 8V6h4v2',
+  housekeeping: 'M12 3v6M8 9h8l1 12H7zM9 14h6',
+  guests: 'M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2 20c0-3.5 3-6 7-6s7 2.500 7 6M17 5a3 3 0 010 6M19 14c2 .6 3 2.600 3 6',
+  inbox: 'M3 13l3-8h12l3 8v6H3zM3 13h5a4 4 0 008 0h5',
+  tasks: 'M14.500 6.500a4 4 0 00-5 5L3 18l3 3 6.500-6.500a4 4 0 005-5L15 12l-3-3z',
+  reports: 'M4 20V10M10 20V4M16 20v-8M22 20H2',
+  admin: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19 12l2-1-2-4-2 .5a7 7 0 00-1.500-1L15 4h-4l-.5 2.500a7 7 0 00-1.500 1L7 7l-2 4 2 1a7 7 0 000 2l-2 1 2 4 2-.5a7 7 0 001.500 1L11 22h4l.5-2.500a7 7 0 001.500-1l2 .5 2-4-2-1a7 7 0 000-2z',
+  search: 'M11 18a7 7 0 100-14 7 7 0 000 14zM21 21l-5-5',
+  bell: 'M6 16V11a6 6 0 1112 0v5l2 2H4zM10 21h4',
+  menu: 'M4 6h16M4 12h16M4 18h16',
+  chevron: 'M9 6l6 6-6 6',
+  chevronDown: 'M6 9l6 6 6-6',
+  check: 'M5 12.500l4.500 4.500L19 7.500',
+  alert: 'M12 3l10 18H2zM12 10v5M12 18v.01',
+  stop: 'M8 3h8l5 5v8l-5 5H8l-5-5V8zM8 8l8 8',
+  info: 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 11v6M12 7.500v.01',
+  clock: 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2',
+  half: 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 3v18',
+  dot: 'M12 16a4 4 0 100-8 4 4 0 000 8z',
+  ring: 'M12 20a8 8 0 100-16 8 8 0 000 16z',
+  x: 'M6 6l12 12M18 6L6 18',
+  offline: 'M2 8.500a15 15 0 0120 0M5 12.500a10 10 0 0114 0M8.500 16a5 5 0 017 0M12 19.500v.01M3 3l18 18',
+  lock: 'M6 11h12v10H6zM8 11V8a4 4 0 118 0v3',
+  user: 'M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 3.500-6 8-6s8 2 8 6',
+  card: 'M2 6h20v12H2zM2 10h20M6 15h4',
+  key: 'M8 15a4 4 0 100-8 4 4 0 000 8zM11 11h10v3M17 11v3',
+  swap: 'M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7',
+  undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3',
+  print: 'M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z',
+  panel: 'M3 4h18v16H3zM9 4v16',
+} as const;
+export type IconName = keyof typeof P;
+export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
+  return <svg className="icon-svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d={P[name]} /></svg>;
+}

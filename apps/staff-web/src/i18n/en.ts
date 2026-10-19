@@ -1,3 +1,4 @@
+import { uxEn } from './ux.js';
 /** English strings. Urdu (ur.ts) must define exactly the same keys — the compiler and a test enforce it. */
 export const en = {
   'app.name': 'Sunset Staff',
@@ -543,5 +544,6 @@ export const en = {
   'rp.r.payment-accounts': 'Payment accounts', 'rp.d.payment-accounts': 'Money in and out of each account, with accounts that are not the company’s marked.',
   'err.RANGE_TOO_LONG': 'Choose a shorter period (at most 400 days).',
   'rp.badPeriod': 'Check the dates: the end cannot be before the start.',
+  ...uxEn,
 } as const;
 export type Key = keyof typeof en;
