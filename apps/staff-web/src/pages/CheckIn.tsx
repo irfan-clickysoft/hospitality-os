@@ -3,7 +3,7 @@ import { api, ApiError, NetworkError } from '../api/client.js';
 import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
 import { useAction } from '../lib/action.js';
-import { useStepUp } from '../lib/stepup.js';
+import { StepUpSlot, useStepUp } from '../lib/stepup.js';
 import { useAuth, useWork } from '../state.js';
 import { ApprovalBox } from '../desk/ComplianceBits.js';
 import { blankOccupant, occupantBody, type Occupant } from '../desk/CheckInSheet.js';
@@ -151,6 +151,7 @@ export function CheckIn({ stay }: { stay: Stay }) {
         <ApprovalBox problem={problem} busy={busy} onApprove={(reason) => void submit(reason)} />
       </section>
 
+      <StepUpSlot />
       <div className="actionbar" role="region" aria-label={t('ci.title')}>
         <div className="ab-msg" role="status" aria-live="polite">
           {reasons.length ? <><Icon name="alert" size={16} /> <span>{reasons.join(' · ')}</span>{attempted && missing.length > 0 && <ul className="plain small">{missing.map((m) => <li key={m}>{m}</li>)}</ul>}</> : <><Icon name="check" size={16} /> <span>{t('ci.ready')}</span></>}

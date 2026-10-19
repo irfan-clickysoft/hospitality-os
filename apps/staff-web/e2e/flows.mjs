@@ -240,6 +240,27 @@ await page.goto(`${BASE}/#/reservations/${early.id}/check-out`);
 await page.getByRole('heading', { name: 'Check out', level: 2 }).waitFor();
 check('leaving a balance unpaid needs a manager: the front desk is told, not offered a button', await page.getByText('Letting a guest leave with a balance needs a manager').count() === 1 || await page.getByText('Other ways to close this bill').count() === 0);
 
+// second factor, in place: the server asks for a step-up while the move panel is open (the answer is simulated; the prompt must appear inside the panel, not over it)
+let asked = false;
+await page.route('**/rooms/*/move', async (route) => { if (!asked) { asked = true; await route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ code: 'MFA_REQUIRED', detail: 'step-up' }) }); } else await route.continue(); });
+await page.route('**/v1/auth/mfa/verify', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+const stepper = await book(hira, pid, { name: `Step Up ${stamp}`, phone: `0300${stamp}7`, arrival: bd, type: 'EXE' });
+await checkInApi(hira, stepper, '202', `Step Up ${stamp}`);
+await page.goto(`${BASE}/#/reservations/${stepper.id}?panel=move`);
+const zp = page.getByRole('dialog', { name: /Move Step Up/ });
+await zp.getByRole('heading', { name: 'Ready now' }).waitFor();
+await zp.getByRole('button', { name: /^102/ }).click();
+await zp.getByRole('button', { name: 'Room not ready' }).click();
+await zp.getByRole('button', { name: 'Move to 102' }).click();
+await zp.locator('.stepup-slot').waitFor();
+check('second factor is asked inside the panel, and no second dialog is opened', await page.getByRole('dialog').count() === 1);
+await zp.locator('.stepup-slot input').fill('123456');
+await zp.locator('.stepup-slot button.primary').click();
+await zp.waitFor({ state: 'detached' });
+await page.getByText(/Room changed at \d\d:\d\d · now Room 102/).waitFor();
+check('after the code the move goes through without starting over', true);
+await page.unroute('**/rooms/*/move'); await page.unroute('**/v1/auth/mfa/verify');
+
 // ═════════ other roles ═════════
 const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 860 } });
 const hk = await login(ctx2, 'bilal@sunset.local');

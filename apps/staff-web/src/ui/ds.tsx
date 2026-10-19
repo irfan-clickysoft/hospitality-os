@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
+import { StepUpSlot } from '../lib/stepup.js';
 import { Icon, type IconName } from './icons.js';
 
 /** Status is always icon + word + tone. Colour alone never carries meaning. */
@@ -85,7 +86,7 @@ export function SidePanel({ title, subtitle, onClose, children, footer }: { titl
       <div className="panel-backdrop" onClick={onClose} aria-hidden="true" />
       <div className="panel" role="dialog" aria-modal="true" aria-labelledby="panel-title" ref={ref}>
         <div className="panel-head"><div><h2 id="panel-title">{title}</h2>{subtitle && <p className="muted small">{subtitle}</p>}</div><button className="icon" onClick={onClose} aria-label={t('common.close')}><Icon name="x" /></button></div>
-        <div className="panel-body">{children}</div>
+        <div className="panel-body"><StepUpSlot />{children}</div>
         {footer && <div className="panel-foot">{footer}</div>}
       </div>
     </div>
