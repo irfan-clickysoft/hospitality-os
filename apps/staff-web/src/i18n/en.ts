@@ -489,6 +489,10 @@ export const en = {
   'safe.why': 'Why is it less than the whole safe?', 'safe.count': 'Count the cash and the envelopes with the person receiving it. This is recorded for good.', 'safe.confirm': 'Record handover',
   'err.SAFE_CHANGED': 'The safe balance has changed since you looked. Check the new balance and try again.', 'err.HANDOVER_EXCEEDS_SAFE': 'That is more cash than the envelopes say the safe holds.',
   'safe.print': 'Print receipt',
+  // gate
+  'nav.gate': 'Gate', 'd.regCard': 'Registration card', 'gt.log': 'Log someone in', 'gt.in': 'Log in', 'gt.out': 'Gone out', 'gt.expected': 'Expected today', 'gt.inHouse': '{n} in the house', 'gt.noArrivals': 'No arrivals expected today.', 'gt.people': 'people', 'gt.arrived': 'Arrived', 'gt.coming': 'Expected',
+  'gt.here': 'At the property now', 'gt.nobody': 'Nobody logged in.', 'gt.today': 'Gone out today', 'gt.visiting': 'Visiting', 'gt.name': 'Name', 'gt.plate': 'Vehicle number', 'gt.phone': 'Phone', 'gt.purpose': 'Purpose', 'gt.id4': 'Last 4 of the ID shown (if any)',
+  'gt.privacy': 'Only the last four characters of an ID are kept, never the whole number.', 'gt.k.VISITOR': 'Visitor', 'gt.k.VEHICLE': 'Vehicle', 'gt.k.DELIVERY': 'Delivery', 'gt.k.CONTRACTOR': 'Contractor',
   // conference room
   'nav.spaces': 'Conference room', 'sp.v.calendar': 'Calendar', 'sp.v.spaces': 'Spaces and prices', 'sp.newHire': 'New hire', 'sp.nothing': 'No hires in the next two weeks.', 'sp.noSpaces': 'No space is set up yet. Ask a manager to add the conference room under Spaces and prices.',
   'sp.creditNote': 'Credit note',

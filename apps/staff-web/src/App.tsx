@@ -18,6 +18,7 @@ import { Spaces } from './desk/Spaces.js';
 import { Readiness } from './desk/Readiness.js';
 import { Rates } from './desk/Rates.js';
 import { Rooms } from './desk/Rooms.js';
+import { Gate as GatePage } from './desk/Gate.js';
 import { Account } from './desk/Account.js';
 import { AuditLog } from './desk/AuditLog.js';
 import { Staff } from './desk/Staff.js';
@@ -36,7 +37,7 @@ import { errorText } from './i18n/index.js';
 
 type Group = 'front' | 'house' | 'money' | 'manage';
 const GROUPS: Group[] = ['front', 'house', 'money', 'manage'];
-type Tab = 'today' | 'management' | 'rack' | 'bookings' | 'cashier' | 'companies' | 'ota' | 'maintenance' | 'compliance' | 'accounts' | 'kitchen' | 'spaces' | 'readiness' | 'rates' | 'rooms' | 'reports' | 'staff' | 'trail' | 'import' | 'audit' | 'tax' | 'mine' | 'board' | 'issues' | 'lost';
+type Tab = 'today' | 'management' | 'rack' | 'bookings' | 'cashier' | 'companies' | 'ota' | 'maintenance' | 'compliance' | 'accounts' | 'kitchen' | 'spaces' | 'readiness' | 'rates' | 'rooms' | 'gate' | 'reports' | 'staff' | 'trail' | 'import' | 'audit' | 'tax' | 'mine' | 'board' | 'issues' | 'lost';
 
 function Shell() {
   const { t, locale, setLocale } = useT();
@@ -45,6 +46,7 @@ function Shell() {
   const [account, setAccount] = useState(false);
   const tabs = useMemo(() => [
     can('management.view') && { id: 'management' as Tab, label: 'nav.management' as Key, group: 'manage' as Group },
+    (can('visitor.log') || can('arrivals.view_masked')) && { id: 'gate' as Tab, label: 'nav.gate' as Key, group: 'front' as Group },
     can('reservation.view') && { id: 'today' as Tab, label: 'nav.today' as Key, group: 'front' as Group },
     can('reservation.view') && { id: 'rack' as Tab, label: 'nav.rack' as Key, group: 'front' as Group },
     can('reservation.view') && { id: 'bookings' as Tab, label: 'nav.bookings' as Key, group: 'front' as Group },
@@ -97,7 +99,7 @@ function Shell() {
       {work.pending.length > 0 && <div className="banner" role="status">{t('banner.pending', { n: work.pending.length })}</div>}
       {work.notices.length > 0 && <div className="banner warn" role="alert">{t('banner.dropped', { n: work.notices.length })} <small>({[...new Set(work.notices.map((n) => errorText(locale, n.code)))].join(' ')})</small> <button className="link" onClick={work.clearNotices}>{t('common.close')}</button></div>}
       <main key={property.id} className="content">
-        {tab === 'today' && <Today />}{tab === 'management' && <Management />}{tab === 'rack' && <Rack />}{tab === 'bookings' && <Bookings />}{tab === 'cashier' && <Cashier />}{tab === 'companies' && <Companies />}{tab === 'ota' && <OtaTab />}{tab === 'import' && <Import />}{tab === 'maintenance' && <Maintenance />}{tab === 'compliance' && <Compliance />}{tab === 'accounts' && <Accounts />}{tab === 'kitchen' && <Kitchen />}{tab === 'spaces' && <Spaces />}{tab === 'readiness' && <Readiness />}{tab === 'rates' && <Rates />}{tab === 'rooms' && <Rooms />}{tab === 'reports' && <Reports />}{tab === 'staff' && <Staff />}{tab === 'trail' && <AuditLog />}{tab === 'audit' && <NightAudit />}{tab === 'tax' && <Tax />}{tab === 'mine' && <MyRooms />}{tab === 'board' && <Board />}{tab === 'issues' && <Issues />}{tab === 'lost' && <LostFound />}
+        {tab === 'today' && <Today />}{tab === 'management' && <Management />}{tab === 'rack' && <Rack />}{tab === 'bookings' && <Bookings />}{tab === 'cashier' && <Cashier />}{tab === 'companies' && <Companies />}{tab === 'ota' && <OtaTab />}{tab === 'import' && <Import />}{tab === 'maintenance' && <Maintenance />}{tab === 'compliance' && <Compliance />}{tab === 'accounts' && <Accounts />}{tab === 'kitchen' && <Kitchen />}{tab === 'spaces' && <Spaces />}{tab === 'readiness' && <Readiness />}{tab === 'rates' && <Rates />}{tab === 'rooms' && <Rooms />}{tab === 'gate' && <GatePage />}{tab === 'reports' && <Reports />}{tab === 'staff' && <Staff />}{tab === 'trail' && <AuditLog />}{tab === 'audit' && <NightAudit />}{tab === 'tax' && <Tax />}{tab === 'mine' && <MyRooms />}{tab === 'board' && <Board />}{tab === 'issues' && <Issues />}{tab === 'lost' && <LostFound />}
         {tabs.length === 0 && <p className="muted center">{t('err.PERMISSION_DENIED')}</p>}
       </main>
       <nav className="tabs" aria-label="main">

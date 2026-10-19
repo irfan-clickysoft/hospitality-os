@@ -105,4 +105,4 @@ a.button { display: inline-flex; align-items: center; min-height: var(--tap); pa
   .sheet { max-width: 720px; border-radius: 20px; align-self: center; max-height: 92dvh; } .sheet-wrap { align-items: center; }
   .tiles { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
 }
-@media (max-width: 899px) { .tabs { overflow-x: auto; } .tabs button { flex: 1 0 auto; min-width: 84px; padding: 0 10px; } }
+@media (max-width: 899px) { .top { flex-wrap: wrap; } .top .who { flex: 1 1 100%; } .top .row { flex-wrap: wrap; gap: 4px 12px; } .tabs { overflow-x: auto; } .tabs button { flex: 1 0 auto; min-width: 84px; padding: 0 10px; } }

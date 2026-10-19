@@ -79,7 +79,7 @@ function Quick({ label, run, done }: { label: string; run: () => Promise<unknown
 
 function LineCard({ r, l, businessDate, open }: { r: ReservationDetail; l: Line; businessDate: string; open: (k: 'checkin' | 'checkout' | 'assign' | 'cancel' | 'noshow' | 'move') => void }) {
   const { t, locale } = useT();
-  const { can } = useAuth();
+  const { can, property } = useAuth();
   const a = l.allowedActions;
   const canArrive = a.includes('CHECK_IN') && l.arrival <= businessDate && businessDate < l.departure && can('frontdesk.check_in');
   return (
@@ -91,6 +91,7 @@ function LineCard({ r, l, businessDate, open }: { r: ReservationDetail; l: Line;
         {a.includes('CHECK_OUT') && can('frontdesk.check_out') && <button className="primary" onClick={() => open('checkout')}>{t('co.title')}</button>}
         {(l.status === 'CONFIRMED' || l.status === 'OPTION') && can('reservation.modify') && <button onClick={() => open('assign')}>{l.assignedRoom ? t('d.changeRoom') : t('d.assignRoom')}</button>}
         {l.status === 'CHECKED_IN' && can('frontdesk.check_in') && <button onClick={() => open('move')}>{t('d.moveRoom')}</button>}
+        {(l.status === 'CHECKED_IN' || l.status === 'CHECKED_OUT') && <a className="button" href={`/v1/properties/${property!.id}/reservations/${r.id}/rooms/${l.id}/registration-card`} target="_blank" rel="noreferrer">{t('d.regCard')}</a>}
         {a.includes('CANCEL') && can('reservation.cancel') && <button onClick={() => open('cancel')}>{t('d.cancel')}</button>}
         {a.includes('NO_SHOW') && l.arrival <= businessDate && can('reservation.cancel') && <button onClick={() => open('noshow')}>{t('d.noShow')}</button>}
       </div>
