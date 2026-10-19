@@ -16,7 +16,7 @@ const any = (...p: string[]) => (can: Can) => p.some(can);
 export const SECTIONS: Section[] = [
   { id: 'today', path: '/today', label: 'nav.today', icon: 'today', show: () => true, primary: true },
   { id: 'reservations', path: '/reservations', label: 'nav.reservations', icon: 'reservations', show: any('reservation.view', 'cashier.operate', 'company.view', 'ota.claim', 'space.view'), primary: true, tabs: [
-    { id: 'bookings', label: 'nav.bookings', show: any('reservation.view'), Page: L(() => import('../desk/Bookings.js'), 'Bookings') },
+    { id: 'bookings', label: 'nav.bookings', show: any('reservation.view'), Page: L(() => import('../pages/ReservationsList.js'), 'ReservationsList') },
     { id: 'cashier', label: 'nav.cashier', show: any('cashier.operate'), Page: L(() => import('../desk/Cashier.js'), 'Cashier') },
     { id: 'companies', label: 'nav.companies', show: any('company.view'), Page: L(() => import('../desk/Companies.js'), 'Companies') },
     { id: 'ota', label: 'nav.ota', show: any('ota.claim'), Page: L(() => import('../desk/OtaClaims.js'), 'OtaTab') },
