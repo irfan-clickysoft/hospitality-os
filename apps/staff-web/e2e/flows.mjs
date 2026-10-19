@@ -266,6 +266,15 @@ await page.getByText(/Room changed at \d\d:\d\d · now Room 102/).waitFor();
 check('after the code the move goes through without starting over', true);
 await page.unroute('**/rooms/*/move'); await page.unroute('**/v1/auth/mfa/verify');
 
+// the bookings list: filters live in the address, search finds by name, a row opens the workspace
+await page.goto(`${BASE}/#/reservations?tab=bookings&view=cancelled`);
+await page.getByRole('link', { name: new RegExp(`Third Guest ${stamp}`) }).waitFor();
+check('the Cancelled filter lists cancelled bookings, and the filter is in the address', page.url().includes('view=cancelled') && await page.getByRole('link', { name: new RegExp(`Imran Siddiqui ${stamp}`) }).count() === 0);
+await page.getByRole('searchbox').fill(`Faisal Raza ${stamp}`);
+await page.getByRole('link', { name: new RegExp(`Faisal Raza ${stamp}`) }).click();
+await page.getByRole('heading', { name: `Faisal Raza ${stamp}`, level: 1 }).waitFor();
+check('searching by name finds a booking and opens its workspace', true);
+
 // ═════════ other roles ═════════
 const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 860 } });
 const hk = await login(ctx2, 'bilal@sunset.local');
