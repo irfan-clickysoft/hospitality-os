@@ -66,7 +66,7 @@ function CreateSheet({ base, onDone, onClose }: { base: string; onDone: () => vo
         <label>{t('mt.area')}<input value={f.area} onChange={set('area')} /></label></div>
       <div className="grid2"><label>{t('mt.dueDate')}<input type="date" value={f.dueDate} onChange={set('dueDate')} dir="ltr" /></label>
         <label>{t('mt.assignTo')}<select value={f.assignedTo} onChange={set('assignedTo')}><option value="">—</option>{techs.data?.items.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label></div>
-      {f.roomId && <label className="row"><input type="checkbox" checked={f.ooo} onChange={(e) => setF({ ...f, ooo: e.target.checked, to: e.target.checked && !f.to ? addDays(f.from || new Date().toISOString().slice(0, 10), 2) : f.to })} /> {t('mt.takeOut')}</label>}
+      {f.roomId && <label className="row"><input type="checkbox" checked={f.ooo} onChange={(e) => setF({ ...f, ooo: e.target.checked, to: e.target.checked && !f.to ? addDays(f.from || property!.businessDate, 2) : f.to })} /> {t('mt.takeOut')}</label>}
       {f.roomId && f.ooo && <div className="grid2"><label>{t('mt.from')}<input type="date" value={f.from} onChange={set('from')} dir="ltr" /></label><label>{t('mt.backOn')}<input type="date" value={f.to} onChange={set('to')} dir="ltr" /></label></div>}
       <ErrorLine code={problem?.code} detail={problem?.detail} />
       <div className="actions"><button className="primary" disabled={busy || f.title.trim().length < 3 || (f.ooo && (!f.from || !f.to))} onClick={go}>{t('common.save')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>

@@ -141,7 +141,8 @@ function CompanySheet({ id, onChanged, onClose }: { id: string; onChanged: () =>
 
 function ReceiptSheet({ company, onDone, onClose }: { company: Company; onDone: () => void; onClose: () => void }) {
   const { t } = useT();
-  const today = new Date().toISOString().slice(0, 10);
+  const { property } = useAuth();
+  const today = property!.businessDate;
   const [f, setF] = useState({ method: 'BANK_TRANSFER', amount: '', reference: '', counterparty: '', receivedOn: today, withheld: '', withholdingRef: '', account: '' });
   const { busy, problem, run } = useAction(); const [sent, setSent] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
