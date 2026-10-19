@@ -483,6 +483,11 @@ export const en = {
   'nav.rooms': 'Rooms', 'rm.add': 'Add a room', 'rm.edit': 'Edit', 'rm.save': 'Save', 'rm.noFloor': 'No floor', 'rm.retired': 'Out of use', 'rm.number': 'Room number', 'rm.type': 'Room type', 'rm.floor': 'Floor', 'rm.accessible': 'Accessible room', 'rm.smoking': 'Smoking room', 'rm.inUse': 'In use (untick to retire the room)',
   'rm.note': 'Changing a number does not change past bills or invoices. A room with guests assigned cannot be retired.',
   'err.DUPLICATE_ROOM': 'Another room already has that number.', 'err.ROOM_IN_USE': 'This room has current or future guests assigned. Move them first.', 'err.ROOM_HAS_BLOCKS': 'Cancel this room’s blocks before retiring it.',
+  // cash safe
+  'safe.title': 'Safe (cash waiting for head office)', 'safe.help': 'Each closed register adds its day’s envelope: what was counted, less the float left in the drawer, plus anything dropped into the safe. Handovers take cash out. The cash is not banked.', 'safe.handover': 'Hand over to head office',
+  'safe.envelopes': 'Envelopes (by day and register)', 'safe.variance': 'difference', 'safe.handovers': 'Handed over so far', 'safe.inSafe': 'The safe should hold', 'safe.amount': 'Amount handed over', 'safe.receivedBy': 'Received by', 'safe.title2': 'Role',
+  'safe.why': 'Why is it less than the whole safe?', 'safe.count': 'Count the cash and the envelopes with the person receiving it. This is recorded for good.', 'safe.confirm': 'Record handover',
+  'err.SAFE_CHANGED': 'The safe balance has changed since you looked. Check the new balance and try again.', 'err.HANDOVER_EXCEEDS_SAFE': 'That is more cash than the envelopes say the safe holds.',
   // conference room
   'nav.spaces': 'Conference room', 'sp.v.calendar': 'Calendar', 'sp.v.spaces': 'Spaces and prices', 'sp.newHire': 'New hire', 'sp.nothing': 'No hires in the next two weeks.', 'sp.noSpaces': 'No space is set up yet. Ask a manager to add the conference room under Spaces and prices.',
   'sp.creditNote': 'Credit note',

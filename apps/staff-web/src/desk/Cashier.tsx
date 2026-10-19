@@ -7,6 +7,7 @@ import { money } from '../lib/format.js';
 import { useStepUp } from '../lib/stepup.js';
 import { useAuth, useLive } from '../state.js';
 import { Badge, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
+import { CashSafe } from './CashSafe.js';
 import type { Amount } from './types.js';
 
 interface Session {
@@ -30,6 +31,7 @@ export function Cashier() {
   return (
     <section>
       <h2>{t('nav.cashier')}</h2>
+      <CashSafe />
       {!s ? (
         <div className="card stack"><p>{t('cash.none')}</p><div className="actions"><button className="primary" onClick={() => setDlg('open')}>{t('cash.open')}</button></div></div>
       ) : (

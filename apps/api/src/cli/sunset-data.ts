@@ -49,3 +49,17 @@ export const TAX_MATRIX: TaxAreaDef[] = [
       { code: 'SRB-ST15', name: 'Sindh sales tax on services 15%', rateBp: 1500, appliesTo: ['ROOM', 'ROOM_EXTRAS', 'FNB', 'HALL'] },
       { code: 'SRB-ST8D', name: 'Sindh sales tax 8% (food paid digitally, transport)', rateBp: 800, appliesTo: ['FNB_DIGITAL', 'TRANSPORT_OWNED', 'TRANSPORT_THIRDPARTY'] }] },
 ];
+
+/**
+ * The bank accounts the owner described. Account numbers are not recorded here (add the last four characters on the Accounts screen).
+ * Three are in the owner's PERSONAL name, one per property, used for transfers the owner describes as non-tax personal transfers; the fourth is the company's account for taxable invoices
+ * and company transfers. Accounts not owned by the company are recorded and flagged in every report: nothing is hidden. Cash is not an account: it is counted per register, kept in
+ * each property's safe as daily envelopes, and handed to head office weekly (see the cash safe).
+ */
+export interface AccountDef { name: string; bankName: string; accountTitle: string; ownerType: 'COMPANY' | 'PERSONAL'; ownerName: string | null; propertyCode: string | null; note: string }
+export const ACCOUNTS: AccountDef[] = [
+  { name: 'Faysal Bank — Farooq Saleh (Creek)', bankName: 'Faysal Bank', accountTitle: 'Farooq Saleh', ownerType: 'PERSONAL', ownerName: 'Farooq Saleh', propertyCode: 'CREEK', note: 'Non-tax personal transfers of Sunset Creek' },
+  { name: 'Bank Alfalah — Farooq Saleh (Boulevard)', bankName: 'Bank Alfalah', accountTitle: 'Farooq Saleh', ownerType: 'PERSONAL', ownerName: 'Farooq Saleh', propertyCode: 'BLVD', note: 'Non-tax personal transfers of Sunset BnB Boulevard' },
+  { name: 'Bank Al Habib — Farooq Saleh (Ramna)', bankName: 'Bank Al Habib', accountTitle: 'Farooq Saleh', ownerType: 'PERSONAL', ownerName: 'Farooq Saleh', propertyCode: 'RAMNA', note: 'Non-tax personal transactions of Sunset BnB Ramna' },
+  { name: 'Bank Al Habib — Sunset BNB (company)', bankName: 'Bank Al Habib', accountTitle: 'Sunset BNB', ownerType: 'COMPANY', ownerName: null, propertyCode: null, note: 'Taxable invoices and company transfers' },
+];

@@ -87,6 +87,15 @@ check('room sleeps 4', (await again.getByLabel('Most people').inputValue()) === 
 await page.getByRole('button', { name: 'Sat' }).click(); await page.waitForTimeout(500);
 await page.screenshot({ path: `${OUT}/25-rates.png` });
 
+// 3e. money: the owner's bank accounts (personal ones flagged) and the cash safe
+await page.locator('nav.tabs button', { hasText: /^Accounts$/ }).click();
+await page.getByText('Faysal Bank — Farooq Saleh (Creek)').waitFor();
+check('bank accounts are recorded, personal ones flagged', await page.getByText('Bank Al Habib — Sunset BNB (company)').count() > 0);
+await page.screenshot({ path: `${OUT}/27-accounts.png` });
+await page.locator('nav.tabs button', { hasText: /^Cashier$/ }).click();
+await page.getByText('Safe (cash waiting for head office)').waitFor();
+check('cash safe shown to the owner', true);
+
 // 3d. rooms: correct a room number and see it in the list
 await page.locator('nav.tabs button', { hasText: /^Rooms$/ }).click();
 await page.getByRole('heading', { name: 'Floor 1' }).waitFor();
