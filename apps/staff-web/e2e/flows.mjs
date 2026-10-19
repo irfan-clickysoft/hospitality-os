@@ -141,6 +141,7 @@ check('after review the workspace shows the guest as in house', await rail.getBy
 await page.goto(`${BASE}/#/reservations/${faisal.id}?done=checkin`);
 await page.getByText(/Checked in at \d\d:\d\d/).waitFor();
 check('a completed check-in stays on the page as a card (not a toast)', true);
+check('… with the printable registration card one click away', (await page.getByRole('link', { name: /Registration card/i }).first().getAttribute('href')).includes('/registration-card'));
 await page.getByRole('button', { name: 'Undo check-in' }).click();
 check('undo asks for a reason first', await page.getByRole('group', { name: 'Undo check-in' }).getByLabel(/Reason/).count() === 1);
 await page.getByRole('group', { name: 'Undo check-in' }).getByLabel(/Reason/).fill('Guest changed plans');

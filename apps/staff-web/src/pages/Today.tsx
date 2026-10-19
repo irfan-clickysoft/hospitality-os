@@ -12,6 +12,7 @@ import { Chip, Empty } from '../ui/kit.js';
 import type { Amount, ListItem } from '../desk/types.js';
 
 const MyRooms = lazy(() => import('../screens/MyRooms.js').then((m) => ({ default: m.MyRooms })));
+const Gate = lazy(() => import('../desk/Gate.js').then((m) => ({ default: m.Gate })));
 const Maintenance = lazy(() => import('../desk/Maintenance.js').then((m) => ({ default: m.Maintenance })));
 
 export interface Blocker { code: string; level: Level; amount?: Amount }
@@ -116,6 +117,7 @@ export function Today() {
   const persona = personaOf(can);
   if (can('reservation.view')) return <DeskToday />;
   if (can('housekeeping.update')) return <section><div className="page-head"><h1>{t('nav.today')}</h1></div><MyRooms /></section>;
+  if (can('visitor.log') || can('arrivals.view_masked')) return <section><div className="page-head"><h1>{t('nav.today')}</h1></div><Gate /></section>;
   if (can('maintenance.view')) return <section><div className="page-head"><h1>{t('nav.today')}</h1></div><Maintenance /></section>;
   return (
     <section><div className="page-head"><h1>{t('nav.today')}</h1></div>
