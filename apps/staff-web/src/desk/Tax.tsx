@@ -127,7 +127,8 @@ function Jurisdictions({ d, onDone }: { d: Codes; onDone: () => void }) {
 
 function LiabilityCard({ propertyId }: { propertyId: string }) {
   const { t } = useT();
-  const today = new Date().toISOString().slice(0, 10);
+  const { property } = useAuth();
+  const today = property!.businessDate;                  // the property's business day, not the browser's (UTC) calendar date
   const [from, setFrom] = useState(`${today.slice(0, 8)}01`); const [to, setTo] = useState(today);
   const q = useLive<Liability>(/^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to) ? `/v1/properties/${propertyId}/tax/liability?from=${from}&to=${to}` : null, 120_000);
   return (
