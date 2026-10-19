@@ -243,6 +243,7 @@ check('leaving a balance unpaid needs a manager: the front desk is told, not off
 // ═════════ other roles ═════════
 const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 860 } });
 const hk = await login(ctx2, 'bilal@sunset.local');
+await hk.getByRole('heading', { name: 'Today', level: 1 }).waitFor();
 check('a housekeeper sees only their areas, and Today is their rooms', await nav(hk).getByRole('link', { name: 'Reservations' }).count() === 0 && await nav(hk).getByRole('link', { name: 'Housekeeping' }).count() === 1 && await hk.getByRole('heading', { name: 'Today', level: 1 }).count() === 1);
 await hk.goto(`${BASE}/#/reservations/${faisal.id}`);
 await hk.locator('.banner2').first().waitFor();
