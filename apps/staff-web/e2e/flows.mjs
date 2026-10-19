@@ -244,6 +244,7 @@ await page.screenshot({ path: `${OUT}/f09-checked-out.png` });
 // early departure and permission limits
 await page.goto(`${BASE}/#/reservations/${early.id}/check-out`);
 await page.getByRole('heading', { name: 'Check out', level: 2 }).waitFor();
+await page.getByText('How is it being settled?').waitFor();
 check('leaving a balance unpaid needs a manager: the front desk is told, not offered a button', await page.getByText('Letting a guest leave with a balance needs a manager').count() === 1 || await page.getByText('Other ways to close this bill').count() === 0);
 
 // second factor, in place: the server asks for a step-up while the move panel is open (the answer is simulated; the prompt must appear inside the panel, not over it)
@@ -283,6 +284,14 @@ await page.getByRole('searchbox').fill(`Faisal Raza ${stamp}`);
 await page.getByRole('link', { name: new RegExp(`Faisal Raza ${stamp}`) }).click();
 await page.getByRole('heading', { name: `Faisal Raza ${stamp}`, level: 1 }).waitFor();
 check('searching by name finds a booking and opens its workspace', true);
+
+// the manager's Today: what only a manager can decide sits above the desk queue
+const flagged = await book(hira, pid, { name: `Flagged Guest ${stamp}`, phone: `0300${stamp}8`, arrival: bd, nights: 1, type: 'DLX' });
+await mgr.patch(`/v1/guests/${flagged.guestId}`, { doNotRent: true, version: (await mgr.get(`/v1/guests/${flagged.guestId}`)).version });
+const mgrPage = await login(await browser.newContext({ viewport: { width: 1280, height: 860 } }), 'manager@sunset.local');
+await mgrPage.getByRole('heading', { name: 'Waiting for a manager' }).waitFor();
+check('a manager’s Today leads with what waits for a manager decision', await mgrPage.locator('section[aria-labelledby="h-mgr"]').getByRole('link', { name: new RegExp(`Flagged Guest ${stamp}.*do not rent`, 'is') }).count() === 1);
+check('the front desk’s Today does not carry that section', await page.goto(`${BASE}/#/today`).then(() => page.getByRole('heading', { name: 'Waiting for a manager' }).count()) === 0);
 
 // ═════════ other roles ═════════
 const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 860 } });
