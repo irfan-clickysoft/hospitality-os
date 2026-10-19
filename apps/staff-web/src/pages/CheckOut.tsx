@@ -4,7 +4,7 @@ import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
 import { useAction } from '../lib/action.js';
 import { isZero, money } from '../lib/format.js';
-import { useStepUp } from '../lib/stepup.js';
+import { StepUpSlot, useStepUp } from '../lib/stepup.js';
 import { useAuth, useWork } from '../state.js';
 import { CompanyBillings } from '../desk/BillToCompany.js';
 import { PaymentSheet } from '../desk/PaymentSheet.js';
@@ -119,6 +119,7 @@ export function CheckOut({ stay }: { stay: Stay }) {
         {(problem?.code === 'network' || problem?.code === 'SERVER_ERROR') && <Banner level="BLOCKER" title={t('ci.outageTitle')} action={<button onClick={() => void finish()}>{t('common.retry')}</button>}>{t('co.outageText')}</Banner>}
       </>)}
 
+      <StepUpSlot />
       <div className="actionbar" role="region" aria-label={t('co.title')}>
         <div className="ab-msg" role="status" aria-live="polite">
           {!f ? t('common.loading') : owes ? <><Icon name="alert" size={16} /> <span>{t('co.msg.owes')}</span></> : credit ? <><Icon name="info" size={16} /> <span>{t('co.msg.credit')}</span></> : needReason ? <><Icon name="alert" size={16} /> <span>{t('co.msg.reason')}</span></> : <><Icon name="check" size={16} /> <span>{t('co.msg.ready')}</span></>}

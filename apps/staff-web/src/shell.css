@@ -134,3 +134,4 @@ table.bill { width: 100%; border-collapse: collapse; } .bill th, .bill td { padd
 .cp-empty { padding: 16px; text-align: center; } .cp-foot { padding: 8px 16px; border-top: 1px solid var(--line); margin: 0; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 a:not([class]) { color: var(--info-fg); }
+.stepup { display: grid; gap: 8px; } .stepup-slot { border: 2px solid var(--focus); border-radius: 12px; padding: 12px 16px; background: var(--card); } .stepup h3 { margin: 0; font-size: 1rem; }
