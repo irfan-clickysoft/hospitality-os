@@ -130,7 +130,7 @@ export function CheckOut({ stay }: { stay: Stay }) {
         </>) : (
           <button className={`primary${canOut ? '' : ' is-disabled'}`} aria-disabled={!canOut} disabled={busy} onClick={() => { if (canOut) void finish(); }}>{busy ? t('common.loading') : t('co.confirm')}</button>)}
       </div>
-      {paying && <PaymentSheet reservationId={res.id} balance={final ?? null} onDone={() => { mine.current = true; stay.refresh(); }} onClose={() => setPaying(false)} />}
+      {paying && <PaymentSheet asPanel reservationId={res.id} balance={final ?? null} onDone={() => { mine.current = true; stay.refresh(); }} onClose={() => setPaying(false)} />}
       {refunding && captured[0] && <PaymentFixSheet kind="refund" payment={captured[0]} onDone={() => { mine.current = true; stay.refresh(); }} onClose={() => setRefunding(false)} />}
     </div>
   );

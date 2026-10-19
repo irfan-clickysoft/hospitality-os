@@ -79,9 +79,10 @@ check('guest is in house', await page.getByRole('region', { name: 'Guest, stay, 
 // money: the bill, a payment, then check out
 await page.getByRole('tab', { name: 'Bill' }).click();
 await page.getByRole('button', { name: 'Take payment' }).first().click();
-await sheet(page).getByLabel('Amount').fill(price);
-await sheet(page).getByRole('button', { name: 'Take payment' }).click();
-await page.locator('.sheet-head h2', { hasText: 'Take payment' }).waitFor({ state: 'detached' });
+const pay = page.getByRole('dialog', { name: 'Take payment' });
+await pay.getByLabel('Amount').fill(price);
+await pay.getByRole('button', { name: 'Take payment' }).click();
+await pay.waitFor({ state: 'detached' });
 await page.getByText('Received').first().waitFor();
 check('payment appears on the bill', await page.getByText('Received').count() > 0);
 await page.screenshot({ path: `${OUT}/d04-bill.png` });

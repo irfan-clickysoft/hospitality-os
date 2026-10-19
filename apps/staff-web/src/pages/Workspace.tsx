@@ -265,7 +265,7 @@ export function Workspace({ id, flow }: { id: string; flow?: string }) {
         </div>)}
 
       {panel === 'move' && r && line && <MovePanel stay={stay} onClose={() => setQuery({ panel: null })} onDone={(kind) => { stay.settle(); setQuery({ panel: null, done: flow ? null : kind }); }} />}
-      {r && (dialog?.kind === 'pay' || dialog?.kind === 'deposit') && <PaymentSheet reservationId={r.id} balance={stay.folio.data?.folio?.balance ?? null} defaultKind={dialog.kind === 'deposit' ? 'DEPOSIT' : 'PAYMENT'} onDone={stay.refresh} onClose={() => setDialog(null)} />}
+      {r && (dialog?.kind === 'pay' || dialog?.kind === 'deposit') && <PaymentSheet asPanel reservationId={r.id} balance={stay.folio.data?.folio?.balance ?? null} defaultKind={dialog.kind === 'deposit' ? 'DEPOSIT' : 'PAYMENT'} onDone={stay.refresh} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'charge' && stay.folio.data?.folio && <ChargeSheet folioId={stay.folio.data.folio.id} onDone={stay.refresh} onClose={() => setDialog(null)} />}
       {r && (dialog?.kind === 'cancel' || dialog?.kind === 'noshow') && <CancelSheet r={r} line={line ?? undefined} noShow={dialog.kind === 'noshow'} onDone={stay.refresh} onClose={() => setDialog(null)} />}
       {dialog && (dialog.kind === 'void' || dialog.kind === 'refund') && dialog.paymentId && stay.folio.data && <PaymentFixSheet kind={dialog.kind} payment={stay.folio.data.payments.find((p) => p.id === dialog.paymentId)!} onDone={stay.refresh} onClose={() => setDialog(null)} />}
