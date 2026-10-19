@@ -19,6 +19,7 @@ const TEAM = [
   { email: 'ayesha@sunset.local', name: 'عائشہ بی بی', role: 'housekeeper', locale: 'ur' },
   { email: 'hira@sunset.local', name: 'Hira Malik (front desk)', role: 'front_desk_agent', locale: 'en' },
   { email: 'manager@sunset.local', name: 'Omar Sheikh (property admin)', role: 'property_admin', locale: 'en' },
+  { email: 'gate@sunset.local', name: 'گیٹ سیکیورٹی (Imtiaz)', role: 'gate_security', locale: 'ur' },
   { email: 'accountant@sunset.local', name: 'Farah Siddiqui (accountant)', role: 'accountant', locale: 'en' },
 ] as const;
 

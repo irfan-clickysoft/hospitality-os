@@ -32,7 +32,8 @@ export const SECTIONS: Section[] = [
   ] },
   { id: 'guests', path: '/guests', label: 'nav.guests', icon: 'guests', show: any('guest.view') },
   { id: 'inbox', path: '/inbox', label: 'nav.inbox', icon: 'inbox', show: () => true, primary: true },
-  { id: 'tasks', path: '/tasks', label: 'nav.tasks', icon: 'tasks', show: any('maintenance.view', 'compliance.view', 'fnb.order'), tabs: [
+  { id: 'tasks', path: '/tasks', label: 'nav.tasks', icon: 'tasks', show: any('maintenance.view', 'compliance.view', 'fnb.order', 'visitor.log', 'arrivals.view_masked'), tabs: [
+    { id: 'gate', label: 'nav.gate', show: any('visitor.log', 'arrivals.view_masked'), Page: L(() => import('../desk/Gate.js'), 'Gate') },
     { id: 'maintenance', label: 'nav.maintenance', show: any('maintenance.view'), Page: L(() => import('../desk/Maintenance.js'), 'Maintenance') },
     { id: 'compliance', label: 'nav.compliance', show: any('compliance.view'), Page: L(() => import('../desk/Compliance.js'), 'Compliance') },
     { id: 'kitchen', label: 'nav.kitchen', show: any('fnb.order'), Page: L(() => import('../desk/Kitchen.js'), 'Kitchen') },

@@ -141,6 +141,7 @@ check('after review the workspace shows the guest as in house', await rail.getBy
 await page.goto(`${BASE}/#/reservations/${faisal.id}?done=checkin`);
 await page.getByText(/Checked in at \d\d:\d\d/).waitFor();
 check('a completed check-in stays on the page as a card (not a toast)', true);
+check('… with the printable registration card one click away', (await page.getByRole('link', { name: /Registration card/i }).first().getAttribute('href')).includes('/registration-card'));
 await page.getByRole('button', { name: 'Undo check-in' }).click();
 check('undo asks for a reason first', await page.getByRole('group', { name: 'Undo check-in' }).getByLabel(/Reason/).count() === 1);
 await page.getByRole('group', { name: 'Undo check-in' }).getByLabel(/Reason/).fill('Guest changed plans');
@@ -304,6 +305,13 @@ await mob.goto(`${BASE}/#/reservations/${faisal.id}`);
 await mob.getByRole('heading', { name: `Faisal Raza ${stamp}`, level: 1 }).waitFor();
 check('phone: the workspace has no sideways scroll and keeps the context summary above the content', await mob.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
 await mob.screenshot({ path: `${OUT}/f11-phone-workspace.png` });
+
+await mob.goto(`${BASE}/#/reservations?tab=bookings`);
+await mob.getByRole('button', { name: 'New booking' }).click();
+const sheetBtn = mob.locator('.sheet').getByRole('button', { name: 'Check availability' });
+await sheetBtn.scrollIntoViewIfNeeded();
+check('phone: a bottom sheet’s buttons are not hidden behind the bottom navigation', await sheetBtn.evaluate((el) => { const r = el.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!hit && el.contains(hit); }));
+await mob.keyboard.press('Escape');
 
 await page.goto(`${BASE}/#/today`);
 await page.getByRole('button', { name: 'Your profile' }).click();

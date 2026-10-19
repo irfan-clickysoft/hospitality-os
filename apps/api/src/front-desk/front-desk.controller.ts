@@ -4,6 +4,7 @@ import { RequirePermission } from '../authz/decorators.js';
 import { parse } from '../common/validate.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { FrontDeskService } from './front-desk.service.js';
+import { renderRegistrationCard } from './registration-card.js';
 import * as S from './schemas.js';
 
 const P = { scope: (req: any) => ({ propertyId: req.params.propertyId }) };
@@ -26,6 +27,12 @@ export class FrontDeskController {
   @Post('reservations/:id/rooms/:lineId/move') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
   move(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Body() body: unknown) { return this.svc.moveRoom(pid, id, line, me(), parse(S.MoveRoom, body)); }
   /** `?reveal=true` shows full document numbers: needs the view-ID permission and a fresh second factor, and is audited. */
+  /** A printable registration card with signature lines. ?reveal=true prints full ID numbers (needs the same permission and fresh second factor as seeing them). */
+  @Get('reservations/:id/rooms/:lineId/registration-card') @RequirePermission('reservation.view', P)
+  async card(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Query() q: unknown, @Res() reply: FastifyReply) {
+    const v = await this.svc.registrationCard(pid, id, line, me(), parse(S.OccupantsQuery, q).reveal === 'true');
+    reply.header('content-type', 'text/html; charset=utf-8').header('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'").header('x-content-type-options', 'nosniff').send(renderRegistrationCard(v));
+  }
   @Get('reservations/:id/rooms/:lineId/guests') @RequirePermission('reservation.view', P)
   occupants(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Query() q: unknown) { return this.svc.occupants(pid, id, line, me(), parse(S.OccupantsQuery, q).reveal === 'true'); }
 

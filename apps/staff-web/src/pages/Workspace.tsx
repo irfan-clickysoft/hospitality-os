@@ -152,7 +152,7 @@ function Timeline({ r }: { r: ReservationDetail }) {
 
 function LineCard({ stay, l, openPanel, openDialog }: { stay: Stay; l: Line; openPanel: (p: string, line: string) => void; openDialog: (d: Dialog) => void }) {
   const { t, locale } = useT();
-  const { can } = useAuth();
+  const { can, property } = useAuth();
   const rack = stay.rack.data?.rooms.find((x) => x.id === l.assignedRoom?.id);
   const a = l.allowedActions;
   return (
@@ -163,6 +163,7 @@ function LineCard({ stay, l, openPanel, openDialog }: { stay: Stay; l: Line; ope
       <div className="actions">
         {l.status === 'CHECKED_IN' && can('frontdesk.check_in') && <button onClick={() => openPanel('move', l.id)}><Icon name="swap" size={16} /> {t('d.moveRoom')}</button>}
         {(l.status === 'CONFIRMED' || l.status === 'OPTION') && can('reservation.modify') && <button onClick={() => openPanel('move', l.id)}><Icon name="key" size={16} /> {l.assignedRoom ? t('d.changeRoom') : t('d.assignRoom')}</button>}
+        {(l.status === 'CHECKED_IN' || l.status === 'CHECKED_OUT') && <a className="button" href={`/v1/properties/${property!.id}/reservations/${stay.r!.id}/rooms/${l.id}/registration-card`} target="_blank" rel="noreferrer"><Icon name="print" size={16} /> {t('d.regCard')}</a>}
         {a.includes('CANCEL') && can('reservation.cancel') && <button onClick={() => openDialog({ kind: 'cancel' })}>{t('d.cancel')}</button>}
         {a.includes('NO_SHOW') && l.arrival <= stay.businessDate && can('reservation.cancel') && <button onClick={() => openDialog({ kind: 'noshow' })}>{t('d.noShow')}</button>}
       </div>
@@ -183,6 +184,7 @@ function Done({ stay, kind, dismiss }: { stay: Stay; kind: string; dismiss: () =
   return (
     <ConfirmCard title={t(`done.${kind}` as Key, { time, room: line.assignedRoom?.number ?? '' })} action={<button className="link" onClick={dismiss}>{t('common.close')}</button>}>
       {kind === 'checkout' && <><p className="small">{t('done.checkoutNote')}</p><InvoicePanel reservationId={r.id} finished /></>}
+      {kind === 'checkin' && <p><a className="button" href={`/v1/properties/${property!.id}/reservations/${r.id}/rooms/${line.id}/registration-card`} target="_blank" rel="noreferrer"><Icon name="print" size={16} /> {t('d.regCard')}</a></p>}
       {kind === 'checkin' && line.status === 'CHECKED_IN' && can('frontdesk.check_in') && (
         <InlineConfirm trigger={t('done.undoCheckIn')} consequence={t('done.undoCheckInText')} confirmLabel={t('done.undoCheckIn')} needReason busy={a.busy} onConfirm={(reason) => void undo(reason)} error={<ErrorLine code={a.problem?.code} detail={a.problem?.detail} />} />)}
     </ConfirmCard>

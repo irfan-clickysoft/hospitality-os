@@ -301,6 +301,24 @@ export class FrontDeskService {
     });
   }
 
+  /** Everything the printed registration card shows. The full document numbers need the same permission and fresh second factor as seeing them on screen; the print is recorded either way by that rule. */
+  async registrationCard(propertyId: string, id: string, lineId: string, userId: string, reveal: boolean) {
+    const occ = await this.occupants(propertyId, id, lineId, userId, reveal);
+    return this.tdb.tx(async (trx) => {
+      const p = await trx.selectFrom('property').select(['name', 'business_date', 'legal_entity_id']).where('id', '=', propertyId).executeTakeFirstOrThrow();
+      const le = await trx.selectFrom('legal_entity').select('name').where('id', '=', p.legal_entity_id).executeTakeFirstOrThrow();
+      const l = await sql<{ confirmation_no: string; arrival: string; departure: string; adults: number; children: number; type: string; room: string | null }>`
+        SELECT r.confirmation_no, l.arrival::text AS arrival, l.departure::text AS departure, l.adults, l.children, rt.name AS type, rm.number AS room
+        FROM reservation_room l JOIN reservation r ON r.tenant_id = l.tenant_id AND r.id = l.reservation_id JOIN room_type rt ON rt.id = l.room_type_id
+        LEFT JOIN room_assignment a ON a.assignment_ref = l.id AND a.status IN ('ASSIGNED','IN_HOUSE','ENDED') LEFT JOIN room rm ON rm.id = a.room_id
+        WHERE l.tenant_id = ${currentTenant().tenantId} AND l.property_id = ${propertyId} AND l.id = ${lineId} AND r.id = ${id} ORDER BY a.created_at DESC NULLS LAST LIMIT 1`.execute(trx);
+      const row = l.rows[0];
+      if (!row) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room line not found on this reservation' });
+      return { company: le.name, property: p.name, confirmationNo: row.confirmation_no, room: row.room, roomType: row.type, arrival: row.arrival, departure: row.departure, adults: row.adults, children: row.children, printedOn: p.business_date, idRevealed: reveal,
+        guests: occ.items.map((g) => ({ fullName: g.fullName, isPrimary: g.isPrimary, ageGroup: g.ageGroup, idType: g.idType, idNumber: g.idNumber, nationality: g.nationality, idExpiry: g.idExpiry })) };
+    });
+  }
+
   // ───────────── room rack (tape chart) ─────────────
   async rack(propertyId: string, q: z.infer<typeof S.RackQuery>) {
     return this.tdb.tx(async (trx) => {
