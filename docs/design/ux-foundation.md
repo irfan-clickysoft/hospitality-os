@@ -369,7 +369,7 @@ Reading order and focus order match visual order in both LTR (English) and RTL (
 **Deliberately not built (and why):**
 
 - **Camera capture of IDs and photos** — needs a storage and retention decision for identity images before anything is stored.
-- **Housekeeping priority request and "undo move"** — there is no endpoint to prioritise one room's cleaning, and a move cannot be reversed without dirtying a room; both would need server work first.
+- **Undo for a room move** — a move cannot be reversed without dirtying a room; putting the guest back is a new move. (The housekeeping "clean this first" request now exists: `POST /housekeeping/rooms/:id/prioritise`.)
 - **Registration-card printing from the check-in page** — the printable card is on a separate open branch (gate and registration card) and will join the done-card when it merges.
 - **Card gateway outage handling** — there is no card gateway yet (card slips are entered by hand), so there is nothing to be "down"; the outage message used for server failures covers the case.
 - **Upgrade as part of a room move** — the system moves guests within the booked room type; an upgrade needs a room-type change on the booking first (the panel says so).

@@ -49,6 +49,8 @@ export function CheckIn({ stay }: { stay: Stay }) {
   const [override, setOverride] = useState(false); const [attempted, setAttempted] = useState(false); const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [save, setSave] = useState<SaveStatus>({ kind: 'idle' });
   const { busy, problem, run, clear } = useAction();
+  const ask = useAction(); const [asked, setAsked] = useState(false);
+  const prioritise = async () => { if (!roomId) return; const r = await ask.run(() => api('POST', `/v1/properties/${property!.id}/housekeeping/rooms/${roomId}/prioritise`)); if (r) { setAsked(true); stay.refresh(); } };
   const edited = useRef(false);
 
   useEffect(() => { setPicked(null); setChangeRoom(false); }, [ln.assignedRoom?.id]);          // the room was (re)assigned elsewhere, e.g. from the move panel: follow it
@@ -108,6 +110,8 @@ export function CheckIn({ stay }: { stay: Stay }) {
           : notReady ? (
             <Banner level="BLOCKER" title={t('ci.roomNotReady', { room: roomNumber ?? '' })} action={<button className="primary" onClick={() => setQuery({ panel: 'move' })}>{t('ci.moveGuest')}</button>}>
               <p>{hk === 'CLEANING' ? t('ci.cleaning') : t('ci.dirty')} <RoomState hk={hk} /></p>
+              {asked ? <p role="status"><StatusBadge tone="ok" icon="check">{t('ci.asked')}</StatusBadge></p> : <p><button disabled={ask.busy || offline} onClick={() => void prioritise()}>{t('ci.prioritise')}</button></p>}
+              <ErrorLine code={ask.problem?.code} detail={ask.problem?.detail} />
               {can('frontdesk.override_room') ? <label className="check"><input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} /> {t('ci.notReady')}</label> : <p className="small muted"><Icon name="lock" size={14} /> {t('ci.overrideManager')}</p>}
             </Banner>)
           : <div className="okrow"><StatusBadge tone="ok" icon="check">{t('ci.roomReady', { room: roomNumber ?? '' })}</StatusBadge>{rackRoom && <RoomState hk={hk} />}</div>}
