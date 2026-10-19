@@ -135,3 +135,5 @@ table.bill { width: 100%; border-collapse: collapse; } .bill th, .bill td { padd
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 a:not([class]) { color: var(--info-fg); }
 .stepup { display: grid; gap: 8px; } .stepup-slot { border: 2px solid var(--focus); border-radius: 12px; padding: 12px 16px; background: var(--card); } .stepup h3 { margin: 0; font-size: 1rem; }
+/* the older bottom sheets (forms, payments, the second-factor prompt on plain screens) must sit above the phone's bottom navigation and the action bar, or their buttons are hidden behind them */
+.sheet-wrap { z-index: 50; }

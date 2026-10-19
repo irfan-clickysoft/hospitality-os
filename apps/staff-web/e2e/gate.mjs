@@ -14,6 +14,7 @@ await page.getByLabel(/Email|ای میل/).fill('gate@sunset.local');
 await page.getByLabel(/Password|پاس ورڈ/).fill(process.env.E2E_PASSWORD ?? 'sunset-demo-passphrase');
 await page.locator('form button.primary').click();
 await page.locator('nav.bottomnav').waitFor();
+await page.getByRole('heading', { name: 'گیٹ' }).waitFor();
 check('the gate screen opens in Urdu', (await page.evaluate(() => document.documentElement.dir)) === 'rtl' && await page.getByRole('heading', { name: 'گیٹ' }).count() === 1);
 check('the gate user has no reservations, reports or administration in the menu', await page.getByRole('link', { name: /بکنگز|رپورٹس|انتظام/ }).count() === 0 && await page.getByRole('button', { name: 'مزید' }).count() === 1);
 await page.getByRole('button', { name: 'اندراج کریں' }).click();

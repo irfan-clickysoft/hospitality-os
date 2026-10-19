@@ -306,6 +306,13 @@ await mob.getByRole('heading', { name: `Faisal Raza ${stamp}`, level: 1 }).waitF
 check('phone: the workspace has no sideways scroll and keeps the context summary above the content', await mob.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
 await mob.screenshot({ path: `${OUT}/f11-phone-workspace.png` });
 
+await mob.goto(`${BASE}/#/reservations?tab=bookings`);
+await mob.getByRole('button', { name: 'New booking' }).click();
+const sheetBtn = mob.locator('.sheet').getByRole('button', { name: 'Check availability' });
+await sheetBtn.scrollIntoViewIfNeeded();
+check('phone: a bottom sheet’s buttons are not hidden behind the bottom navigation', await sheetBtn.evaluate((el) => { const r = el.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!hit && el.contains(hit); }));
+await mob.keyboard.press('Escape');
+
 await page.goto(`${BASE}/#/today`);
 await page.getByRole('button', { name: 'Your profile' }).click();
 await page.getByRole('button', { name: 'اردو' }).click();
