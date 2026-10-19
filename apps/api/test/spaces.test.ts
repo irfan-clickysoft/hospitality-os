@@ -190,4 +190,27 @@ describe('conference room', () => {
     await code(call('POST', S(w, `/bookings/${onStay.id}/bill-to-company`), O, { companyId: co.id }, key()), 422, 'NOT_A_SEPARATE_BILL');
     expect((await ok(call('GET', u(w, 'folio-check'), O))).ok).toBe(true);
   });
+
+  it('a hire that has not happened yet can be moved or changed: the price is worked out again, the slot is checked again, and a finished or cancelled hire cannot be changed', async () => {
+    const w = await sunset(); at('2026-11-05', '10:00'); await setBd(w, '2026-11-05');
+    const s = await hall(w); const desk = await staff(w, 'front_desk_agent'); const clerk = await staff(w, 'cashier');
+    const a = await ok(hire(w, s, { startTime: '14:00', endTime: '17:00' }), 201);                               // half day, 15,000
+    const b = await ok(hire(w, s, { startTime: '19:00', endTime: '20:00', pricing: 'HOURLY' }), 201);
+    const patch = (id: string, body: unknown, h = O) => call('PATCH', S(w, `/bookings/${id}`), h, body);
+    const moved = await ok(patch(a.id, { date: '2026-11-06', startTime: '09:00', endTime: '12:00', version: a.version }));
+    expect(moved).toMatchObject({ date: '2026-11-06', startTime: '09:00', endTime: '12:00', amount: { amount: '15000.00' }, version: a.version + 1 });
+    const longer = await ok(patch(a.id, { pricing: 'HOURLY', endTime: '13:30', version: moved.version }));              // 4½ hours → 5 × 5000
+    expect(longer).toMatchObject({ pricing: 'HOURLY', hours: 5, amount: { amount: '25000.00' } });
+    await code(patch(a.id, { pricing: 'HALF_DAY', version: longer.version }), 422, 'TOO_LONG_FOR_HALF_DAY');
+    await code(patch(a.id, { date: '2026-11-05', startTime: '19:30', endTime: '21:00', version: longer.version }), 409, 'SPACE_TAKEN');   // runs into b and its changeover
+    await code(patch(a.id, { endTime: '14:00', version: moved.version }), 412, 'VERSION_CONFLICT');
+    expect(await ok(patch(a.id, { eventName: 'Board retreat', attendees: 20, version: longer.version }))).toMatchObject({ eventName: 'Board retreat', attendees: 20, startTime: '09:00' });
+    await code(patch(a.id, { eventName: 'x', version: longer.version + 1 }, desk.h), 400, 'VALIDATION_FAILED');
+    await code(patch(a.id, { endTime: '12:00', version: longer.version + 1 }, clerk.h), 403, 'PERMISSION_DENIED');
+    expect((await ok(call('GET', S(w, '/bookings?from=2026-11-05&to=2026-11-06'), O))).items.map((x: any) => [x.date, x.startTime])).toEqual([['2026-11-05', '19:00'], ['2026-11-06', '09:00']]);
+    at('2026-11-05', '21:00'); await ok(call('POST', S(w, `/bookings/${b.id}/complete`), O, {}));
+    await code(patch(b.id, { endTime: '20:30', version: b.version }), 409, 'WRONG_STATE');
+    await ok(call('POST', S(w, `/bookings/${a.id}/cancel`), O, { reason: 'Host cancelled' }));
+    await code(patch(a.id, { endTime: '12:00', version: longer.version + 2 }), 409, 'WRONG_STATE');
+  });
 });

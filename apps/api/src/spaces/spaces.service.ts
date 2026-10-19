@@ -97,31 +97,38 @@ export class SpacesService {
       invoices: invoices.map((x) => ({ id: x.id, number: x.number, docType: x.doc_type })), completedAt: b.completed_at, cancelReason: b.cancel_reason, version: b.version };
   }
 
+  /** Works out the length and the price (before tax) of a hire, or says why it cannot be. */
+  private priced(space: { hourly_minor: string | null; half_day_minor: string | null; full_day_minor: string | null }, p: { business_date: string; timezone: string }, i: { date: string; startTime: string; endTime: string; pricing: 'HOURLY' | 'HALF_DAY' | 'FULL_DAY' }) {
+    if (i.date < p.business_date) throw fail(422, 'DATE_IN_PAST', 'That date has already passed');
+    const startMs = zonedToUtcMs(i.date, i.startTime, p.timezone), endMs = zonedToUtcMs(i.date, i.endTime, p.timezone);
+    const minutes = Math.round((endMs - startMs) / 60_000);
+    if (minutes <= 0) throw fail(422, 'TIME_RANGE_INVALID', 'The hire must end after it starts (same day)');
+    if (minutes < MIN_MIN) throw fail(422, 'TOO_SHORT', `The shortest hire is ${MIN_MIN} minutes`);
+    const hours = Math.ceil(minutes / 60);
+    let amount: bigint;
+    if (i.pricing === 'HOURLY') {
+      if (space.hourly_minor === null) throw fail(422, 'PRICING_NOT_OFFERED', 'This space is not sold by the hour');
+      amount = BigInt(space.hourly_minor) * BigInt(hours);
+    } else if (i.pricing === 'HALF_DAY') {
+      if (space.half_day_minor === null) throw fail(422, 'PRICING_NOT_OFFERED', 'This space has no half-day price');
+      if (minutes > HALF_DAY_MAX_MIN) throw fail(422, 'TOO_LONG_FOR_HALF_DAY', 'A half day is up to 4 hours. Use the full-day price.');
+      amount = BigInt(space.half_day_minor);
+    } else {
+      if (space.full_day_minor === null) throw fail(422, 'PRICING_NOT_OFFERED', 'This space has no full-day price');
+      if (minutes > FULL_DAY_MAX_MIN) throw fail(422, 'TOO_LONG_FOR_FULL_DAY', 'A full day is up to 12 hours.');
+      amount = BigInt(space.full_day_minor);
+    }
+    return { startMs, endMs, minutes, hours, amount };
+  }
+
   async book(propertyId: string, userId: string, i: z.infer<typeof S.CreateBooking>) {
     return this.tdb.tx(async (trx) => {
       const p = await trx.selectFrom('property').select(['id', 'code', 'currency', 'business_date', 'timezone']).where('id', '=', propertyId).executeTakeFirstOrThrow();
       const space = await trx.selectFrom('space').selectAll().where('id', '=', i.spaceId).where('property_id', '=', propertyId).executeTakeFirst();
       if (!space) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Space not found' });
       if (!space.active) throw fail(422, 'SPACE_INACTIVE', `"${space.name}" is not being hired out`);
-      if (i.date < p.business_date) throw fail(422, 'DATE_IN_PAST', 'That date has already passed');
-      const startMs = zonedToUtcMs(i.date, i.startTime, p.timezone), endMs = zonedToUtcMs(i.date, i.endTime, p.timezone);
-      const minutes = Math.round((endMs - startMs) / 60_000);
-      if (minutes <= 0) throw fail(422, 'TIME_RANGE_INVALID', 'The hire must end after it starts (same day)');
-      if (minutes < MIN_MIN) throw fail(422, 'TOO_SHORT', `The shortest hire is ${MIN_MIN} minutes`);
-      const hours = Math.ceil(minutes / 60);
-      let amount: bigint;
-      if (i.pricing === 'HOURLY') {
-        if (space.hourly_minor === null) throw fail(422, 'PRICING_NOT_OFFERED', 'This space is not sold by the hour');
-        amount = BigInt(space.hourly_minor) * BigInt(hours);
-      } else if (i.pricing === 'HALF_DAY') {
-        if (space.half_day_minor === null) throw fail(422, 'PRICING_NOT_OFFERED', 'This space has no half-day price');
-        if (minutes > HALF_DAY_MAX_MIN) throw fail(422, 'TOO_LONG_FOR_HALF_DAY', 'A half day is up to 4 hours. Use the full-day price.');
-        amount = BigInt(space.half_day_minor);
-      } else {
-        if (space.full_day_minor === null) throw fail(422, 'PRICING_NOT_OFFERED', 'This space has no full-day price');
-        if (minutes > FULL_DAY_MAX_MIN) throw fail(422, 'TOO_LONG_FOR_FULL_DAY', 'A full day is up to 12 hours.');
-        amount = BigInt(space.full_day_minor);
-      }
+      const q = this.priced(space, p, i);
+      const { startMs, endMs, hours, amount } = q;
       let folioId: string | null = null;
       if (i.billTo === 'STAY') {
         const live = await sql`SELECT 1 FROM reservation_room WHERE tenant_id = ${currentTenant().tenantId} AND property_id = ${propertyId} AND reservation_id = ${i.reservationId!} AND status IN ('CHECKED_IN','CONFIRMED','OPTION') LIMIT 1`.execute(trx);
@@ -146,6 +153,34 @@ export class SpacesService {
       await this.audit.record(trx, { action: 'space.book', resourceType: 'space_booking', resourceId: b.id, propertyId, after: { number: b.number, space: space.name, date: i.date, from: i.startTime, to: i.endTime, amount: amount.toString(), billTo: i.billTo } });
       await this.outbox.publish(trx, { aggregateType: 'space_booking', aggregateId: b.id, eventType: 'SpaceBooked', propertyId, businessDate: p.business_date, payload: { bookingId: b.id, number: b.number, spaceId: space.id } });
       return this.bookingView(trx, b, p.timezone);
+    });
+  }
+
+  /** Changes a hire that has not happened yet (time, price type, details). The price is worked out again; the slot is checked again. */
+  async reschedule(propertyId: string, id: string, userId: string, i: z.infer<typeof S.UpdateBooking>) {
+    return this.tdb.tx(async (trx) => {
+      const p = await trx.selectFrom('property').select(['id', 'business_date', 'timezone']).where('id', '=', propertyId).executeTakeFirstOrThrow();
+      const b = await this.row(trx, propertyId, id, true);
+      if (b.status !== 'BOOKED') throw fail(409, 'WRONG_STATE', `A hire that is ${b.status.toLowerCase()} cannot be changed`);
+      if (b.version !== i.version) throw fail(412, 'VERSION_CONFLICT', 'Someone else changed this hire. Reload and try again.');
+      const space = await trx.selectFrom('space').selectAll().where('id', '=', b.space_id).executeTakeFirstOrThrow();
+      const cur = { date: this.local(b.starts_at, p.timezone).date, startTime: this.local(b.starts_at, p.timezone).time, endTime: this.local(b.ends_at, p.timezone).time };
+      const next = { date: i.date ?? cur.date, startTime: i.startTime ?? cur.startTime, endTime: i.endTime ?? cur.endTime, pricing: i.pricing ?? b.pricing };
+      const set: Record<string, unknown> = {};
+      if (next.date !== cur.date || next.startTime !== cur.startTime || next.endTime !== cur.endTime || next.pricing !== b.pricing) {
+        const q = this.priced(space, p, next);
+        Object.assign(set, { starts_at: new Date(q.startMs), ends_at: new Date(q.endMs), blocked_until: new Date(q.endMs + space.buffer_minutes * 60_000), pricing: next.pricing, hours: q.hours, amount_minor: q.amount.toString() });
+      }
+      if (i.eventName !== undefined) set.event_name = i.eventName; if (i.hostName !== undefined) set.host_name = i.hostName; if (i.hostPhone !== undefined) set.host_phone = i.hostPhone; if (i.attendees !== undefined) set.attendees = i.attendees; if (i.note !== undefined) set.note = i.note;
+      try {
+        const u = await trx.updateTable('space_booking').set({ ...set, version: sql`version + 1` } as never).where('id', '=', id).returningAll().executeTakeFirstOrThrow();
+        await this.audit.record(trx, { action: 'space.reschedule', resourceType: 'space_booking', resourceId: id, propertyId, before: { ...cur, amount: b.amount_minor, pricing: b.pricing }, after: { ...next, amount: u.amount_minor } });
+        await this.outbox.publish(trx, { aggregateType: 'space_booking', aggregateId: id, eventType: 'SpaceHireChanged', propertyId, businessDate: p.business_date, payload: { bookingId: id, number: b.number } });
+        return this.bookingView(trx, u, p.timezone);
+      } catch (e) {
+        if ((e as { code?: string }).code === '23P01') throw fail(409, 'SPACE_TAKEN', `"${space.name}" is already booked at that time${space.buffer_minutes ? ` (${space.buffer_minutes} minutes are kept free between hires)` : ''}`);
+        throw e;
+      }
     });
   }
 

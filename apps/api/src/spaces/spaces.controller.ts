@@ -27,6 +27,8 @@ export class SpacesController {
   book(@Param('propertyId', uuid()) pid: string, @Body() body: unknown) { return this.svc.book(pid, me(), parse(S.CreateBooking, body)); }
   @Get('stays') @RequirePermission('space.book', P)
   stays(@Param('propertyId', uuid()) pid: string) { return this.svc.stays(pid); }
+  @Patch('bookings/:bookingId') @RequirePermission('space.book', P)
+  reschedule(@Param('propertyId', uuid()) pid: string, @Param('bookingId', uuid()) id: string, @Body() body: unknown) { return this.svc.reschedule(pid, id, me(), parse(S.UpdateBooking, body)); }
   @Post('bookings/:bookingId/complete') @RequirePermission('space.book', P) @HttpCode(200)
   complete(@Param('propertyId', uuid()) pid: string, @Param('bookingId', uuid()) id: string) { return this.svc.complete(pid, id, me()); }
   @Post('bookings/:bookingId/cancel') @RequirePermission('space.book', P) @HttpCode(200)

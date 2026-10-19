@@ -13,7 +13,7 @@ import type { Amount } from './types.js';
 interface Space { id: string; name: string; nameUr: string | null; capacity: number | null; bufferMinutes: number; hourly: Amount | null; halfDay: Amount | null; fullDay: Amount | null; active: boolean; version: number }
 interface Hire {
   id: string; number: string; space: string; eventName: string; hostName: string; hostPhone: string | null; attendees: number | null; note: string | null; date: string; startTime: string; endTime: string; pricing: string; hours: number; amount: Amount;
-  status: 'BOOKED' | 'COMPLETED' | 'CANCELLED'; billTo: 'STAY' | 'SEPARATE'; stay: { reservationId: string; confirmationNo: string; guest: string } | null; bill: { folioId: string; folioNo: string; balance: Amount; status: string } | null; company: { name: string } | null; invoices: Array<{ id: string; number: string; docType: string }>; cancelReason: string | null;
+  status: 'BOOKED' | 'COMPLETED' | 'CANCELLED'; billTo: 'STAY' | 'SEPARATE'; stay: { reservationId: string; confirmationNo: string; guest: string } | null; bill: { folioId: string; folioNo: string; balance: Amount; status: string } | null; company: { name: string } | null; invoices: Array<{ id: string; number: string; docType: string }>; cancelReason: string | null; version: number;
 }
 interface Stay { reservationId: string; confirmationNo: string; guest: string; room: string | null; status: string }
 const tone = (s: string) => (s === 'COMPLETED' ? 'inspected' : s === 'CANCELLED' ? 'neutral' : 'warn') as 'inspected' | 'neutral' | 'warn';
@@ -24,7 +24,7 @@ export function Spaces() {
   const { t } = useT();
   const { property, can } = useAuth();
   const base = `/v1/properties/${property!.id}/spaces`;
-  const [view, setView] = useState<'calendar' | 'spaces'>('calendar'); const [booking, setBooking] = useState(false); const [paying, setPaying] = useState<Hire | null>(null); const [billing, setBilling] = useState<Hire | null>(null);
+  const [view, setView] = useState<'calendar' | 'spaces'>('calendar'); const [booking, setBooking] = useState(false); const [paying, setPaying] = useState<Hire | null>(null); const [billing, setBilling] = useState<Hire | null>(null); const [editing, setEditing] = useState<Hire | null>(null);
   const cal = useLive<{ items: Hire[] }>(view === 'calendar' ? `${base}/bookings` : null, 30_000);
   const { busy, problem, run } = useAction();
   const go = async (h: Hire, tail: string, body: unknown = {}) => { if (await run(() => api('POST', `${base}/bookings/${h.id}/${tail}`, body))) cal.reload(); };
@@ -48,6 +48,7 @@ export function Spaces() {
               {book && h.status === 'BOOKED' && <div className="row">
                 <button className="primary" disabled={busy} onClick={() => go(h, 'complete')}>{t('sp.complete')}</button>
                 {h.bill && <button disabled={busy} onClick={() => setPaying(h)}>{t('sp.takePayment')}</button>}
+                <button disabled={busy} onClick={() => setEditing(h)}>{t('sp.change')}</button>
                 <button className="link" disabled={busy} onClick={() => { const r = window.prompt(t('sp.cancelWhy')); if (r && r.trim().length >= 3) void go(h, 'cancel', { reason: r.trim() }); }}>{t('kt.cancel')}</button></div>}
               {h.invoices.length > 0 && <div className="row">{h.invoices.map((x) => <a key={x.id} className="button" href={`/v1/properties/${property!.id}/invoices/${x.id}/print`} target="_blank" rel="noreferrer">{x.docType === 'CREDIT_NOTE' ? t('sp.creditNote') : t('inv.print')} {x.number}</a>)}</div>}
               {book && h.status === 'COMPLETED' && h.bill && h.bill.status === 'OPEN' && <div className="row">
@@ -56,9 +57,29 @@ export function Spaces() {
                 {can('ar.bill') && !h.bill.balance.amount.startsWith('-') && h.bill.balance.amount !== '0.00' && <button disabled={busy} onClick={() => setBilling(h)}>{t('ar.bill')}</button>}</div>}
             </li>))}</ul></div>))}
       {booking && <NewHire base={base} onDone={() => { setBooking(false); cal.reload(); }} onClose={() => setBooking(false)} />}
+      {editing && <EditHire base={base} hire={editing} onDone={() => { setEditing(null); cal.reload(); }} onClose={() => setEditing(null)} />}
       {billing?.bill && <BillSheet endpoint={`${base}/bookings/${billing.id}/bill-to-company`} companyId={billing.company ? (billing.company as { id?: string }).id ?? null : null} balance={billing.bill.balance} onDone={() => { setBilling(null); cal.reload(); }} onClose={() => setBilling(null)} />}
       {paying?.bill && <PaymentSheet folioId={paying.bill.folioId} balance={paying.bill.balance} onDone={cal.reload} onClose={() => setPaying(null)} />}
     </section>
+  );
+}
+
+function EditHire({ base, hire, onDone, onClose }: { base: string; hire: Hire; onDone: () => void; onClose: () => void }) {
+  const { t } = useT();
+  const [f, setF] = useState({ date: hire.date, startTime: hire.startTime, endTime: hire.endTime, pricing: hire.pricing, eventName: hire.eventName, hostName: hire.hostName });
+  const { busy, problem, run } = useAction();
+  const go = async () => { if (await run(() => api('PATCH', `${base}/bookings/${hire.id}`, { ...f, eventName: f.eventName.trim(), hostName: f.hostName.trim(), version: hire.version }))) onDone(); };
+  return (
+    <Sheet title={`${t('sp.change')} · ${hire.number}`} onClose={onClose}>
+      <label>{t('sp.event')}<input value={f.eventName} onChange={(e) => setF({ ...f, eventName: e.target.value })} /></label>
+      <label>{t('sp.host')}<input value={f.hostName} onChange={(e) => setF({ ...f, hostName: e.target.value })} /></label>
+      <label>{t('sp.date')}<input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} dir="ltr" /></label>
+      <div className="grid2"><label>{t('sp.from')}<input type="time" value={f.startTime} onChange={(e) => setF({ ...f, startTime: e.target.value })} dir="ltr" /></label><label>{t('sp.to')}<input type="time" value={f.endTime} onChange={(e) => setF({ ...f, endTime: e.target.value })} dir="ltr" /></label></div>
+      <div className="chips" role="group">{(['HOURLY', 'HALF_DAY', 'FULL_DAY'] as const).map((p) => <button key={p} type="button" className={`chip${p === f.pricing ? ' on' : ''}`} aria-pressed={p === f.pricing} onClick={() => setF({ ...f, pricing: p })}>{t(`sp.p.${p}` as Key)}</button>)}</div>
+      <p className="muted small">{t('sp.changeNote')}</p>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      <div className="actions"><button className="primary" disabled={busy || f.eventName.trim().length < 2 || f.hostName.trim().length < 2} onClick={go}>{t('sp.save')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>
+    </Sheet>
   );
 }
 

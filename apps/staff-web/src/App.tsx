@@ -76,7 +76,7 @@ function Shell() {
   return (
     <div className="shell">
       <header className="top">
-        <div className="who"><strong>{property.name}</strong>
+        <div className="who">{properties.length <= 1 && <strong>{property.name}</strong>}
           {properties.length > 1 && <select aria-label={t('property.choose')} value={property.id} onChange={(e) => setPropertyId(e.target.value)}>{properties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
         </div>
         <div className="row">

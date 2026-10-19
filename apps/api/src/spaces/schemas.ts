@@ -22,6 +22,10 @@ export const CreateBooking = z.object({
   if (v.billTo === 'SEPARATE' && v.reservationId) ctx.addIssue({ code: 'custom', path: ['reservationId'], message: 'A separate bill is not linked to a stay' });
   if (v.billTo === 'STAY' && v.companyId) ctx.addIssue({ code: 'custom', path: ['companyId'], message: 'A company can only be noted on a separate bill' });
 });
+export const UpdateBooking = z.object({
+  eventName: z.string().trim().min(2).max(160).optional(), hostName: z.string().trim().min(2).max(160).optional(), hostPhone: z.string().trim().max(30).nullish(), attendees: z.number().int().min(1).max(2000).nullish(), note: z.string().trim().max(300).nullish(),
+  date: date.optional(), startTime: time.optional(), endTime: time.optional(), pricing: z.enum(['HOURLY', 'HALF_DAY', 'FULL_DAY']).optional(), version: z.number().int(),
+});
 export const Cancel = z.object({ reason: z.string().trim().min(3).max(300) });
 export const CalendarQuery = z.object({ from: date.optional(), to: date.optional(), spaceId: uuid.optional(), status: z.enum(['BOOKED', 'COMPLETED', 'CANCELLED', 'ALL']).default('ALL') });
 export const SpacesQuery = z.object({ all: z.enum(['true', 'false']).default('false').transform((v) => v === 'true') });
