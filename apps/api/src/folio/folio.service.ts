@@ -9,6 +9,7 @@ import { CLOCK, type ClockLike } from '../common/clock.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { taxAs } from '../tax/engine.js';
+import { ChargeReviewService } from '../charge-review/charge-review.service.js';
 import { TaxService } from '../tax/tax.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import type * as S from './schemas.js';
@@ -35,6 +36,7 @@ export class FolioService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(TaxService) private readonly tax: TaxService,
+    @Inject(ChargeReviewService) private readonly reviews: ChargeReviewService,
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
     @Inject(CLOCK) private readonly clock: ClockLike,
   ) {}
@@ -80,6 +82,7 @@ export class FolioService {
       created_by: a.userId ?? currentTenant().actorId ?? null,
       tax_code: a.tax?.code ?? null, tax_version_id: a.tax?.versionId ?? null, tax_rate_bp: a.tax?.rateBp ?? null, taxable_minor: a.tax?.taxableMinor?.toString() ?? null,
     } as never).returning('id').executeTakeFirstOrThrow();
+    if (a.type === 'CHARGE') await this.reviews.openFor(trx, { postingId: row.id, folioId: a.folioId, propertyId: a.propertyId, txnCode: a.txnCode, amount: a.amount, currency: a.currency, description: a.description });
     if (a.type === 'CHARGE' || a.type === 'DISCOUNT') await this.tax.applyToPosting(trx, { id: row.id, folioId: a.folioId, propertyId: a.propertyId, txnCode: a.taxAs ?? taxAs(a.txnCode), amount: a.amount, date: a.businessDate, lineId: a.lineId, currency: a.currency, userId: a.userId });
     return row.id;
   }

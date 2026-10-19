@@ -19,6 +19,7 @@ const TEAM = [
   { email: 'ayesha@sunset.local', name: 'عائشہ بی بی', role: 'housekeeper', locale: 'ur' },
   { email: 'hira@sunset.local', name: 'Hira Malik (front desk)', role: 'front_desk_agent', locale: 'en' },
   { email: 'manager@sunset.local', name: 'Omar Sheikh (property admin)', role: 'property_admin', locale: 'en' },
+  { email: 'accountant@sunset.local', name: 'Farah Siddiqui (accountant)', role: 'accountant', locale: 'en' },
 ] as const;
 
 const admin = createDb(process.env.DATABASE_URL_ADMIN!, 2);
@@ -36,7 +37,7 @@ try {
     if (!u) u = await admin.insertInto('staff_user').values({ tenant_id: tenant.id, email: m.email, full_name: m.name, password_hash: hash, status: 'ACTIVE', preferred_locale: m.locale } as never).returning('id').executeTakeFirstOrThrow();
     const role = await admin.selectFrom('role').select('id').where('tenant_id', '=', tenant.id).where('key', '=', m.role).executeTakeFirstOrThrow();
     const has = await admin.selectFrom('role_assignment').select('id').where('tenant_id', '=', tenant.id).where('user_id', '=', u.id).where('role_id', '=', role.id).executeTakeFirst();
-    if (!has) await admin.insertInto('role_assignment').values({ tenant_id: tenant.id, user_id: u.id, role_id: role.id, scope_type: 'PROPERTY', scope_id: prop.id, limits: '{}' }).execute();
+    if (!has) await admin.insertInto('role_assignment').values({ tenant_id: tenant.id, user_id: u.id, role_id: role.id, ...(m.role === 'accountant' ? { scope_type: 'TENANT', scope_id: null } : { scope_type: 'PROPERTY', scope_id: prop.id }), limits: '{}' } as never).execute();
     ids[m.email] = u.id;
   }
   const rooms = await admin.selectFrom('room').select(['id', 'number']).where('property_id', '=', prop.id).orderBy('number').execute();

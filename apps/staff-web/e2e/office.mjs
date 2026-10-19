@@ -68,10 +68,16 @@ await page.getByRole('link', { name: /Print.*INV-/ }).waitFor();
 check('invoice shows with a print link', true);
 await page.screenshot({ path: `${OUT}/21-hire-done.png` });
 
+// 3b. tax: the owner's matrix is there as drafts waiting for approval
+await page.locator('nav.tabs button', { hasText: /^Tax$/ }).click();
+await page.getByText('SRB-ST15', { exact: false }).first().waitFor();
+check('tax matrix is listed (drafts)', await page.getByText('ICT-ST5D').count() > 0);
+await page.screenshot({ path: `${OUT}/24-tax-drafts.png` });
+
 // 3a. setup check: the owner sees what is still missing
 await page.locator('nav.tabs button', { hasText: /^Setup check$/ }).click();
 await page.getByText(/to do · .* to look at/).waitFor();
-check('setup check lists what is missing', await page.getByText('Tax area chosen for this property').count() > 0 && await page.getByText('To do', { exact: true }).count() > 0);
+check('setup check lists what is missing', await page.getByText('Approved tax rate in force for this property').count() > 0 && await page.getByText('To do', { exact: true }).count() > 0);
 await page.screenshot({ path: `${OUT}/23-setup-check.png` });
 
 // 3. kitchen: the menu tab for a manager

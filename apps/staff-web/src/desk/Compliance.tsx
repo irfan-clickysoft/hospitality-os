@@ -5,6 +5,7 @@ import type { Key } from '../i18n/en.js';
 import { useAction } from '../lib/action.js';
 import { useAuth, useLive } from '../state.js';
 import { Badge, Empty, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
+import { ChargeReviews } from './ChargeReviews.js';
 
 interface Rule { id: string; name: string; description: string | null; status: string; stages: string[]; conditions: { nationalities?: string[]; excludeNationalities?: string[]; residency?: string; minGuests?: number; minNights?: number }; action: string; message: string; messageUr: string | null; documentTypes: string[]; taskTitle: string | null; version: number }
 interface Task { id: string; title: string; dueDate: string | null; confirmationNo: string; guest: string; nationality: string | null; arrival: string | null }
@@ -25,6 +26,7 @@ export function Compliance() {
   return (
     <section className="stack">
       <h2>{t('nav.compliance')}</h2>
+      <ChargeReviews />
       <h3>{t('cmp.tasks')}</h3>
       {!tasks.data ? <Spinner /> : tasks.data.items.length === 0 ? <p className="ok">✓ {t('cmp.noTasks')}</p> : (
         <ul className="plain">{tasks.data.items.map((x) => (

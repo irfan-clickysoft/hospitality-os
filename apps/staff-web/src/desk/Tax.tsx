@@ -9,7 +9,7 @@ import { useAuth, useLive } from '../state.js';
 import { Badge, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 import type { Amount } from './types.js';
 
-const TXN = ['ROOM', 'ROOM_EXTRAS', 'FNB', 'HALL', 'LAUNDRY', 'TRANSPORT', 'MINIBAR', 'MISC', 'CANCEL_FEE', 'NOSHOW_FEE'] as const;
+const TXN = ['ROOM', 'ROOM_EXTRAS', 'FNB', 'FNB_DIGITAL', 'HALL', 'LAUNDRY', 'TRANSPORT_OWNED', 'TRANSPORT_THIRDPARTY', 'MINIBAR', 'MISC', 'CANCEL_FEE', 'NOSHOW_FEE'] as const;
 interface Version { id: string; versionNo: number; status: string; rateBp: number; ratePercent: number; appliesTo: string[]; residency: string | null; effectiveFrom: string; effectiveTo: string | null; legalBasis: string | null; advisorRef: string | null; createdBy: string; approvedBy: string | null; note: string | null }
 interface Code { id: string; code: string; name: string; jurisdiction: string; versions: Version[] }
 interface Codes { items: Code[]; properties: Array<{ id: string; code: string; name: string; taxJurisdiction: string | null }> }
