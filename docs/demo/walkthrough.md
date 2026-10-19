@@ -1,13 +1,13 @@
 # Demo walkthrough — Sunset Hospitality OS
 
-For showing the system (to PayFast, to staff, to partners). About 20 minutes. Everything below works on a local copy (`bash scripts/reset-dev.sh`, then start the API and the staff app, open http://localhost:3001). Company code `sunset`, password `sunset-demo-passphrase`.
+For showing the system (to PayFast, to staff, to partners). About 20–25 minutes. Everything below works on a local copy (`bash scripts/reset-dev.sh`, then start the API and the staff app, open http://localhost:3001). Company code `sunset`, password `sunset-demo-passphrase`.
 
 ## Before the meeting (10 minutes, once)
 
 1. `bash scripts/reset-dev.sh`, restart the API and the staff app.
 2. Sign in as `owner@sunset.local` → **My account** → set up the second factor (authenticator app).
 3. **Tax** → enter the company's **NTN and STRN** (legal entity card). Set the real effective date on each draft rate and **approve** it with the advisor's reference. (Until you do, nothing is taxed and the invoice shows no tax.)
-4. **Accounts** → add the real payment accounts (cash drawer, bank, card clearing, **the PayFast gateway account** when it exists). Anything not owned by the company is entered with the owner's name and is flagged in every report.
+4. **Accounts** → the four bank accounts are already there (three in the owner's personal name, one company account, flagged accordingly); add the last four characters of each, and **the PayFast gateway account** when it exists. Cash is not an account: registers close daily into the property's safe (**Cashier**), and the weekly handover to head office is recorded and printed there.
 5. **Rooms** → correct the Ramna numbers (see the note in the README). **Rates** → set how many people each type sleeps.
 6. Open **Setup check**: nothing should say *To do* except what you know is pending.
 7. Sign in as `hira@sunset.local` in a second browser (front desk) and open the cashier session (**Cashier** → open, with a float).
@@ -26,8 +26,9 @@ For showing the system (to PayFast, to staff, to partners). About 20 minutes. Ev
 | 8 | Check out and invoice | Booking → Check out → **Issue invoice** | Numbered tax invoice with the company's NTN/STRN; printable; credit notes if wrong. |
 | 9 | Company on credit | Booking → **Bill to company** | Credit limit, terms; over the limit needs a manager (with the second factor). |
 | 10 | Housekeeping on a phone | Sign in as `bilal@sunset.local` on a phone-sized window | Works offline; Urdu for staff who prefer it (`ayesha@sunset.local`). |
-| 11 | Close the day | **Night audit** | Rolls the business date; the day's figures become fixed. |
-| 12 | Nothing hidden | **Audit trail**, **Setup check**, **Compliance** | Who did what; personal accounts are flagged; charges that need a tax review are listed. |
+| 11 | Cash and the safe | **Cashier** (manager) | Registers are counted blind; each day's envelope goes in the safe; the weekly handover to head office is recorded with a printable, signable receipt. |
+| 12 | Close the day | **Night audit** | Rolls the business date; the day's figures become fixed. |
+| 13 | Nothing hidden | **Audit trail**, **Setup check**, **Compliance** | Who did what; personal accounts are flagged; charges that need a tax review are listed. |
 
 ## For PayFast specifically
 
