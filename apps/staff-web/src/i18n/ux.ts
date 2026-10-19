@@ -299,6 +299,16 @@ export const uxEn = {
   'rl.h.cancelled': 'Cancelled bookings',
   'rl.more': 'Show more',
   'today.mgrQueue': 'Waiting for a manager',
+  'sc.title': 'Keyboard shortcuts',
+  'sc.subtitle': 'Single letters work on a reservation page and are ignored while you are typing.',
+  'sc.palette': 'Search and commands',
+  'sc.search': 'Search (same as above)',
+  'sc.help': 'Show this list',
+  'sc.close': 'Close a panel or dialog',
+  'sc.checkin': 'Check the guest in',
+  'sc.checkout': 'Check the guest out',
+  'sc.move': 'Move the guest to another room',
+  'sc.pay': 'Take a payment',
 } as const;
 
 /** اردو */
@@ -602,4 +612,14 @@ export const uxUr: Record<keyof typeof uxEn, string> = {
   'rl.h.cancelled': 'منسوخ شدہ بکنگز',
   'rl.more': 'مزید دکھائیں',
   'today.mgrQueue': 'مینیجر کے فیصلے کے منتظر',
+  'sc.title': 'کی بورڈ شارٹ کٹس',
+  'sc.subtitle': 'اکیلے حروف بکنگ کے صفحے پر کام کرتے ہیں اور ٹائپ کرتے وقت نظر انداز ہوتے ہیں۔',
+  'sc.palette': 'تلاش اور کمانڈز',
+  'sc.search': 'تلاش (اوپر والے کے برابر)',
+  'sc.help': 'یہ فہرست دکھائیں',
+  'sc.close': 'پینل یا ڈائیلاگ بند کریں',
+  'sc.checkin': 'مہمان کو چیک اِن کریں',
+  'sc.checkout': 'مہمان کو چیک آؤٹ کریں',
+  'sc.move': 'مہمان کو دوسرے کمرے میں منتقل کریں',
+  'sc.pay': 'ادائیگی لیں',
 };

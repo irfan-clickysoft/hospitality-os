@@ -138,3 +138,4 @@ a:not([class]) { color: var(--info-fg); }
 /* the older bottom sheets (forms, payments, the second-factor prompt on plain screens) must sit above the phone's bottom navigation and the action bar, or their buttons are hidden behind them */
 .sheet-wrap { z-index: 50; }
 .rowwrap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .rowwrap > .qrow { flex: 1 1 320px; width: auto; }
+.shortcuts { display: grid; gap: 8px; margin: 0; } .shortcuts div { display: flex; gap: 16px; align-items: center; min-height: 44px; border-bottom: 1px solid var(--line); } .shortcuts dt { min-width: 84px; } .shortcuts dd { margin: 0; }

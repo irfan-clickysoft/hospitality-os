@@ -15,6 +15,7 @@ const inHouse = (await hira.get(`/v1/properties/${pid}/reservations?view=in-hous
 const any = (await hira.get(`/v1/properties/${pid}/reservations?limit=5`)).items[0];
 
 async function audit(page, name, { skip = [] } = {}) {
+  await page.waitForTimeout(350);                       // let a panel or popover finish sliding in: axe would measure it half transparent
   await page.addScriptTag({ content: AXE });
   const r = await page.evaluate(async (skipRules) => window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] }, rules: Object.fromEntries(skipRules.map((x) => [x, { enabled: false }])) }), skip);
   const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
@@ -51,6 +52,7 @@ for (const scheme of ['light', 'dark']) {
     await page.keyboard.press('Escape');
   }
   if (any) { await go(`/reservations/${any.reservationId}/check-in`); await page.waitForTimeout(1000); await page.getByRole('button', { name: 'Check in' }).last().click({ force: true }); await page.waitForTimeout(400); await audit(page, `${scheme} · Check-in page with errors shown`); }
+  await go('/today'); await page.keyboard.press('?'); await page.getByRole('dialog').waitFor(); await audit(page, `${scheme} · Shortcut help`); await page.keyboard.press('Escape');
   await go('/today'); await page.keyboard.press('Control+k'); await page.getByRole('dialog').waitFor(); await audit(page, `${scheme} · Command palette`); await page.keyboard.press('Escape');
   await page.getByRole('button', { name: /^Alerts/ }).click(); await audit(page, `${scheme} · Alerts popover`, { skip: ['target-size'] });   // the open popover sits over the page's own controls; axe counts those as obscured await page.keyboard.press('Escape');
   if (scheme === 'light') {
