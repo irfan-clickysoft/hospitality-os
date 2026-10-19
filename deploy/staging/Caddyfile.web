@@ -1,0 +1,11 @@
+# Serves the built staff app. Requests for pages that are not files fall back to index.html (it is a single-page app).
+:80 {
+	root * /srv
+	encode zstd gzip
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@shell path /index.html /sw.js /manifest.webmanifest
+	header @shell Cache-Control "no-cache"
+	try_files {path} /index.html
+	file_server
+}

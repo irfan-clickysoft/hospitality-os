@@ -1,0 +1,95 @@
+# Hospitality OS (Sunset pilot) on the shared STAGING server (/opt/hospitality). Images come from GitHub Actions.
+# No ports are published: the shared front door (/opt/edge) reaches the API and the staff app over the "edge" network.
+name: hospitality
+
+x-api-env: &api-env
+  NODE_ENV: production
+  PORT: 3000
+  DATABASE_URL_APP: postgres://hos_app:${HOS_APP_PASSWORD}@db:5432/${HOS_DB}
+  DATABASE_URL_ADMIN: postgres://hos_admin:${HOS_ADMIN_PASSWORD}@db:5432/${HOS_DB}
+  DATABASE_URL_OWNER: postgres://hos_owner:${HOS_OWNER_PASSWORD}@db:5432/${HOS_DB}
+  APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY}
+  ALLOWED_ORIGINS: ${PUBLIC_WEB_ORIGIN}
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${PG_SUPERUSER_PASSWORD}
+      HOS_DB: ${HOS_DB}
+      HOS_OWNER_PASSWORD: ${HOS_OWNER_PASSWORD}
+      HOS_APP_PASSWORD: ${HOS_APP_PASSWORD}
+      HOS_ADMIN_PASSWORD: ${HOS_ADMIN_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # One-off job: applies database migrations before the new API starts. Never resets data.
+  migrate:
+    image: ${HOS_REGISTRY}/hospitality-os-api:${HOS_TAG}
+    working_dir: /app/packages/db
+    command: ['tsx', 'src/migrate-cli.ts']
+    environment: *api-env
+    depends_on:
+      db: { condition: service_healthy }
+    restart: 'no'
+
+  api:
+    image: ${HOS_REGISTRY}/hospitality-os-api:${HOS_TAG}
+    restart: unless-stopped
+    environment: *api-env
+    depends_on:
+      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    networks:
+      default: {}
+      edge:
+        aliases: [hos-api]
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  web:
+    image: ${HOS_REGISTRY}/hospitality-os-web:${HOS_TAG}
+    restart: unless-stopped
+    networks:
+      default: {}
+      edge:
+        aliases: [hos-web]
+
+  # Run ONCE, by hand, to load the Sunset pilot with demo staff (see deploy/staging/README.md):
+  #   docker compose --profile seed run --rm seed
+  seed:
+    profiles: [seed]
+    image: ${HOS_REGISTRY}/hospitality-os-api:${HOS_TAG}
+    working_dir: /app/apps/api
+    environment:
+      <<: *api-env
+      # seed-demo-staff refuses NODE_ENV=production ("local development only"). This server is a demo with no real data,
+      # so ONLY this one-off job is told it is development. The running API stays in production mode.
+      NODE_ENV: development
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?set DEMO_PASSWORD for the demo logins}
+      SEED_OWNER_EMAIL: ${SEED_OWNER_EMAIL:-owner@sunset.local}
+      SEED_TENANT_SLUG: sunset
+    command: ['sh', '-c', 'tsx src/cli/seed-sunset.ts && tsx src/cli/seed-sunset-rates.ts && tsx src/cli/seed-demo-staff.ts']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: 'no'
+
+networks:
+  edge:
+    external: true
+    name: edge
+
+volumes:
+  db-data:

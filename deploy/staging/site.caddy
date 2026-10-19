@@ -1,0 +1,25 @@
+# Hospitality OS staging: the staff app and its API on ONE address (the app relies on this: one origin for cookies and CSRF).
+# Behind the staging password. /healthz stays open for monitors.
+pms-s.sunsetbb.com {
+	encode zstd gzip
+	request_body {
+		max_size 12MB
+	}
+	header {
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+	@health path /healthz
+	handle @health {
+		reverse_proxy hos-api:3000
+	}
+	handle {
+		import gate
+		handle /v1/* {
+			reverse_proxy hos-api:3000
+		}
+		handle {
+			reverse_proxy hos-web:80
+		}
+	}
+}
