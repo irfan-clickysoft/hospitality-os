@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
+import { api } from '../api/client.js';
+import { useAction } from '../lib/action.js';
 import { useAuth, useLive } from '../state.js';
 import type { ListItem, RackData, RackRoom } from '../desk/types.js';
 import { Banner, ResStatus, RoomState, Skeleton, StatusBadge, Tabs } from '../ui/ds.js';
 import { Icon } from '../ui/icons.js';
-import { Chip, Empty } from '../ui/kit.js';
+import { Chip, Empty, ErrorLine } from '../ui/kit.js';
 import { Link, useRoute, useSetQuery } from '../shell/router.js';
 import type { Section } from '../shell/sections.js';
 
@@ -71,8 +73,10 @@ const roomFilter = (r: RackRoom, f: RoomFilter): boolean => f === 'all' || (f ==
 /** The house right now, room by room. A list rather than a grid so it reads the same on a phone. */
 export function RoomsLive() {
   const { t } = useT();
-  const { property } = useAuth();
+  const { property, can } = useAuth();
   const route = useRoute(); const setQuery = useSetQuery();
+  const ask = useAction(); const [asked, setAsked] = useState<Record<string, boolean>>({});
+  const prioritise = async (roomId: string) => { if (await ask.run(() => api('POST', `/v1/properties/${property!.id}/housekeeping/rooms/${roomId}/prioritise`)) !== undefined) { setAsked((m) => ({ ...m, [roomId]: true })); rack.reload(); } };
   const rack = useLive<RackData>(`/v1/properties/${property!.id}/rack?days=1`, 20_000, `rack1-${property!.id}`);
   const f = (['ready', 'dirty', 'occupied', 'blocked'] as const).find((x) => x === route.query.get('f')) ?? 'all';
   const floors = useMemo(() => {
@@ -84,6 +88,7 @@ export function RoomsLive() {
   return (
     <section aria-labelledby="h-rooms">
       <div className="page-head"><h1 id="h-rooms">{t('nav.rooms2')}</h1></div>
+      <ErrorLine code={ask.problem?.code} detail={ask.problem?.detail} />
       {rack.offline && <Banner level="ACTION" title={t('state.staleTitle')}>{t('state.staleText')}</Banner>}
       {s && <p className="muted" role="status">{t('rooms.summary', { occupied: s.occupied, clean: s.vacantClean, dirty: s.vacantDirty, out: s.outOfOrder + s.outOfService })}</p>}
       <div className="chips" role="group" aria-label={t('inbox.filter')}>{(['all', 'ready', 'dirty', 'occupied', 'blocked'] as const).map((x) => <Chip key={x} active={f === x} onClick={() => setQuery({ f: x === 'all' ? null : x })}>{t(`rooms.f.${x}` as Key)}</Chip>)}</div>
@@ -96,7 +101,12 @@ export function RoomsLive() {
               <span className="q-main"><strong>{t('d.room')} {r.number}</strong><span className="muted small">{stay ? `${stay.guestName} · ${stay.confirmationNo}` : t(`occ.${r.occupancy}` as Key)}</span></span>
               <span className="q-badges"><RoomState hk={r.hkStatus} />{r.blocks.length > 0 && <StatusBadge tone="danger" icon="stop">{t('bl.ROOM_OUT_OF_SERVICE')}</StatusBadge>}{r.arrivingToday && <StatusBadge tone="info" icon="clock">{t('rooms.arriving')}</StatusBadge>}{r.dueOutToday && <StatusBadge tone="neutral" icon="clock">{t('rooms.dueOut')}</StatusBadge>}</span>
             </>);
-            return <li key={r.id}>{stay ? <Link to={`/reservations/${stay.reservationId}`} className="qrow">{inner}<span className="q-next"><Icon name="chevron" size={18} /></span></Link> : <div className="qrow static">{inner}</div>}</li>;
+            const dirty = r.hkStatus === 'DIRTY' || r.hkStatus === 'CLEANING';
+            return (
+              <li key={r.id} className="rowwrap">
+                {stay ? <Link to={`/reservations/${stay.reservationId}`} className="qrow">{inner}<span className="q-next"><Icon name="chevron" size={18} /></span></Link> : <div className="qrow static">{inner}</div>}
+                {dirty && can('frontdesk.check_in') && (asked[r.id] ? <StatusBadge tone="ok" icon="check">{t('ci.asked')}</StatusBadge> : <button disabled={ask.busy} onClick={() => void prioritise(r.id)}>{t('ci.prioritise')}</button>)}
+              </li>);
           })}</ul></section>))}
     </section>
   );
