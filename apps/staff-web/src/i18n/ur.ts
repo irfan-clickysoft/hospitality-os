@@ -1,4 +1,5 @@
 import type { Key } from './en.js';
+import { uxUr } from './ux.js';
 
 /** اردو — same keys as English; the compiler rejects a missing or extra key. */
 export const ur: Record<Key, string> = {
@@ -491,6 +492,10 @@ export const ur: Record<Key, string> = {
   'safe.why': 'پوری تجوری سے کم کیوں؟', 'safe.count': 'وصول کرنے والے کے ساتھ نقدی اور لفافے گنیں۔ یہ ہمیشہ کے لیے درج ہوتا ہے۔', 'safe.confirm': 'حوالگی درج کریں',
   'err.SAFE_CHANGED': 'آپ کے دیکھنے کے بعد تجوری کا بیلنس بدل گیا ہے۔ نیا بیلنس دیکھ کر دوبارہ کوشش کریں۔', 'err.HANDOVER_EXCEEDS_SAFE': 'یہ لفافوں کے مطابق تجوری میں موجود نقدی سے زیادہ ہے۔',
   'safe.print': 'رسید پرنٹ کریں',
+  // gate
+  'nav.gate': 'گیٹ', 'd.regCard': 'رجسٹریشن کارڈ', 'gt.log': 'اندراج کریں', 'gt.in': 'اندر درج کریں', 'gt.out': 'باہر چلا گیا', 'gt.expected': 'آج متوقع', 'gt.inHouse': '{n} ہوٹل میں مقیم', 'gt.noArrivals': 'آج کوئی آمد متوقع نہیں۔', 'gt.people': 'افراد', 'gt.arrived': 'پہنچ گئے', 'gt.coming': 'متوقع',
+  'gt.here': 'اس وقت اندر', 'gt.nobody': 'کوئی اندر درج نہیں۔', 'gt.today': 'آج باہر گئے', 'gt.visiting': 'ملاقات کے لیے', 'gt.name': 'نام', 'gt.plate': 'گاڑی نمبر', 'gt.phone': 'فون', 'gt.purpose': 'مقصد', 'gt.id4': 'دکھائے گئے شناختی کارڈ کے آخری 4 ہندسے (اگر ہو)',
+  'gt.privacy': 'شناختی کارڈ کے صرف آخری چار ہندسے رکھے جاتے ہیں، پورا نمبر کبھی نہیں۔', 'gt.k.VISITOR': 'ملاقاتی', 'gt.k.VEHICLE': 'گاڑی', 'gt.k.DELIVERY': 'ڈیلیوری', 'gt.k.CONTRACTOR': 'ٹھیکیدار',
   // conference room
   'nav.spaces': 'کانفرنس روم', 'sp.v.calendar': 'کیلنڈر', 'sp.v.spaces': 'جگہیں اور قیمتیں', 'sp.newHire': 'نئی بکنگ', 'sp.nothing': 'اگلے دو ہفتوں میں کوئی بکنگ نہیں۔', 'sp.noSpaces': 'ابھی کوئی جگہ درج نہیں۔ مینیجر سے کہیں کہ "جگہیں اور قیمتیں" میں کانفرنس روم شامل کرے۔',
   'sp.creditNote': 'کریڈٹ نوٹ',
@@ -545,4 +550,5 @@ export const ur: Record<Key, string> = {
   'rp.r.payment-accounts': 'ادائیگی کھاتے', 'rp.d.payment-accounts': 'ہر کھاتے میں آنے جانے والی رقم، اور جو کھاتے کمپنی کے نہیں ان پر نشان۔',
   'err.RANGE_TOO_LONG': 'کم مدت چنیں (زیادہ سے زیادہ 400 دن)۔',
   'rp.badPeriod': 'تاریخیں دیکھیں: آخری تاریخ شروع سے پہلے نہیں ہو سکتی۔',
+  ...uxUr,
 };

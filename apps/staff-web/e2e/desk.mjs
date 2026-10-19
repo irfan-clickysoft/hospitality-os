@@ -1,5 +1,6 @@
 // Browser test of the front-office screens against the real API (see apps/staff-web/README.md for the setup).
 import { chromium } from 'playwright';
+import { goTab, mainNav, setLang } from './lib.mjs';
 const BASE = process.env.STAFF_URL ?? 'http://localhost:3001';
 const OUT = process.argv[2] ?? '.';
 const browser = await chromium.launch({ ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}), args: ['--no-sandbox'] });
@@ -15,16 +16,16 @@ async function login(ctx, email) {
   await page.getByLabel(/^Email/).fill(email);
   await page.getByLabel(/^Password/).fill((process.env.E2E_PASSWORD ?? 'sunset-demo-passphrase'));
   await page.locator('form button.primary').click();
-  await page.locator('nav.tabs').waitFor();
+  await mainNav(page).waitFor();
   return page;
 }
-const tab = (page, name) => page.locator('nav.tabs').getByRole('button', { name, exact: true }).click();
+const tab = (page, name) => goTab(page, name);
 const sheet = (page) => page.locator('.sheet').last();
 
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
 const page = await login(ctx, 'hira@sunset.local');
 check('front desk lands on Today', await page.getByRole('heading', { name: 'Today' }).count() === 1);
-check('front desk sees desk tabs but not Night audit', await page.locator('nav.tabs').getByRole('button', { name: 'Night audit' }).count() === 0 && await page.locator('nav.tabs').getByRole('button', { name: 'Rack' }).count() === 1);
+check('front desk sees the desk sections but not Administration', await mainNav(page).getByRole('link', { name: 'Administration' }).count() === 0 && await mainNav(page).getByRole('link', { name: 'Calendar' }).count() === 1);
 await page.screenshot({ path: `${OUT}/d01-today.png` });
 
 // cashier: open a session
@@ -61,37 +62,40 @@ await sheet(page).getByRole('button', { name: 'Confirm booking' }).click();
 const conf = await sheet(page).locator('.ok.big').innerText();
 check(`booking confirmed (${conf})`, /✓ BLVD-\d+/.test(conf));
 await sheet(page).getByRole('button', { name: 'Open booking' }).click();
+await page.getByRole('heading', { level: 1, name: new RegExp(`Ali Raza ${stamp}`) }).waitFor();
+check('opening a booking lands on its workspace page', page.url().includes('#/reservations/'));
 
-// check in
-await sheet(page).getByRole('button', { name: 'Check in' }).first().click();
-const clean = page.locator('.room-picker .pick:not([disabled])').filter({ hasText: /Clean(?!ing)/ });
+// check in (a full page inside the workspace)
+await page.locator('.head-actions').getByRole('link', { name: /Check in/ }).click();
+const clean = page.locator('.room-picker button:not([disabled])').filter({ hasText: /Clean(?!ing)|Ready/ });
 await clean.first().waitFor();
 await clean.first().click();
-const ci = page.locator('.sheet').last();
-await ci.getByLabel('ID number').fill('35202-1234567-1');
+await page.getByLabel(/^ID number/).fill('35202-1234567-1');
 await page.screenshot({ path: `${OUT}/d03-checkin.png` });
-await ci.getByRole('button', { name: 'Check in', exact: true }).click();
-await page.locator('.sheet').first().getByText('In house').first().waitFor();
-check('guest is in house', await page.locator('.sheet').first().getByText('In house').count() > 0);
+await page.getByRole('region', { name: 'Check in' }).getByRole('button', { name: 'Check in' }).click();
+await page.getByText(/Checked in at \d\d:\d\d/).waitFor();
+check('guest is in house', await page.getByRole('region', { name: 'Guest, stay, room and balance' }).getByText('In house').count() > 0);
 
 // money: the bill, a payment, then check out
-await page.locator('.sheet').first().getByRole('tab', { name: 'Bill' }).click();
-await page.locator('.sheet').first().getByRole('button', { name: 'Take payment' }).first().click();
-await sheet(page).getByLabel('Amount').fill(price);
-await sheet(page).getByRole('button', { name: 'Take payment' }).click();
-await page.locator('.sheet-head h2', { hasText: 'Take payment' }).waitFor({ state: 'detached' });
-await page.locator('.sheet').first().getByText('Received').first().waitFor();
-check('payment appears on the bill', await page.locator('.sheet').first().getByText('Received').count() > 0);
+await page.getByRole('tab', { name: 'Bill' }).click();
+await page.getByRole('button', { name: 'Take payment' }).first().click();
+const pay = page.getByRole('dialog', { name: 'Take payment' });
+await pay.getByLabel('Amount').fill(price);
+await pay.getByRole('button', { name: 'Take payment' }).click();
+await pay.waitFor({ state: 'detached' });
+await page.getByText('Received').first().waitFor();
+check('payment appears on the bill', await page.getByText('Received').count() > 0);
 await page.screenshot({ path: `${OUT}/d04-bill.png` });
-await page.locator('.sheet').first().getByRole('tab', { name: 'Stay' }).click();
-await page.locator('.sheet').first().getByRole('button', { name: 'Check out' }).first().click();
-await sheet(page).getByLabel('Why is the guest leaving early?').fill('Changed plans');
-await sheet(page).getByRole('button', { name: 'Check out' }).last().click();
-await page.locator('.sheet').first().getByText('Checked out').first().waitFor();
-check('guest checked out with a settled bill', await page.locator('.sheet').first().getByText('Checked out').count() > 0);
-await page.keyboard.press('Escape');
+await page.getByRole('tab', { name: 'Overview' }).click();
+await page.locator('.head-actions').getByRole('link', { name: /Check out/ }).click();
+await page.getByLabel(/Why is the guest leaving early/).fill('Changed plans');
+await page.screenshot({ path: `${OUT}/d04b-checkout.png` });
+await page.getByRole('region', { name: 'Check out' }).getByRole('button', { name: 'Check out' }).click();
+await page.getByText(/Checked out at \d\d:\d\d/).waitFor();
+check('guest checked out with a settled bill', true);
 
 // walk-in
+await tab(page, 'Bookings');
 await page.getByRole('button', { name: 'Walk-in' }).first().click();
 await sheet(page).getByLabel('Full name').first().fill(`Sara Khan ${stamp}`);
 await sheet(page).getByLabel('ID number').fill('42101-7654321-9');
@@ -109,8 +113,8 @@ await page.locator('.rack').waitFor();
 await page.screenshot({ path: `${OUT}/d06-rack.png` });
 check('rack shows the walk-in guest as a bar', await page.locator('.bar.st-checked_in', { hasText: 'Sara Khan' }).count() > 0);
 await page.locator('.bar.st-checked_in', { hasText: 'Sara Khan' }).first().click();
-await page.locator('.sheet').first().getByText(/BLVD-/).first().waitFor();
-await page.keyboard.press('Escape');
+await page.getByRole('heading', { level: 1, name: /Sara Khan/ }).waitFor();
+check('a bar on the calendar opens the same workspace', page.url().includes('#/reservations/'));
 
 // today shows the in-house guest
 await tab(page, 'Today');
@@ -129,12 +133,12 @@ await page.screenshot({ path: `${OUT}/d07-cashier-closed.png` });
 await sheet(page).getByRole('button', { name: 'Close' }).click();
 
 // Urdu on the rack
-await page.getByRole('button', { name: 'اردو' }).click();
+await setLang(page, 'ur');
 await tab(page, 'ریک');
 await page.locator('.rack').waitFor();
 check('rack is right-to-left in Urdu', (await page.evaluate(() => document.documentElement.dir)) === 'rtl');
 await page.screenshot({ path: `${OUT}/d08-rack-urdu.png` });
-await page.getByRole('button', { name: 'English' }).first().click();      // put the profile back (the choice is saved on the server)
+await setLang(page, 'en');      // put the profile back (the choice is saved on the server)
 await page.waitForTimeout(500);
 await ctx.close();
 
@@ -142,7 +146,7 @@ await ctx.close();
 const phone = await browser.newContext({ viewport: { width: 390, height: 780 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 const p2 = await login(phone, 'hira@sunset.local');
 await p2.screenshot({ path: `${OUT}/d09-phone-today.png` });
-await p2.locator('nav.tabs').getByRole('button', { name: 'Rack', exact: true }).click();
+await tab(p2, 'Rack');
 await p2.locator('.rack').waitFor();
 await p2.screenshot({ path: `${OUT}/d10-phone-rack.png` });
 await phone.close();

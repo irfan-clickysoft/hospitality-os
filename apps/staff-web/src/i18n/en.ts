@@ -1,3 +1,4 @@
+import { uxEn } from './ux.js';
 /** English strings. Urdu (ur.ts) must define exactly the same keys — the compiler and a test enforce it. */
 export const en = {
   'app.name': 'Sunset Staff',
@@ -489,6 +490,10 @@ export const en = {
   'safe.why': 'Why is it less than the whole safe?', 'safe.count': 'Count the cash and the envelopes with the person receiving it. This is recorded for good.', 'safe.confirm': 'Record handover',
   'err.SAFE_CHANGED': 'The safe balance has changed since you looked. Check the new balance and try again.', 'err.HANDOVER_EXCEEDS_SAFE': 'That is more cash than the envelopes say the safe holds.',
   'safe.print': 'Print receipt',
+  // gate
+  'nav.gate': 'Gate', 'd.regCard': 'Registration card', 'gt.log': 'Log someone in', 'gt.in': 'Log in', 'gt.out': 'Gone out', 'gt.expected': 'Expected today', 'gt.inHouse': '{n} in the house', 'gt.noArrivals': 'No arrivals expected today.', 'gt.people': 'people', 'gt.arrived': 'Arrived', 'gt.coming': 'Expected',
+  'gt.here': 'At the property now', 'gt.nobody': 'Nobody logged in.', 'gt.today': 'Gone out today', 'gt.visiting': 'Visiting', 'gt.name': 'Name', 'gt.plate': 'Vehicle number', 'gt.phone': 'Phone', 'gt.purpose': 'Purpose', 'gt.id4': 'Last 4 of the ID shown (if any)',
+  'gt.privacy': 'Only the last four characters of an ID are kept, never the whole number.', 'gt.k.VISITOR': 'Visitor', 'gt.k.VEHICLE': 'Vehicle', 'gt.k.DELIVERY': 'Delivery', 'gt.k.CONTRACTOR': 'Contractor',
   // conference room
   'nav.spaces': 'Conference room', 'sp.v.calendar': 'Calendar', 'sp.v.spaces': 'Spaces and prices', 'sp.newHire': 'New hire', 'sp.nothing': 'No hires in the next two weeks.', 'sp.noSpaces': 'No space is set up yet. Ask a manager to add the conference room under Spaces and prices.',
   'sp.creditNote': 'Credit note',
@@ -543,5 +548,6 @@ export const en = {
   'rp.r.payment-accounts': 'Payment accounts', 'rp.d.payment-accounts': 'Money in and out of each account, with accounts that are not the company’s marked.',
   'err.RANGE_TOO_LONG': 'Choose a shorter period (at most 400 days).',
   'rp.badPeriod': 'Check the dates: the end cannot be before the start.',
+  ...uxEn,
 } as const;
 export type Key = keyof typeof en;

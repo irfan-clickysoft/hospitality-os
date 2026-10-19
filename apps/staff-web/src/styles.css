@@ -1,6 +1,6 @@
 :root {
   --bg: #f6f4ef; --card: #ffffff; --ink: #1d2a30; --muted: #5d6b72; --line: #dcd7cb; --brand: #0f4c5c; --brand-ink: #ffffff; --accent: #f4a259;
-  --dirty: #c8553d; --dirty-bg: #fbe3dd; --cleaning: #b7791f; --cleaning-bg: #fdf0d2; --clean: #2f7d4f; --clean-bg: #dff2e5; --inspected: #1d5fa8; --inspected-bg: #dbe9f9;
+  --dirty: #a4262c; --dirty-bg: #fde8e8; --cleaning: #8a4b00; --cleaning-bg: #fdf0d9; --clean: #1e6b3a; --clean-bg: #e6f4ea; --inspected: #0b5cad; --inspected-bg: #e4effa;
   --urgent: #a4161a; --warn-bg: #fff3cd; --radius: 14px; --tap: 48px;
 }
 @media (prefers-color-scheme: dark) {
@@ -105,4 +105,4 @@ a.button { display: inline-flex; align-items: center; min-height: var(--tap); pa
   .sheet { max-width: 720px; border-radius: 20px; align-self: center; max-height: 92dvh; } .sheet-wrap { align-items: center; }
   .tiles { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
 }
-@media (max-width: 899px) { .tabs { overflow-x: auto; } .tabs button { flex: 1 0 auto; min-width: 84px; padding: 0 10px; } }
+@media (max-width: 899px) { .top { flex-wrap: wrap; } .top .who { flex: 1 1 100%; } .top .row { flex-wrap: wrap; gap: 4px 12px; } .tabs { overflow-x: auto; } .tabs button { flex: 1 0 auto; min-width: 84px; padding: 0 10px; } }

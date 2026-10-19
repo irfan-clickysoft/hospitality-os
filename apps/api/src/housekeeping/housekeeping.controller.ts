@@ -28,6 +28,8 @@ export class HousekeepingController {
   cancel(@Param('propertyId', uuid()) pid: string, @Param('taskId', uuid()) id: string, @Body() body: unknown) { return this.svc.cancel(pid, id, me(), parse(S.CancelTask, body).reason); }
   @Post('tasks/:taskId/inspect') @RequirePermission('housekeeping.assign', P) @HttpCode(200)
   inspect(@Param('propertyId', uuid()) pid: string, @Param('taskId', uuid()) id: string, @Body() body: unknown) { return this.svc.inspect(pid, id, me(), parse(S.InspectTask, body)); }
+  @Post('rooms/:roomId/prioritise') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
+  prioritise(@Param('propertyId', uuid()) pid: string, @Param('roomId', uuid()) roomId: string) { return this.svc.prioritise(pid, roomId, me()); }
   @Put('settings') @RequirePermission('property.manage', P)
   settings(@Param('propertyId', uuid()) pid: string, @Body() body: unknown) { return this.svc.setSettings(pid, parse(S.Settings, body)); }
   @Put('rooms/:roomId/status') @RequirePermission('housekeeping.assign', P)

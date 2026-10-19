@@ -15,7 +15,7 @@ async function login(ctx, email, tenant = 'sunset') {
   await page.getByLabel(/Email|ای میل/).fill(email);
   await page.getByLabel(/Password|پاس ورڈ/).fill((process.env.E2E_PASSWORD ?? 'sunset-demo-passphrase'));
   await page.locator('form button.primary').click();
-  await page.locator('nav.tabs').waitFor();
+  await page.getByRole('navigation', { name: /Main navigation|مین مینو/ }).first().waitFor();
   return page;
 }
 
@@ -61,7 +61,7 @@ async function login(ctx, email, tenant = 'sunset') {
   check('page is right-to-left', (await page.evaluate(() => document.documentElement.dir)) === 'rtl');
   check('Urdu text on screen', await page.getByText('صفائی شروع کریں').count() > 0);
   await page.screenshot({ path: `${OUT}/05-ayesha-urdu.png` });
-  await page.getByRole('button', { name: 'English' }).first().click();
+  await page.getByRole('button', { name: /پروفائل/ }).click(); await page.getByRole('button', { name: 'English' }).click();
   check('switch to English', (await page.evaluate(() => document.documentElement.dir)) === 'ltr');
   await ctx.close();
 }
@@ -70,7 +70,7 @@ async function login(ctx, email, tenant = 'sunset') {
 {
   const ctx = await browser.newContext(phone);
   const page = await login(ctx, 'sana@sunset.local');
-  await page.getByRole('button', { name: 'Board' }).click();
+  await page.goto(`${BASE}/#/housekeeping?tab=board`);
   await page.waitForSelector('.tile');
   check('board shows all nine rooms', await page.locator('.tile').count() === 9);
   await page.screenshot({ path: `${OUT}/06-sana-board.png` });

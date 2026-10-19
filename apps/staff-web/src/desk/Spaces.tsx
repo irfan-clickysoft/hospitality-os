@@ -17,7 +17,6 @@ interface Hire {
 }
 interface Stay { reservationId: string; confirmationNo: string; guest: string; room: string | null; status: string }
 const tone = (s: string) => (s === 'COMPLETED' ? 'inspected' : s === 'CANCELLED' ? 'neutral' : 'warn') as 'inspected' | 'neutral' | 'warn';
-const today = () => new Date().toLocaleDateString('en-CA');
 
 /** The conference room: a calendar of hires, new bookings (charged to a staying guest or on a bill of their own), and the prices. */
 export function Spaces() {
@@ -85,9 +84,10 @@ function EditHire({ base, hire, onDone, onClose }: { base: string; hire: Hire; o
 
 function NewHire({ base, onDone, onClose }: { base: string; onDone: () => void; onClose: () => void }) {
   const { t, locale } = useT();
+  const { property } = useAuth();                       // a new hire starts on the property's business day, which is not always the calendar day (before the night audit it is still yesterday)
   const spaces = useLive<{ items: Space[] }>(base, 120_000);
   const stays = useLive<{ items: Stay[] }>(`${base}/stays`, 120_000);
-  const [f, setF] = useState({ spaceId: '', eventName: '', hostName: '', hostPhone: '', date: today(), startTime: '10:00', endTime: '14:00', pricing: 'HALF_DAY', billTo: 'SEPARATE', reservationId: '', attendees: '' });
+  const [f, setF] = useState({ spaceId: '', eventName: '', hostName: '', hostPhone: '', date: property!.businessDate, startTime: '10:00', endTime: '14:00', pricing: 'HALF_DAY', billTo: 'SEPARATE', reservationId: '', attendees: '' });
   const { busy, problem, run } = useAction();
   const space = spaces.data?.items.find((s) => s.id === (f.spaceId || spaces.data?.items[0]?.id));
   const go = async () => {
