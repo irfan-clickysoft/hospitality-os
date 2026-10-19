@@ -267,6 +267,14 @@ await page.getByText(/Room changed at \d\d:\d\d · now Room 102/).waitFor();
 check('after the code the move goes through without starting over', true);
 await page.unroute('**/rooms/*/move'); await page.unroute('**/v1/auth/mfa/verify');
 
+// the Rooms page: the desk can push a dirty room up the cleaning queue from the list
+await page.goto(`${BASE}/#/rooms?f=dirty`);
+const askBtn = page.getByRole('button', { name: 'Ask housekeeping to clean it first' }).first();
+await askBtn.waitFor();
+await askBtn.click();
+await page.getByText('Housekeeping has been asked to clean this room first').first().waitFor();
+check('Rooms lists dirty rooms with an "ask housekeeping" action, and confirms it', true);
+
 // the bookings list: filters live in the address, search finds by name, a row opens the workspace
 await page.goto(`${BASE}/#/reservations?tab=bookings&view=cancelled`);
 await page.getByRole('link', { name: new RegExp(`Third Guest ${stamp}`) }).waitFor();
