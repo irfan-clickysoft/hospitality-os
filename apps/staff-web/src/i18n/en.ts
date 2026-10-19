@@ -485,6 +485,7 @@ export const en = {
   'err.TOO_SHORT': 'The shortest hire is 30 minutes.', 'err.DATE_IN_PAST': 'That date has already passed.', 'err.SPACE_INACTIVE': 'This space is not being hired out.', 'err.STAY_NOT_ACTIVE': 'That stay is not in the house or coming. Use an own bill instead.',
   'err.BILL_HAS_PAYMENTS': 'Money has been taken on this hire’s bill. Refund it first, then cancel.', 'err.ALREADY_COMPLETED': 'This hire is already on the bill. Reverse the charge on the bill instead.',
   'err.NOT_A_SEPARATE_BILL': 'This hire is on a guest’s stay. Use the stay’s bill instead.', 'err.HIRE_NOT_DONE': 'Mark the hire done first, so there is something on its bill.',
+  'grp.label': 'Switch area', 'grp.front': 'Front desk', 'grp.house': 'Housekeeping', 'grp.money': 'Money', 'grp.manage': 'Management',
   // staff, account, audit
   'nav.staff': 'Staff', 'nav.audit2': 'Audit trail', 'acct.title': 'My account',
   'inv2.title': 'Choose your password', 'inv2.help': 'Use at least 12 characters. A few ordinary words together make a strong password.', 'inv2.new': 'New password', 'inv2.again': 'New password again', 'inv2.set': 'Save password', 'inv2.done': 'Your password is saved. You can sign in now.',

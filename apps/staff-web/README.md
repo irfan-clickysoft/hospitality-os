@@ -33,5 +33,6 @@ pnpm --filter @hos/staff-web build
 # browser smoke test against the running stack (needs: npx playwright install chromium)
 node apps/staff-web/e2e/smoke.mjs ./shots      # housekeeping: attendant, offline, Urdu, supervisor board
 node apps/staff-web/e2e/desk.mjs ./shots       # front office: book, check in, pay, check out, walk-in, rack, cashier, audit (run after scripts/reset-dev.sh)
+node apps/staff-web/e2e/office.mjs ./shots     # owner: every tab opens, conference room (space, hire, overlap refused, done, invoice), kitchen menu, grouped tabs on a phone (run after scripts/reset-dev.sh)
 ```
 Translations live in `src/i18n/en.ts` and `ur.ts`; Urdu must define exactly the English keys (compiler + test enforce it). **The Urdu wording is a first draft and needs a native-speaker review before go-live.**
