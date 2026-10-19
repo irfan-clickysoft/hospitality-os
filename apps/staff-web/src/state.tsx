@@ -123,21 +123,22 @@ export function WorkProvider({ userId, children }: { userId: string; children: R
 }
 
 /** Polls a GET, keeps the last good answer (also on disk) so a screen still shows something with no signal. */
-export function useLive<T>(path: string | null, intervalMs = 30_000, cacheKey?: string): { data: T | null; error: ApiError | null; offline: boolean; reload: () => void; loading: boolean } {
+export function useLive<T>(path: string | null, intervalMs = 30_000, cacheKey?: string): { data: T | null; error: ApiError | null; offline: boolean; reload: () => void; loading: boolean; updatedAt: number | null } {
   const [data, setData] = useState<T | null>(() => { try { return cacheKey ? JSON.parse(localStorage.getItem(`hos.cache.${cacheKey}`) ?? 'null') : null; } catch { return null; } });
   const [error, setError] = useState<ApiError | null>(null);
   const [offline, setOffline] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [tick, setTick] = useState(0);
   const { lastSent } = useWork();
   useEffect(() => {
     if (!path) return;
     let dead = false;
-    const go = () => api<T>('GET', path).then((d) => { if (dead) return; setData(d); setError(null); setOffline(false); setLoading(false); if (cacheKey) { try { localStorage.setItem(`hos.cache.${cacheKey}`, JSON.stringify(d)); } catch { /* full */ } } })
+    const go = () => api<T>('GET', path).then((d) => { if (dead) return; setData(d); setError(null); setOffline(false); setLoading(false); setUpdatedAt(Date.now()); if (cacheKey) { try { localStorage.setItem(`hos.cache.${cacheKey}`, JSON.stringify(d)); } catch { /* full */ } } })
       .catch((e) => { if (dead) return; setLoading(false); if (e instanceof NetworkError) setOffline(true); else if (e instanceof ApiError) setError(e); });
     go();
     const t = setInterval(go, intervalMs);
     return () => { dead = true; clearInterval(t); };
   }, [path, intervalMs, cacheKey, tick, lastSent]);
-  return { data, error, offline, reload: () => setTick((n) => n + 1), loading };
+  return { data, error, offline, reload: () => setTick((n) => n + 1), loading, updatedAt };
 }
