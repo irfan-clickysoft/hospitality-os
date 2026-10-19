@@ -7,6 +7,7 @@ import { Banner, LevelBadge, ResStatus, Skeleton, type Level } from '../ui/ds.js
 import { Icon } from '../ui/icons.js';
 import { useInbox } from '../shell/context.js';
 import { Link, useRoute, useSetQuery } from '../shell/router.js';
+import { inboxTarget } from './Inbox.js';
 import { personaOf } from '../shell/sections.js';
 import { Chip, Empty } from '../ui/kit.js';
 import type { Amount, ListItem } from '../desk/types.js';
@@ -42,6 +43,22 @@ function QueueRow({ to, name, vip, sub, status, blockers, next, done }: { to: st
   );
 }
 
+const MANAGER_KINDS = new Set(['PAYMENT_TO_VERIFY', 'COMPLIANCE_TASKS', 'CHARGE_REVIEWS', 'WORK_ORDER_URGENT', 'NO_SHOW_CANDIDATES', 'GUEST_FLAGGED']);
+/** What only a manager can decide today, pulled out of the inbox so it sits above the desk queue. */
+function ManagerQueue() {
+  const { t } = useT();
+  const inbox = useInbox();
+  const items = (inbox.data?.items ?? []).filter((i) => MANAGER_KINDS.has(i.kind) && i.level !== 'INFO').slice(0, 6);
+  if (!items.length) return null;
+  return (
+    <section className="block" aria-labelledby="h-mgr"><h2 id="h-mgr">{t('today.mgrQueue')}</h2>
+      <ul className="plain queue">{items.map((i) => (
+        <li key={i.id}><Link to={inboxTarget(i)} className="qrow slim"><span className="q-main"><strong>{t(`ib.${i.kind}` as Key, { guest: i.guest ?? '', room: i.roomNumber ?? '', n: i.count ?? 0, title: i.title ?? '' })}</strong></span>
+          <span className="q-badges"><LevelBadge level={i.level}>{t(`lvl.${i.level}` as Key)}</LevelBadge></span><span className="q-next"><Icon name="chevron" size={18} /></span></Link></li>))}</ul>
+    </section>
+  );
+}
+
 function DeskToday() {
   const { t, locale } = useT();
   const { property, can } = useAuth();
@@ -74,6 +91,7 @@ function DeskToday() {
       {stale && <Banner level="ACTION" title={t('state.staleTitle')}>{t('state.staleText')}</Banner>}
       {today.error && !d && <Banner level="BLOCKER" title={t('state.errorTitle')} action={<button onClick={today.reload}>{t('common.retry')}</button>}>{t(`err.${today.error.code}` as Key) === `err.${today.error.code}` ? t('err.generic') : t(`err.${today.error.code}` as Key)}</Banner>}
       {inbox.data && inbox.data.summary.blockers > 0 && can('management.view') && <Banner level="BLOCKER" title={t('today.mgrBlockers', { n: inbox.data.summary.blockers })} action={<Link className="button" to="/inbox">{t('shell.openInbox')}</Link>} />}
+      {can('management.view') && <ManagerQueue />}
       {!d ? <Skeleton rows={5} /> : (<>
         <div className="kpis" role="group" aria-label={t('today.summary')}>
           <button className={`kpi${view === 'arrivals' ? ' on' : ''}`} aria-pressed={view === 'arrivals'} onClick={() => setQuery({ view: 'arrivals' })}><strong>{s!.arrivalsPending}</strong><span>{t('today.toArrive')}</span>{s!.arrivalsWithProblems > 0 && <span className="kpi-flag"><Icon name="alert" size={14} />{t('today.withProblems', { n: s!.arrivalsWithProblems })}</span>}</button>

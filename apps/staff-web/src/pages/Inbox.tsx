@@ -8,7 +8,7 @@ import { useInbox, type InboxItem } from '../shell/context.js';
 import { Link, useRoute, useSetQuery } from '../shell/router.js';
 
 const TARGET: Record<string, string> = { NO_SHOW_CANDIDATES: '/reservations?tab=bookings', COMPLIANCE_TASKS: '/tasks?tab=compliance', CHARGE_REVIEWS: '/tasks?tab=compliance', PAYMENT_TO_VERIFY: '/reservations?tab=cashier', WORK_ORDER_MINE: '/tasks?tab=maintenance', WORK_ORDER_URGENT: '/tasks?tab=maintenance' };
-const where = (i: InboxItem): string => (i.reservationId ? `/reservations/${i.reservationId}${i.kind === 'BALANCE_DUE' || i.kind === 'OVERDUE_DEPARTURE' ? '/check-out' : ''}` : TARGET[i.kind] ?? '/today');
+export const inboxTarget = (i: InboxItem): string => (i.reservationId ? `/reservations/${i.reservationId}${i.kind === 'BALANCE_DUE' || i.kind === 'OVERDUE_DEPARTURE' ? '/check-out' : ''}` : TARGET[i.kind] ?? '/today');
 
 /** The shared inbox: everything that is waiting on someone, drawn from the records themselves, so an item disappears the moment its cause is fixed. */
 export function Inbox() {
@@ -30,7 +30,7 @@ export function Inbox() {
         {shown.length === 0 ? <Empty text={t('inbox.clear')} /> : (
           <ul className="plain queue" aria-label={t('nav.inbox')}>{shown.map((i) => (
             <li key={i.id}>
-              <Link to={where(i)} className="qrow">
+              <Link to={inboxTarget(i)} className="qrow">
                 <span className="q-main"><strong>{t(`ib.${i.kind}` as Key, { guest: i.guest ?? '', room: i.roomNumber ?? '', n: i.count ?? 0, title: i.title ?? '' })}</strong>
                   <span className="muted small">{[i.guest, i.roomNumber ? `${t('d.room')} ${i.roomNumber}` : '', i.amount ? money(i.amount) : ''].filter(Boolean).join(' · ')}</span></span>
                 <span className="q-badges"><LevelBadge level={i.level}>{t(`lvl.${i.level}` as Key)}</LevelBadge></span>

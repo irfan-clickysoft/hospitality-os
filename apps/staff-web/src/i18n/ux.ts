@@ -298,6 +298,7 @@ export const uxEn = {
   'rl.h.atrisk': 'Upcoming bookings with no deposit or guarantee',
   'rl.h.cancelled': 'Cancelled bookings',
   'rl.more': 'Show more',
+  'today.mgrQueue': 'Waiting for a manager',
 } as const;
 
 /** اردو */
@@ -600,4 +601,5 @@ export const uxUr: Record<keyof typeof uxEn, string> = {
   'rl.h.atrisk': 'بغیر ڈپازٹ یا ضمانت کی آنے والی بکنگز',
   'rl.h.cancelled': 'منسوخ شدہ بکنگز',
   'rl.more': 'مزید دکھائیں',
+  'today.mgrQueue': 'مینیجر کے فیصلے کے منتظر',
 };
