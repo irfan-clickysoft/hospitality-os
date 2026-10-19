@@ -51,6 +51,8 @@ Not yet: reservations, rack, front desk, folio, payments, tax engine, night audi
 
 **Slice 26 (changing a conference-room hire, and the real rate card):** a booked hire can be changed from the screen (**Change**): time, price type, event and host; the price is worked out again and the slot checked again. The seeds now carry the owner's rate card and each property's real room types (Creek sells Standard, Executive, Deluxe Triple and Family Suite). The header on a PC no longer repeats the property name when there is a property picker.
 
+**Slice 27 (setup check):** a **Setup check** tab (Management section; anyone with the management view, for the properties they may see) that reads the live configuration and says, per business and per property, what **needs doing** (tax area and an approved tax rate in force, the company's NTN and STRN, a nightly price for every room type, a payment account), what is **worth a look** (staff without a second factor, extra-person prices of zero, no separate weekend price and which days count as weekend, an empty kitchen menu, no conference room, room types with no rooms) and what is fine. It changes nothing and assumes nothing; its job is that no money runs on a guess. `GET /v1/readiness`. Needs no migration.
+
 ## Run it on your Mac (no cloud needed)
 Requires Node 22+, pnpm 10 (`corepack enable`), and Docker Desktop (or a local PostgreSQL 16). `psql` need not be installed: the scripts fall back to the one inside the database container.
 ```bash

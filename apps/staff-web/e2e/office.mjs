@@ -68,6 +68,12 @@ await page.getByRole('link', { name: /Print.*INV-/ }).waitFor();
 check('invoice shows with a print link', true);
 await page.screenshot({ path: `${OUT}/21-hire-done.png` });
 
+// 3a. setup check: the owner sees what is still missing
+await page.locator('nav.tabs button', { hasText: /^Setup check$/ }).click();
+await page.getByText(/to do · .* to look at/).waitFor();
+check('setup check lists what is missing', await page.getByText('Tax area chosen for this property').count() > 0 && await page.getByText('To do', { exact: true }).count() > 0);
+await page.screenshot({ path: `${OUT}/23-setup-check.png` });
+
 // 3. kitchen: the menu tab for a manager
 await page.locator('nav.tabs button', { hasText: /^Kitchen$/ }).click();
 await page.getByRole('button', { name: 'Menu', exact: true }).click();

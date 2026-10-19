@@ -28,6 +28,8 @@ import { PaymentAccountsController } from './payment-accounts/payment-accounts.c
 import { PaymentAccountsService } from './payment-accounts/payment-accounts.service.js';
 import { FnbController } from './fnb/fnb.controller.js';
 import { FnbService } from './fnb/fnb.service.js';
+import { ReadinessController } from './readiness/readiness.controller.js';
+import { ReadinessService } from './readiness/readiness.service.js';
 import { SpacesController } from './spaces/spaces.controller.js';
 import { SpacesService } from './spaces/spaces.service.js';
 import { StaffController } from './staff/staff.controller.js';
@@ -58,8 +60,8 @@ import { TenantMiddleware } from './tenancy/tenant.middleware.js';
 
 @Module({
   imports: [DbModule, CoreServicesModule, IdentityModule, AuthzModule, InventoryModule],
-  controllers: [HealthController, PropertySetupController, RatesController, GuestsController, ReservationsController, FrontDeskController, FolioController, HousekeepingController, NightAuditController, TaxController, InvoiceController, CompaniesController, ManagementController, OtaController, ReportsController, StaffController, FnbController, SpacesController, PaymentAccountsController, ComplianceController, MaintenanceController, ImportsController, AuditController],
-  providers: [TenantMiddleware, PropertySetupService, RatesService, QuoteSigner, GuestsService, ReservationsService, FrontDeskService, FolioService, HousekeepingService, NightAuditService, TaxService, InvoiceService, CompaniesService, ArService, ManagementService, OtaService, ReportsService, StaffService, FnbService, SpacesService, PaymentAccountsService, ComplianceService, MaintenanceService, ImportsService, PaymentsService, CashierService, { provide: APP_FILTER, useClass: ProblemDetailsFilter }],
+  controllers: [HealthController, PropertySetupController, RatesController, GuestsController, ReservationsController, FrontDeskController, FolioController, HousekeepingController, NightAuditController, TaxController, InvoiceController, CompaniesController, ManagementController, OtaController, ReportsController, StaffController, FnbController, SpacesController, ReadinessController, PaymentAccountsController, ComplianceController, MaintenanceController, ImportsController, AuditController],
+  providers: [TenantMiddleware, PropertySetupService, RatesService, QuoteSigner, GuestsService, ReservationsService, FrontDeskService, FolioService, HousekeepingService, NightAuditService, TaxService, InvoiceService, CompaniesService, ArService, ManagementService, OtaService, ReportsService, StaffService, FnbService, SpacesService, ReadinessService, PaymentAccountsService, ComplianceService, MaintenanceService, ImportsService, PaymentsService, CashierService, { provide: APP_FILTER, useClass: ProblemDetailsFilter }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void { consumer.apply(TenantMiddleware).forRoutes('*'); }

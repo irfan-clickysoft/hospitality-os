@@ -487,6 +487,12 @@ export const en = {
   'err.NOT_A_SEPARATE_BILL': 'This hire is on a guest’s stay. Use the stay’s bill instead.', 'err.HIRE_NOT_DONE': 'Mark the hire done first, so there is something on its bill.',
   'grp.label': 'Switch area', 'grp.front': 'Front desk', 'grp.house': 'Housekeeping', 'grp.money': 'Money', 'grp.manage': 'Management',
   'sp.change': 'Change', 'sp.save': 'Save', 'sp.changeNote': 'The price is worked out again for the new time, and the room is checked for clashes.',
+  // readiness
+  'nav.readiness': 'Setup check', 'rd.summary': '{a} to do · {n} to look at · {o} fine', 'rd.business': 'Whole business', 'rd.s.OK': 'Fine', 'rd.s.ACTION': 'To do', 'rd.s.NOTE': 'Look at',
+  'rd.ENTITY_NTN': 'Company NTN entered (goes on every tax invoice)', 'rd.ENTITY_STRN': 'Company STRN entered (goes on every tax invoice)', 'rd.STAFF_MFA': 'Staff without a second factor: {n}',
+  'rd.TAX_JURISDICTION': 'Tax area chosen for this property (until then charges are not taxed)', 'rd.TAX_RATES': 'Approved tax rate in force for this property’s tax area (until then charges are not taxed)',
+  'rd.RATES': 'Nightly price for every room type (room types without one: {n})', 'rd.ROOMTYPE_EMPTY': 'Room types that have no rooms yet: {n}', 'rd.EXTRAS': 'Extra-person prices (room types where an extra person is free: {n})',
+  'rd.WEEKEND': 'Separate weekend price (without one, every night costs the same). Weekend days: {d}', 'rd.PAYMENT_ACCOUNTS': 'A payment account to receive money into', 'rd.MENU': 'Kitchen menu has items', 'rd.SPACES': 'Conference room set up with prices',
   // staff, account, audit
   'nav.staff': 'Staff', 'nav.audit2': 'Audit trail', 'acct.title': 'My account',
   'inv2.title': 'Choose your password', 'inv2.help': 'Use at least 12 characters. A few ordinary words together make a strong password.', 'inv2.new': 'New password', 'inv2.again': 'New password again', 'inv2.set': 'Save password', 'inv2.done': 'Your password is saved. You can sign in now.',
