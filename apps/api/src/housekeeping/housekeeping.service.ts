@@ -265,6 +265,25 @@ export class HousekeepingService {
     });
   }
 
+  /**
+   * The front desk asks for a room to be cleaned first (a guest is waiting at the desk). Open tasks for the room become the most urgent; if the room is dirty and has no
+   * open task, an on-demand one is created. Nothing here changes the room's state: the attendant still cleans it and a supervisor can still inspect it.
+   */
+  async prioritise(propertyId: string, roomId: string, userId: string) {
+    return this.tdb.tx(async (trx) => {
+      const p = await this.prop(trx, propertyId);
+      const room = await trx.selectFrom('room').select(['id', 'number', 'hk_status']).where('id', '=', roomId).where('property_id', '=', propertyId).executeTakeFirst();
+      if (!room) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room not found' });
+      if (room.hk_status === 'CLEAN' || room.hk_status === 'INSPECTED') throw new HttpException({ code: 'ROOM_ALREADY_CLEAN', message: `Room ${room.number} is already clean` }, 409);
+      const raised = await trx.updateTable('housekeeping_task').set({ priority: 1 }).where('room_id', '=', roomId).where('status', 'in', ['PENDING', 'IN_PROGRESS']).where('priority', '>', 1).returning('id').execute();
+      let created = false;
+      const open = await trx.selectFrom('housekeeping_task').select('id').where('room_id', '=', roomId).where('status', 'in', ['PENDING', 'IN_PROGRESS']).executeTakeFirst();
+      if (!open) created = !!(await this.insertTask(trx, propertyId, { roomId, type: 'ON_DEMAND', date: p.business_date, priority: 1, notes: 'Asked for by the front desk: a guest is waiting', sourceKey: `PRIORITISE:${roomId}:${p.business_date}`, userId }));
+      await this.audit.record(trx, { action: 'housekeeping.prioritise', resourceType: 'room', resourceId: roomId, propertyId, after: { raised: raised.length, created } });
+      return { roomId, roomNumber: room.number, raised: raised.length, created };
+    });
+  }
+
   // ───────────── reading ─────────────
   private async taskView(trx: Trx, id: string) {
     const t = await trx.selectFrom('housekeeping_task as t').innerJoin('room as r', 'r.id', 't.room_id').leftJoin('staff_user as u', 'u.id', 't.assigned_to')

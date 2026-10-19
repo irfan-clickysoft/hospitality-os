@@ -81,6 +81,11 @@ check('a front-desk agent cannot override: the page says who can', await page.ge
 const bar = page.getByRole('region', { name: 'Check in' });
 check('the check-in button says why it cannot be used yet', await bar.getByText('the room is not ready').count() === 1 && await bar.getByRole('button', { name: 'Check in' }).getAttribute('aria-disabled') === 'true');
 
+await page.getByRole('button', { name: 'Ask housekeeping to clean it first' }).click();
+await page.getByText('Housekeeping has been asked to clean this room first').waitFor();
+check('the desk can ask housekeeping to clean the room first, and the page says it was asked', true);
+check('the room now has a most-urgent cleaning task', (await sana.get(`${P}/housekeeping/board`)).rooms.find((r) => r.number === '201').tasks.some((t) => t.priority === 1));
+
 // B (before arrival): move to a ready room from the panel, without losing the page
 await page.getByRole('button', { name: 'Move guest to another room' }).click();
 const panel = page.getByRole('dialog', { name: /Choose a room for Faisal/ });
