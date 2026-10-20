@@ -150,3 +150,16 @@ a:not([class]) { color: var(--info-fg); }
 
 .nightpct { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
 .nighttable { width: 100%; border-collapse: collapse; } .nighttable th, .nighttable td { text-align: start; padding: 4px 6px; border-bottom: 1px solid var(--line-strong); font-weight: normal; } .nighttable thead th { font-weight: 700; }
+
+/* the guest's booking page */
+.gb { max-width: 760px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+.gb-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; } .gb-head h1 { margin: 0; } .gb-tools { display: flex; gap: 8px; align-items: center; }
+.gb-ticket { border: 2px dashed var(--line-strong); border-radius: 16px; padding: 16px; display: grid; gap: 6px; background: var(--surface, transparent); }
+.gb-ref { font-size: 1.8rem; font-weight: 800; letter-spacing: .04em; margin: 0; }
+.gb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 0; } .gb-grid dt { color: var(--muted, inherit); font-size: .85rem; } .gb-grid dd { margin: 0; font-weight: 600; }
+.gb-room, .gb-block { border: 1px solid var(--line-strong); border-radius: 12px; padding: 14px 16px; display: grid; gap: 8px; } .gb-room h2, .gb-block h2 { margin: 0; font-size: 1.15rem; }
+.gb-media { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; } .gb-media img, .gb-media video { height: 180px; border-radius: 10px; scroll-snap-align: start; flex: 0 0 auto; max-width: 85%; object-fit: cover; }
+.gb-kinds { display: flex; flex-wrap: wrap; gap: 8px; } .gb-terms { white-space: pre-wrap; } .gb-reqrow { padding: 6px 0; border-bottom: 1px solid var(--line-strong); } .gb-reqrow .st { margin-inline-start: 8px; }
+.gb-foot { text-align: center; } .print-only { display: none; }
+.okbox { background: var(--ok-bg, #e6f4ea); border-radius: 8px; padding: 8px 12px; margin: 0; font-weight: 600; }
+@media print { .noprint { display: none !important; } .print-only { display: block; } .gb { max-width: none; padding: 0; } .gb-media video { display: none; } .gb-room, .gb-block, .gb-ticket { break-inside: avoid; } body { background: #fff; color: #000; } }

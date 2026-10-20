@@ -150,7 +150,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
         <p>{name} · {money(result.totalExTax)} {t('d.exTax')}</p>
         <ComplianceNotes hits={result.compliance ?? []} />
         {result.guarantee.atRisk && <p className="warnbox">⚠ {t('rs.atRisk')} · {t('rs.depositNeeded')}: {money(result.guarantee.depositRequired)}</p>}
-        <details open className="block"><summary>{t('wa.title')}</summary><ConfirmationMessage guestName={name} phone={guest?.phone ?? nf.phone} confirmationNo={result.confirmationNo} arrival={arrival} departure={departure} /></details>
+        <details open className="block"><summary>{t('wa.title')}</summary><ConfirmationMessage reservationId={result.id} guestName={name} phone={guest?.phone ?? nf.phone} confirmationNo={result.confirmationNo} arrival={arrival} departure={departure} /></details>
         <div className="actions">
           <button className="primary" onClick={() => onOpenReservation(result.id)}>{t('bk.open')}</button>
           <button onClick={onClose}>{t('common.close')}</button>

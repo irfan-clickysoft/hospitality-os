@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
+import { api } from '../api/client.js';
 import { useT } from '../i18n/index.js';
 import { confirmationText } from '../lib/confirmation.js';
 import { whatsappNumber } from '../lib/format.js';
 import { useAuth } from '../state.js';
 
 /** The confirmation message, ready to send on WhatsApp. The sender can change the greeting and any word before sending; the manager's name is the person signed in. */
-export function ConfirmationMessage({ guestName, phone, confirmationNo, arrival, departure }: { guestName: string; phone: string | null | undefined; confirmationNo: string; arrival: string; departure: string }) {
+export function ConfirmationMessage({ reservationId, guestName, phone, confirmationNo, arrival, departure }: { reservationId: string; guestName: string; phone: string | null | undefined; confirmationNo: string; arrival: string; departure: string }) {
   const { t } = useT();
   const { me, property } = useAuth();
   const [salutation, setSalutation] = useState<'' | 'Mr.' | 'Mrs.'>('');
+  const [link, setLink] = useState<string | null>(null);
+  useEffect(() => { let dead = false; api<{ token: string }>('GET', `/v1/properties/${property!.id}/reservations/${reservationId}/guest-link`).then((r) => { if (!dead) setLink(`${window.location.origin}/#/b/${r.token}`); }).catch(() => undefined); return () => { dead = true; }; }, [property, reservationId]);
   const generated = confirmationText({ guestName, salutation, manager: me?.user.fullName ?? '', propertyName: property?.name ?? '', city: property?.city, confirmationNo, arrival, departure,
-    checkInTime: property?.checkInTime, checkOutTime: property?.checkOutTime, mapsUrl: property?.mapsUrl });
+    checkInTime: property?.checkInTime, checkOutTime: property?.checkOutTime, mapsUrl: property?.mapsUrl, bookingUrl: link });
   const [text, setText] = useState(generated); const [edited, setEdited] = useState(false); const [copied, setCopied] = useState(false);
   useEffect(() => { if (!edited) setText(generated); }, [generated, edited]);
   const wa = whatsappNumber(phone);
