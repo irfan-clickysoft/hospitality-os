@@ -32,7 +32,7 @@ export class PropertySetupService {
     return p;
   }
   private propDto(p: Awaited<ReturnType<PropertySetupService['prop']>>) {
-    return { id: p.id, code: p.code, name: p.name, legalEntityId: p.legal_entity_id, brandId: p.brand_id, timezone: p.timezone, currency: p.currency, businessDate: p.business_date, weekendDays: p.weekend_days, status: p.status, version: p.version };
+    return { id: p.id, code: p.code, name: p.name, legalEntityId: p.legal_entity_id, brandId: p.brand_id, timezone: p.timezone, currency: p.currency, businessDate: p.business_date, weekendDays: p.weekend_days, city: p.city, mapsUrl: p.maps_url, checkInTime: String(p.check_in_time).slice(0, 5), checkOutTime: String(p.check_out_time).slice(0, 5), status: p.status, version: p.version };
   }
 
   /** Properties the current user may view (property-scoped users see only theirs). */
@@ -52,7 +52,7 @@ export class PropertySetupService {
     const rows = await this.tdb.tx((trx) => trx.selectFrom('property').selectAll().where('status', '<>', 'ARCHIVED' as never).orderBy('name').execute());
     const { decide } = await import('@hos/auth');
     return rows.filter((p) => grants.some((g) => decide([g], { permission: g.permission, scope: { propertyId: p.id, legalEntityId: p.legal_entity_id } }).effect === 'ALLOW'))
-      .map((p) => ({ id: p.id, code: p.code, name: p.name, businessDate: p.business_date, timezone: p.timezone, status: p.status }));
+      .map((p) => ({ id: p.id, code: p.code, name: p.name, businessDate: p.business_date, timezone: p.timezone, status: p.status, city: p.city, mapsUrl: p.maps_url, checkInTime: String(p.check_in_time).slice(0, 5), checkOutTime: String(p.check_out_time).slice(0, 5) }));
   }
 
   async createProperty(i: z.infer<typeof S.CreateProperty>) {
@@ -78,6 +78,10 @@ export class PropertySetupService {
       if (i.name !== undefined) set.name = i.name;
       if (i.timezone !== undefined) set.timezone = i.timezone;
       if (i.brandId !== undefined) set.brand_id = i.brandId;
+      if (i.city !== undefined) set.city = i.city;
+      if (i.mapsUrl !== undefined) set.maps_url = i.mapsUrl;
+      if (i.checkInTime !== undefined) set.check_in_time = i.checkInTime;
+      if (i.checkOutTime !== undefined) set.check_out_time = i.checkOutTime;
       if (i.weekendDays !== undefined) set.weekend_days = [...new Set(i.weekendDays)].sort();
       const after = await trx.updateTable('property').set(set as never).where('id', '=', id).where('version', '=', i.version).returningAll().executeTakeFirst();
       if (!after) throw stale();

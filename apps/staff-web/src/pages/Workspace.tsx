@@ -3,6 +3,7 @@ import { api, ApiError, NetworkError } from '../api/client.js';
 import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
 import { useAction } from '../lib/action.js';
+import { ConfirmationMessage } from '../desk/ConfirmationMessage.js';
 import { isNegative, isZero, money, shortDate, whatsappNumber } from '../lib/format.js';
 import { useStepUp } from '../lib/stepup.js';
 import { useAuth, useLive, useWork } from '../state.js';
@@ -250,7 +251,8 @@ export function Workspace({ id, flow }: { id: string; flow?: string }) {
                   {r.penalty.amount.amount !== '0.00' && <Banner level="INFO" title={`${t('rs.penalty')}: ${money(r.penalty.amount)}${r.penalty.waived ? ` (${t('rs.waived')})` : ''}`} />}
                   <Notes r={r} onSaved={stay.refresh} />
                   <section className="block" aria-labelledby="h-msg"><h2 id="h-msg">{t('ws.messages')}</h2>
-                    {r.guest.phone ? <p><a className="button" href={`tel:${r.guest.phone}`}><Icon name="user" size={16} /> {t('ws.call')}</a>{wa && <> <a className="button" target="_blank" rel="noreferrer" href={`https://wa.me/${wa}?text=${encodeURIComponent(t('wa.confirm', { name: r.guest.fullName, no: r.confirmationNo, from: r.lines[0]?.arrival ?? '', to: r.lines[0]?.departure ?? '', property: property!.name }))}`}>{t('wa.open')}</a></>}</p> : <Banner level="ACTION" title={t('ws.noPhone')}>{t('ws.noPhoneText')}</Banner>}
+                    {r.guest.phone ? <p><a className="button" href={`tel:${r.guest.phone}`}><Icon name="user" size={16} /> {t('ws.call')}</a></p> : <Banner level="ACTION" title={t('ws.noPhone')}>{t('ws.noPhoneText')}</Banner>}
+                    <details className="block"><summary>{t('wa.title')}</summary><ConfirmationMessage guestName={r.guest.fullName} phone={r.guest.phone} confirmationNo={r.confirmationNo} arrival={r.lines[0]?.arrival ?? ''} departure={r.lines[0]?.departure ?? ''} /></details>
                     <p className="muted small">{t('ws.messagesNote')}</p></section>
                   <section className="block" aria-labelledby="h-tasks"><h2 id="h-tasks">{t('ws.tasks')}</h2>
                     {comp.data && <ComplianceNotes hits={comp.data.hits.map((h) => ({ name: h.rule, action: h.action, message: h.message, approved: h.approved }))} />}

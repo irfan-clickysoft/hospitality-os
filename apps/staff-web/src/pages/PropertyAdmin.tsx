@@ -9,7 +9,7 @@ import { Icon } from '../ui/icons.js';
 import { Empty, ErrorLine } from '../ui/kit.js';
 import { Link, navigate, useRoute } from '../shell/router.js';
 
-interface Prop { id: string; code: string; name: string; status: string; timezone: string; currency?: string; businessDate?: string; weekendDays?: number[]; version?: number }
+interface Prop { id: string; code: string; name: string; status: string; timezone: string; currency?: string; businessDate?: string; weekendDays?: number[]; version?: number; city?: string | null; mapsUrl?: string | null; checkInTime?: string; checkOutTime?: string }
 interface Status { property: Prop & { version: number; weekendDays: number[] }; steps: Record<string, boolean>; counts: { floors: number; roomTypes: number; rooms: number }; blockers: string[]; readyToGoLive: boolean }
 interface Floor { id: string; name: string }
 interface RoomType { id: string; code: string; name: string; description: string | null; maxAdults: number; maxChildren: number; maxOccupancy: number; baseOccupancy: number; bedConfig: string | null; sizeSqm: number | null; status: string; version: number; amenityIds: string[] }
@@ -134,16 +134,23 @@ function GoLive({ id, ready, blockers, date, onDone }: { id: string; ready: bool
 
 function Details({ prop, onSaved }: { prop: Status['property']; onSaved: () => void }) {
   const { t } = useT();
-  const [f, setF] = useState({ name: prop.name, timezone: prop.timezone, weekend: prop.weekendDays ?? [] }); const { busy, problem, run } = useAction(); const [saved, setSaved] = useState(false);
+  const [f, setF] = useState({ name: prop.name, timezone: prop.timezone, weekend: prop.weekendDays ?? [], city: prop.city ?? '', mapsUrl: prop.mapsUrl ?? '', checkIn: prop.checkInTime ?? '14:00', checkOut: prop.checkOutTime ?? '12:00' }); const { busy, problem, run } = useAction(); const [saved, setSaved] = useState(false); const { refreshProperties } = useAuth();
+  const edit = (patch: Partial<typeof f>) => { setSaved(false); setF((x) => ({ ...x, ...patch })); };
   const toggle = (d: number) => { setSaved(false); setF((x) => ({ ...x, weekend: x.weekend.includes(d) ? x.weekend.filter((y) => y !== d) : [...x.weekend, d].sort() })); };
   return (
     <section className="block" aria-labelledby="h-det"><h3 id="h-det">{t('ps.details')}</h3>
       <Field label={t('ps.name')}>{(p) => <input {...p} value={f.name} onChange={(e) => { setSaved(false); setF({ ...f, name: e.target.value }); }} />}</Field>
       <Field label={t('ps.zone')}>{(p) => <input {...p} dir="ltr" list="zones2" value={f.timezone} onChange={(e) => { setSaved(false); setF({ ...f, timezone: e.target.value }); }} />}</Field>
+      <div className="grid2">
+        <Field label={t('ps.city')}>{(p) => <input {...p} value={f.city} onChange={(e) => edit({ city: e.target.value })} placeholder="Karachi" />}</Field>
+        <Field label={t('ps.mapsUrl')} hint={t('ps.mapsHint')}>{(p) => <input {...p} dir="ltr" inputMode="url" value={f.mapsUrl} onChange={(e) => edit({ mapsUrl: e.target.value })} placeholder="https://maps.app.goo.gl/…" />}</Field>
+        <Field label={t('ps.checkIn')}>{(p) => <input {...p} type="time" dir="ltr" value={f.checkIn} onChange={(e) => edit({ checkIn: e.target.value })} />}</Field>
+        <Field label={t('ps.checkOut')}>{(p) => <input {...p} type="time" dir="ltr" value={f.checkOut} onChange={(e) => edit({ checkOut: e.target.value })} />}</Field>
+      </div>
       <datalist id="zones2">{ZONES.map((z) => <option key={z} value={z} />)}</datalist>
       <fieldset className="guestcard"><legend>{t('ps.weekend')}</legend><div className="chips">{DAYS.map(([d, k]) => <label key={d} className="check"><input type="checkbox" checked={f.weekend.includes(d)} onChange={() => toggle(d)} /> {t(k)}</label>)}</div><p className="hint">{t('ps.weekendHint')}</p></fieldset>
       <ErrorLine code={problem?.code} detail={problem?.detail} />
-      <div className="actions"><button disabled={busy || f.name.trim().length < 2} onClick={async () => { if (await run(() => api('PATCH', `/v1/properties/${prop.id}`, { name: f.name.trim(), timezone: f.timezone.trim(), weekendDays: f.weekend, version: prop.version }))) { setSaved(true); onSaved(); } }}>{t('common.save')}</button>{saved && <StatusBadge tone="ok" icon="check">{t('ps.saved')}</StatusBadge>}</div>
+      <div className="actions"><button disabled={busy || f.name.trim().length < 2} onClick={async () => { if (await run(() => api('PATCH', `/v1/properties/${prop.id}`, { name: f.name.trim(), timezone: f.timezone.trim(), weekendDays: f.weekend, city: f.city.trim() || null, mapsUrl: f.mapsUrl.trim() || null, checkInTime: f.checkIn, checkOutTime: f.checkOut, version: prop.version }))) { setSaved(true); onSaved(); void refreshProperties(); } }}>{t('common.save')}</button>{saved && <StatusBadge tone="ok" icon="check">{t('ps.saved')}</StatusBadge>}</div>
     </section>
   );
 }

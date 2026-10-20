@@ -5,7 +5,7 @@ import { LocaleProvider, type Locale } from './i18n/index.js';
 
 export interface Grant { permission: string; scopeType: string; scopeId: string | null }
 export interface Me { user: { id: string; email: string; fullName: string; locale: Locale; mfaEnabled?: boolean }; session: { state: string }; csrfToken: string | null; grants: Grant[] }
-export interface Property { id: string; code: string; name: string; businessDate: string; timezone: string; status: string }
+export interface Property { id: string; code: string; name: string; businessDate: string; timezone: string; status: string; city?: string | null; mapsUrl?: string | null; checkInTime?: string; checkOutTime?: string }
 type Status = 'loading' | 'out' | 'mfa' | 'in';
 
 interface Auth {
