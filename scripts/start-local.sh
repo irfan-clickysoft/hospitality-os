@@ -41,9 +41,17 @@ if [ "${HOS_SKIP_DOCKER:-0}" != "1" ]; then
   fi
 fi
 [ "${HOS_STOP_AFTER_SETTINGS:-0}" = "1" ] && exit 0   # used by the test of this step
-for p in 3000 3001; do
-  if (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then die "Port $p is already in use (is it already running? open http://localhost:3001). Stop whatever uses it and try again."; fi
-done
+if curl -fs -o /dev/null http://localhost:3000/readyz 2>/dev/null && curl -fs -o /dev/null http://localhost:3001/ 2>/dev/null; then
+  echo; echo "It is already running: open http://localhost:3001  (to restart it, stop the other Terminal window with Ctrl-C first)"; exit 0
+fi
+# Another program (often another project's dev server) may already use 3000 or 3001: take the next free ports and remember them in .env.
+pick_port() { local p; for p in "$@"; do port_busy "$p" || { echo "$p"; return 0; }; done; return 1; }
+API_PORT="$(pick_port 3000 3100 3200 3300)" || die "Ports 3000, 3100, 3200 and 3300 are all in use. Stop some programs and try again."
+WEB_PORT="$(pick_port 3001 3101 3201 3301)" || die "Ports 3001, 3101, 3201 and 3301 are all in use. Stop some programs and try again."
+[ "$API_PORT" = "3000" ] && [ "$WEB_PORT" = "3001" ] || echo "ports 3000/3001 are used by another program: using $API_PORT for the system and $WEB_PORT for the page you open (saved in .env)"
+set_env() { if grep -q "^$1=" .env; then sed -i.bak "s#^$1=.*#$1=$2#" .env; else echo "$1=$2" >> .env; fi; rm -f .env.bak; }
+set_env PORT "$API_PORT"; set_env ALLOWED_ORIGINS "http://localhost:$WEB_PORT"
+set -a; . ./.env; set +a
 
 say "3/6 Installing and building (the first time takes a few minutes)"
 [ -d node_modules ] || pnpm install
@@ -70,19 +78,19 @@ pids=()
 cleanup() { trap - EXIT INT TERM; echo; echo "stopping…"; for p in "${pids[@]}"; do kill -TERM -- "-$p" 2>/dev/null || kill "$p" 2>/dev/null || true; done; sleep 1; for p in "${pids[@]}"; do kill -KILL -- "-$p" 2>/dev/null || true; done; }
 trap cleanup EXIT INT TERM
 (cd apps/api && exec pnpm dev) > .local/api.log 2>&1 & pids+=($!)
-(cd apps/staff-web && exec pnpm dev) > .local/web.log 2>&1 & pids+=($!)
+(cd apps/staff-web && API_URL="http://localhost:$API_PORT" exec pnpm exec vite --port "$WEB_PORT" --host) > .local/web.log 2>&1 & pids+=($!)
 printf 'starting'
 ready=0
 for _ in $(seq 1 90); do
-  if curl -fs -o /dev/null http://localhost:3000/readyz && curl -fs -o /dev/null http://localhost:3001/; then ready=1; break; fi
+  if curl -fs -o /dev/null "http://localhost:$API_PORT/readyz" && curl -fs -o /dev/null "http://localhost:$WEB_PORT/"; then ready=1; break; fi
   for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null || { echo; tail -20 .local/api.log .local/web.log; die "A server stopped. The last lines of the logs are above (full logs in .local/)."; }; done
   printf '.'; sleep 1
 done; echo
 [ "$ready" = "1" ] || { tail -20 .local/api.log .local/web.log; die "It did not become ready in time. See .local/api.log and .local/web.log."; }
 
-cat <<'MSG'
+cat <<MSG
 
-  ✅ Running. Open  http://localhost:3001
+  ✅ Running. Open  http://localhost:$WEB_PORT
 
   Company code:  sunset        Password (everyone):  sunset-demo-passphrase
     hira@sunset.local      front desk (try check-in, moving a guest, check-out)
@@ -93,5 +101,5 @@ cat <<'MSG'
   Press Ctrl-C here to stop.
 MSG
 open_url() { command -v open >/dev/null && open "$1" || { command -v xdg-open >/dev/null && xdg-open "$1" >/dev/null 2>&1 || true; }; }
-open_url http://localhost:3001
+open_url "http://localhost:$WEB_PORT"
 wait
