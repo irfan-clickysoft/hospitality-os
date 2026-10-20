@@ -18,7 +18,7 @@ import { RatesService } from '../rates/rates.service.js';
 import { ReservationsService } from '../reservations/reservations.service.js';
 import { nextStatus } from '../reservations/state-machine.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
-import { last4, maskId, normaliseIdNumber, type IdType } from './id-documents.js';
+import { idHash, last4, maskId, normaliseIdNumber, type IdType } from './id-documents.js';
 import type * as S from './schemas.js';
 
 type Trx = Transaction<DB>;
@@ -49,17 +49,24 @@ export class FrontDeskService {
   }
 
   /** Validates the registration card and returns the canonical occupants. Foreign guests must be registered with a passport. */
-  private checkOccupants(occupants: Occupant[], line: { adults: number; children: number }, residency: 'RESIDENT' | 'NON_RESIDENT', bd: string): Array<Occupant & { canonical: string; primary: boolean }> {
+  private checkOccupants(occupants: Occupant[], line: { adults: number; children: number }, residency: 'RESIDENT' | 'NON_RESIDENT', bd: string): Array<Occupant & { canonical: string | null; primary: boolean }> {
     const primaries = occupants.filter((o) => o.isPrimary).length;
     if (primaries > 1) throw fail(422, 'ID_INVALID', 'Only one guest can be the primary guest');
-    const list = occupants.map((o, k) => ({ ...o, canonical: normaliseIdNumber(o.idType, o.idNumber), primary: primaries === 0 ? k === 0 : o.isPrimary }));
+    const list = occupants.map((o, k) => {
+      let canonical: string | null = null;
+      if (o.idType && o.idNumber) {
+        try { canonical = normaliseIdNumber(o.idType, o.idNumber); } catch (e) { throw fail(422, 'ID_INVALID', `${o.fullName}: ${(e as { response?: { message?: string } }).response?.message ?? 'the ID number is not valid'}`); }
+      }
+      return { ...o, canonical, primary: primaries === 0 ? k === 0 : o.isPrimary };
+    });
     const adults = list.filter((o) => o.ageGroup === 'ADULT').length;
     if (adults < 1) throw fail(422, 'ID_INVALID', 'At least one adult must be registered');
     if (adults > line.adults || list.length > line.adults + line.children) throw fail(422, 'OCCUPANCY_EXCEEDED', `This room is booked for ${line.adults} adult(s) and ${line.children} child(ren). Change the booking first to add more guests.`);
     const seen = new Set<string>();
-    for (const o of list) { const k = `${o.idType}:${o.canonical}`; if (seen.has(k)) throw fail(422, 'ID_INVALID', 'The same identity document is entered twice'); seen.add(k); }
+    for (const o of list) { if (!o.canonical) continue; const k = `${o.idType}:${o.canonical}`; if (seen.has(k)) throw fail(422, 'ID_INVALID', 'The same identity document is entered twice'); seen.add(k); }
     const main = list.find((o) => o.primary)!;
     if (main.ageGroup !== 'ADULT') throw fail(422, 'ID_INVALID', 'The primary guest must be an adult');
+    if (!main.canonical) throw fail(422, 'ID_REQUIRED', 'The main guest\'s ID is needed. Other family members may share it.');
     if (residency === 'NON_RESIDENT' && main.idType !== 'PASSPORT') throw fail(422, 'PASSPORT_REQUIRED', 'Foreign guests are registered with their passport');
     if (residency === 'RESIDENT' && main.nationality && main.nationality !== 'PK') throw fail(422, 'RESIDENCY_MISMATCH', 'This booking is on the local (resident) rate but the primary guest is a foreign national. Re-book on the international rate.');
     for (const o of list) if (o.idExpiry && o.idType === 'PASSPORT' && o.idExpiry < bd) throw fail(422, 'ID_EXPIRED', `${o.fullName}'s passport has expired`);
@@ -111,7 +118,7 @@ export class FrontDeskService {
     const mainOcc = occupants.find((o) => o.primary)!;
     const cctx = { propertyId, stage: 'CHECK_IN' as const, nationality: mainOcc.nationality ?? guest.nationality ?? null, residency: res.residency as 'RESIDENT' | 'NON_RESIDENT', guests: occupants.length, nights: nightsOf(line.arrival, line.departure).length, businessDate: bd };
     const enforced = await this.compliance.enforce(trx, cctx, userId, id, i.complianceApproval);
-    this.compliance.assertDocuments(enforced.matches, mainOcc.idType);
+    this.compliance.assertDocuments(enforced.matches, mainOcc.idType!);
 
     const current = await this.liveAssignment(trx, lineId);
     const roomId = i.roomId ?? current?.room_id;
@@ -123,7 +130,7 @@ export class FrontDeskService {
     const tenantId = currentTenant().tenantId;
     for (const o of occupants) {
       await trx.insertInto('stay_guest').values({ tenant_id: tenantId, property_id: propertyId, reservation_room_id: lineId, full_name: o.fullName, is_primary: o.primary, age_group: o.ageGroup,
-        id_type: o.idType, id_number_sealed: this.box.seal(o.canonical, this.aad(lineId)), id_last4: last4(o.canonical), nationality: o.nationality ?? null, id_expiry: o.idExpiry ?? null, created_by: userId } as never).execute();
+        id_type: o.idType ?? null, id_number_sealed: o.canonical ? this.box.seal(o.canonical, this.aad(lineId)) : null, id_last4: o.canonical ? last4(o.canonical) : null, id_hash: o.canonical ? idHash(o.idType!, o.canonical) : null, nationality: o.nationality ?? null, id_expiry: o.idExpiry ?? null, created_by: userId } as never).execute();
     }
     const main = occupants.find((o) => o.primary)!;
     if (!guest.nationality && main.nationality) await trx.updateTable('guest').set({ nationality: main.nationality, version: sql`version + 1` as never }).where('id', '=', guest.id).execute();
@@ -296,7 +303,7 @@ export class FrontDeskService {
       if (!lines.find((l) => l.id === lineId)) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room line not found on this reservation' });
       const rows = await trx.selectFrom('stay_guest').selectAll().where('reservation_room_id', '=', lineId).where('voided_at', 'is', null).orderBy('is_primary', 'desc').orderBy('created_at').execute();
       if (reveal) await this.audit.record(trx, { action: 'frontdesk.view_id', resourceType: 'reservation', resourceId: id, propertyId, note: `${rows.length} document(s) revealed` });
-      return { items: rows.map((r) => ({ id: r.id, fullName: r.full_name, isPrimary: r.is_primary, ageGroup: r.age_group, idType: r.id_type, idNumber: reveal ? this.box.open(r.id_number_sealed, this.aad(lineId)) : maskId(r.id_type as IdType, r.id_last4),
+      return { items: rows.map((r) => ({ id: r.id, fullName: r.full_name, isPrimary: r.is_primary, ageGroup: r.age_group, idType: r.id_type, idNumber: !r.id_type || !r.id_number_sealed ? null : reveal ? this.box.open(r.id_number_sealed, this.aad(lineId)) : maskId(r.id_type as IdType, r.id_last4!),
         nationality: r.nationality, idExpiry: r.id_expiry })) };
     });
   }

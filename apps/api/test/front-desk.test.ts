@@ -239,6 +239,57 @@ describe('room move', () => {
   });
 });
 
+describe('walk-in without every ID', () => {
+  const walkKey = () => ({ 'idempotency-key': `walk-${++n}-${Date.now()}` });
+  const post = (w: W, b: unknown) => call('POST', `/v1/properties/${w.pid}/front-desk/walk-ins`, O, b, walkKey());
+  const base = (w: W, o: Record<string, unknown> = {}) => ({ guest: { fullName: `Family ${++n}`, phone: `0312${String(4000000 + n).slice(-7)}`, nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 1, adults: 2, children: 2, extraBeds: 1, ...o });
+
+  it('a family of four can check in on the main guest’s ID alone: children and family members need none', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const main = occ({ isPrimary: true, fullName: 'Imran Khan' });
+    const r = await post(w, base(w, { occupants: [main, { fullName: 'Nadia Khan', ageGroup: 'ADULT' }, { fullName: 'Ali Khan', ageGroup: 'CHILD' }, { fullName: 'Sara Khan', ageGroup: 'CHILD' }] }));
+    expect(r.statusCode, r.body).toBe(201);
+    const line = r.json().lines[0];
+    const card = (await call('GET', `/v1/properties/${w.pid}/reservations/${r.json().id}/rooms/${line.id}/guests`, O)).json().items;
+    expect(card).toHaveLength(4);
+    expect(card.filter((c: any) => c.idType === null).map((c: any) => c.fullName).sort()).toEqual(['Ali Khan', 'Nadia Khan', 'Sara Khan']);
+    expect(card.find((c: any) => c.fullName === 'Imran Khan').idNumber).toMatch(/^\*+/);                    // still masked
+  });
+
+  it('the main guest’s ID is still required, and a bad number says whose and what', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const none = await post(w, base(w, { occupants: [{ fullName: 'No Id', isPrimary: true }] }));
+    expect(none.statusCode).toBe(422); expect(none.json().code).toBe('ID_REQUIRED');
+    const bad = await post(w, base(w, { occupants: [occ({ isPrimary: true }), occ({ fullName: 'Nadia Khan', idNumber: '123' })] }));
+    expect(bad.statusCode).toBe(422); expect(bad.json().code).toBe('ID_INVALID'); expect(bad.json().detail).toContain('Nadia Khan'); expect(bad.json().detail).toContain('13 digits');
+    const half = await post(w, base(w, { occupants: [occ({ isPrimary: true }), { fullName: 'Half', idType: 'CNIC' }] }));
+    expect(half.statusCode).toBe(400);
+  });
+});
+
+describe('finding a returning guest', () => {
+  const search = async (q: string) => (await ok(call('GET', `/v1/guests/search?q=${encodeURIComponent(q)}`, O))).items as Array<{ fullName: string; stays: number; matchedById: boolean }>;
+  it('finds them by name in any order, by phone in any format, and by CNIC or passport — and counts their stays', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const id = `35201${String(7000000 + (++n % 1000)).slice(-7)}9`;
+    const r = await call('POST', `/v1/properties/${w.pid}/front-desk/walk-ins`, O, { guest: { fullName: 'Zubair Ahmed Qureshi', phone: '0333 7654321', nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 1, adults: 1,
+      occupants: [{ fullName: 'Zubair Ahmed Qureshi', isPrimary: true, idType: 'CNIC', idNumber: id, nationality: 'PK' }] }, { 'idempotency-key': `walk-${++n}-${Date.now()}` });
+    expect(r.statusCode, r.body).toBe(201);
+    expect((await search('Qureshi Zubair')).map((g) => g.fullName)).toContain('Zubair Ahmed Qureshi');
+    expect((await search('zubair q')).map((g) => g.fullName)).toContain('Zubair Ahmed Qureshi');
+    expect((await search('+92 333 7654321')).map((g) => g.fullName)).toContain('Zubair Ahmed Qureshi');
+    const byId = await search(`${id.slice(0, 5)}-${id.slice(5, 12)}-${id.slice(12)}`);
+    expect(byId.find((g) => g.fullName === 'Zubair Ahmed Qureshi')).toMatchObject({ matchedById: true });
+    expect((await search(id)).map((g) => g.fullName)).toContain('Zubair Ahmed Qureshi');                // dashes are optional
+    expect((await search('3520199999999')).map((g) => g.fullName)).not.toContain('Zubair Ahmed Qureshi');
+    expect(byId.find((g) => g.fullName === 'Zubair Ahmed Qureshi')!.stays).toBe(1);
+  });
+  it('the stored ID cannot be read from the search index', async () => {
+    const rows = await adminDb.selectFrom('stay_guest').select(['id_hash', 'id_number_sealed']).where('id_hash', 'is not', null).limit(5).execute();
+    for (const r of rows) { expect(r.id_hash).toMatch(/^[0-9a-f]{64}$/); expect(r.id_number_sealed).not.toMatch(/\d{5}-?\d{7}/); }
+  });
+});
+
 describe('walk-in', () => {
   const body = (w: W, o: Record<string, unknown> = {}) => ({ guest: { fullName: `Walker ${++n}`, phone: `0311${String(3000000 + n).slice(-7)}`, nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 2, adults: 2,
     occupants: [occ({ isPrimary: true })], ...o });
