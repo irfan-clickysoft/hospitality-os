@@ -58,10 +58,4 @@ export class HousekeepingController {
   issues(@Param('propertyId', uuid()) pid: string, @Query() q: unknown) { return this.svc.issues(pid, parse(S.IssuesQuery, q).status); }
   @Post('issues/:issueId/resolve') @RequirePermission('housekeeping.assign', P) @HttpCode(200)
   resolve(@Param('propertyId', uuid()) pid: string, @Param('issueId', uuid()) id: string, @Body() body: unknown) { return this.svc.resolveIssue(pid, id, me(), parse(S.ResolveIssue, body ?? {}).note); }
-  @Post('lost-found') @RequirePermission('housekeeping.update', P)
-  addLost(@Param('propertyId', uuid()) pid: string, @Body() body: unknown) { return this.svc.addLostFound(pid, me(), parse(S.LostFoundCreate, body)); }
-  @Get('lost-found') @RequirePermission('housekeeping.view', P)
-  lost(@Param('propertyId', uuid()) pid: string, @Query() q: unknown) { return this.svc.lostFound(pid, parse(S.LostFoundQuery, q).status); }
-  @Post('lost-found/:itemId/close') @RequirePermission('housekeeping.assign', P) @HttpCode(200)
-  closeLost(@Param('propertyId', uuid()) pid: string, @Param('itemId', uuid()) id: string, @Body() body: unknown) { return this.svc.closeLostFound(pid, id, me(), parse(S.LostFoundClose, body)); }
 }
