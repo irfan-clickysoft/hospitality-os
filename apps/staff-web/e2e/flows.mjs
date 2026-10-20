@@ -294,6 +294,18 @@ await page.getByRole('link', { name: new RegExp(`Faisal Raza ${stamp}`) }).click
 await page.getByRole('heading', { name: `Faisal Raza ${stamp}`, level: 1 }).waitFor();
 check('searching by name finds a booking and opens its workspace', true);
 
+// the guest profile: details and notes are saved as you type, and the panel is in the address
+await page.goto(`${BASE}/#/guests?q=${encodeURIComponent(`Faisal Raza ${stamp}`)}`);
+await page.getByRole('button', { name: new RegExp(`Faisal Raza ${stamp}`) }).click();
+const gp = page.getByRole('dialog', { name: new RegExp(`Faisal Raza ${stamp}`) });
+await gp.getByLabel('Notes and preferences').fill('Prefers a quiet room, high floor');
+await gp.getByText(/Saved \d\d:\d\d/).waitFor();
+check('guest notes save by themselves, with the state shown', true);
+await page.reload();
+await page.getByRole('dialog', { name: new RegExp(`Faisal Raza ${stamp}`) }).getByLabel('Notes and preferences').waitFor();
+check('the profile panel is in the address and the saved notes are there after a reload', await page.getByRole('dialog').getByLabel('Notes and preferences').inputValue() === 'Prefers a quiet room, high floor');
+await page.keyboard.press('Escape');
+
 // the manager's Today: what only a manager can decide sits above the desk queue
 const flagged = await book(hira, pid, { name: `Flagged Guest ${stamp}`, phone: `0300${stamp}8`, arrival: bd, nights: 1, type: 'DLX' });
 await mgr.patch(`/v1/guests/${flagged.guestId}`, { doNotRent: true, version: (await mgr.get(`/v1/guests/${flagged.guestId}`)).version });

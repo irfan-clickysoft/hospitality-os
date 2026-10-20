@@ -139,3 +139,4 @@ a:not([class]) { color: var(--info-fg); }
 .sheet-wrap { z-index: 50; }
 .rowwrap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .rowwrap > .qrow { flex: 1 1 320px; width: auto; }
 .shortcuts { display: grid; gap: 8px; margin: 0; } .shortcuts div { display: flex; gap: 16px; align-items: center; min-height: 44px; border-bottom: 1px solid var(--line); } .shortcuts dt { min-width: 84px; } .shortcuts dd { margin: 0; }
+.b-danger button.primary, .b-warn button.primary, .b-info button.primary, .b-danger .button.primary, .b-warn .button.primary, .b-info .button.primary { color: var(--brand-ink); }

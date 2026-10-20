@@ -309,6 +309,13 @@ export const uxEn = {
   'sc.checkout': 'Check the guest out',
   'sc.move': 'Move the guest to another room',
   'sc.pay': 'Take a payment',
+  'gp.email': 'Email',
+  'gp.notes': 'Notes and preferences',
+  'gp.notesHint': 'Seen by staff on every booking for this guest.',
+  'gp.vip': 'VIP guest',
+  'gp.stays': 'Stays',
+  'gp.conflictTitle': 'Someone else changed this guest',
+  'gp.dnrNote': 'Marked “do not rent”. Only a manager can change this.',
 } as const;
 
 /** اردو */
@@ -622,4 +629,11 @@ export const uxUr: Record<keyof typeof uxEn, string> = {
   'sc.checkout': 'مہمان کو چیک آؤٹ کریں',
   'sc.move': 'مہمان کو دوسرے کمرے میں منتقل کریں',
   'sc.pay': 'ادائیگی لیں',
+  'gp.email': 'ای میل',
+  'gp.notes': 'نوٹس اور ترجیحات',
+  'gp.notesHint': 'اس مہمان کی ہر بکنگ پر عملے کو نظر آتے ہیں۔',
+  'gp.vip': 'وی آئی پی مہمان',
+  'gp.stays': 'قیام',
+  'gp.conflictTitle': 'کسی اور نے اس مہمان کا ریکارڈ بدل دیا',
+  'gp.dnrNote': '“کرائے پر نہ دیں” نشان زد۔ اسے صرف مینیجر بدل سکتا ہے۔',
 };
