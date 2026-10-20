@@ -284,6 +284,33 @@ describe('cancellation (72-hour rule), waiver, no-show, reinstatement', () => {
     expect(past.json().code).toBe('HOLD_INVALID');
   });
 
+  it('a discount can differ night by night: deep on the empty first night, lighter after', async () => {
+    const w = await sunset();
+    const opt = await quoteOpt(w, 'STD', 'BAR', { arrival: '2026-11-05', departure: '2026-11-08', discountPct: 10, nightDiscounts: [{ date: '2026-11-05', pct: 40 }] });
+    expect(opt.nights.map((x: any) => x.discountPct)).toEqual([40, 10, 10]);
+    const gross = opt.nights.map((x: any) => Number(x.total.replace(/,/g, '')));
+    const paid = opt.nights.map((x: any) => Number(x.payable.replace(/,/g, '')));
+    expect(paid[0]).toBeCloseTo(gross[0] * 0.6, 2);
+    expect(paid[1]).toBeCloseTo(gross[1] * 0.9, 2);
+    expect(Number(opt.totalExTax.amount)).toBeCloseTo(paid.reduce((a: number, b: number) => a + b, 0), 2);
+    const bad = await call('POST', `/v1/properties/${w.pid}/quotes`, O, { arrival: '2026-11-05', departure: '2026-11-07', adults: 2, nightDiscounts: [{ date: '2026-11-09', pct: 20 }] });
+    expect(bad.statusCode).toBe(422);
+    const r = await ok(book(w, { quote: { arrival: '2026-11-05', departure: '2026-11-08', discountPct: 10, nightDiscounts: [{ date: '2026-11-05', pct: 40 }] } }), 201);
+    const billed = r.lines[0].nightPrices.map((x: any) => Number(x.total.replace(/,/g, '')));
+    expect(billed[0]).toBeCloseTo(paid[0], 2);
+    expect(Number(r.lines[0].total.amount.replace(/,/g, ''))).toBeCloseTo(paid.reduce((a: number, b: number) => a + b, 0), 2);
+  });
+
+  it('the deepest night decides whether a person may give the discount', async () => {
+    const w = await sunset();
+    const u = await addUser(T.tenantId, `nlim${++n}@resv.test`); await assignRole(T.tenantId, u, 'front_desk_agent', 'PROPERTY', w.pid, { limits: { maxDiscountPct: 10 } });
+    const lim = as(T.tenantId, u);
+    const q = (await call('POST', `/v1/properties/${w.pid}/quotes`, lim, { arrival: '2026-11-05', departure: '2026-11-07', adults: 2, discountPct: 5, nightDiscounts: [{ date: '2026-11-05', pct: 40 }] })).json();
+    const std = q.options.find((o: any) => o.roomType.code === 'STD');
+    expect(std.quoteToken).toBeNull();
+    expect(std.bookable).toBe(false);
+  });
+
   it('cancelling an unconfirmed option never carries a fee', async () => {
     const w = await sunset();
     const r = await ok(book(w, { body: { hold: { minutes: 120 } } }), 201);
