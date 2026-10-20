@@ -82,3 +82,26 @@ export function gapsFor(o: Occupant, index: number, all: Occupant[], m: Matrix |
   }
   return gaps;
 }
+
+/**
+ * A group's guest list pasted from a message or a spreadsheet, one person per line: name, then in any order the ID number, "child" or "adult", and a two-letter country.
+ * "Ali Raza, 35202-1234567-1" · "Sara Raza, child" · "John Smith, GB, 123456789". Lines that cannot be read are returned so the desk can fix them.
+ */
+export function parseRoster(text: string): { people: Occupant[]; skipped: string[] } {
+  const people: Occupant[] = []; const skipped: string[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim(); if (!line) continue;
+    const [name = '', ...rest] = line.split(/[,;\t]/).map((x) => x.trim()).filter(Boolean);
+    if (name.length < 2 || !/\p{L}/u.test(name)) { skipped.push(line); continue; }
+    let id = ''; let nat = ''; let age: 'ADULT' | 'CHILD' = 'ADULT';
+    for (const tok of rest) {
+      if (/^(child|kid|minor|c)$/i.test(tok)) age = 'CHILD';
+      else if (/^(adult|a)$/i.test(tok)) age = 'ADULT';
+      else if (/^[A-Za-z]{2}$/.test(tok)) nat = tok.toUpperCase();
+      else if (/\d/.test(tok) && !id) id = tok;
+    }
+    const idType = !id ? 'CNIC' : /^\d{13}$/.test(digits(id)) ? 'CNIC' : 'PASSPORT';
+    people.push({ fullName: name, idType, idNumber: id ? formatId(idType, id) : '', nationality: nat || (idType === 'CNIC' ? 'PK' : ''), idExpiry: '', ageGroup: age, guestType: '', docs: {}, foreign: {}, guardian: null });
+  }
+  return { people, skipped };
+}

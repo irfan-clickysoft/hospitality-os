@@ -301,6 +301,22 @@ describe('the document matrix at check-in', () => {
     await ok(call('PATCH', `/v1/properties/${w.pid}`, O, { nicopAloneOk: true, version: v2 }));
     expect(await req()).toEqual(['NICOP']);
   });
+
+  it('the foreign-guest register lists foreign guests with their full passport number for a period, behind the view-ID permission and a fresh second factor, and is recorded', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const docs = seen('FOREIGN_PASSPORT', 'PASSPORT_BIO_COPY', 'VISA_BASIS', 'ENTRY_STAMP');
+    const foreign = { passportIssuePlace: 'London', visaType: 'eVisa (tourist)', stayExpiry: '2026-12-10', entryDate: '2026-11-03', entryPort: 'Karachi airport', localAddress: 'Sunset BnB Boulevard, Karachi', nextDestination: 'Lahore', froInstruction: true };
+    const r = await walk(w, { adults: 1, occupants: [foreignAdult({ documents: docs, foreign, idNumber: 'GB7000555' })], guest: { fullName: 'Tim Matrix', phone: '+44 7700 900558', nationality: 'GB' } });
+    expect(r.statusCode, r.body).toBe(201);
+    await walk(w, { adults: 1, occupants: [occ({ isPrimary: true, documents: seen('CNIC_OR_PASSPORT') })] });            // a Pakistani guest is not in the register
+    const url = `/v1/properties/${w.pid}/registration/foreign-register?from=2026-11-01&to=2026-11-30`;
+    await code(call('GET', url, O), 403, 'MFA_REQUIRED');
+    const x = await ok(call('GET', url, OM));
+    expect(x.count).toBe(1); expect(x.filename).toContain('foreign-guest-register-2026-11-01_2026-11-30');
+    expect(x.csv).toContain('GB7000555'); expect(x.csv).toContain('Karachi airport'); expect(x.csv).toContain('Yes'); expect(x.csv).not.toContain('35202');
+    const hk = await addUser(T.tenantId, `hk${++n}@fd.test`); await assignRole(T.tenantId, hk, 'housekeeper', 'PROPERTY', w.pid); await code(call('GET', url, as(T.tenantId, hk, { mfa: true })), 403, 'PERMISSION_DENIED');
+    await code(call('GET', `${url}&to=2026-10-01`, OM), 400, 'VALIDATION_FAILED');
+  });
 });
 
 describe('walk-in without every ID', () => {
@@ -444,6 +460,7 @@ describe('housekeeping status', () => {
     expect((await call('PUT', `/v1/properties/${w.pid}/housekeeping/rooms/${w.room['101']}/status`, H, { status: 'SPARKLING' })).statusCode).toBe(400);
     expect(await adminDb.selectFrom('audit_log').select('id').where('tenant_id', '=', T.tenantId).where('action', '=', 'housekeeping.status').where('resource_id', '=', w.room['101']).execute()).toHaveLength(2);
   });
+
 });
 
 describe('short stays', () => {

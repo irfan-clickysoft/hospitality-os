@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
-import { checkOccupant, formatId, type Matrix, type Occupant } from '../lib/occupants.js';
+import { checkOccupant, formatId, parseRoster, type Matrix, type Occupant } from '../lib/occupants.js';
 import { OccupantDocs } from './OccupantDocs.js';
 import { Field } from '../ui/ds.js';
 
@@ -16,6 +16,12 @@ export const occupantBody = (o: Occupant, primary: boolean) => ({ fullName: o.fu
 export function OccupantsForm({ occupants, onChange, foreign, businessDate, attempted, matrix = null, corporate = false }: { occupants: Occupant[]; onChange: (o: Occupant[]) => void; foreign: boolean; businessDate: string; attempted: boolean; matrix?: Matrix | null; corporate?: boolean }) {
   const { t } = useT();
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [roster, setRoster] = useState<string | null>(null); const [skipped, setSkipped] = useState<string[]>([]);
+  const addRoster = () => {
+    const r = parseRoster(roster ?? ''); setSkipped(r.skipped);
+    const kept = occupants.filter((o, i) => i === 0 || o.fullName.trim() || o.idNumber.trim());          // the booking's main guest stays where it is
+    if (r.people.length) { onChange([...kept, ...r.people].slice(0, 12)); if (!r.skipped.length) setRoster(null); }
+  };
   const set = (i: number, patch: Partial<Occupant>) => onChange(occupants.map((o, k) => (k === i ? { ...o, ...patch } : o)));
   const blur = (i: number, k: string) => setTouched((x) => ({ ...x, [`${i}.${k}`]: true }));
   return (
@@ -44,7 +50,17 @@ export function OccupantsForm({ occupants, onChange, foreign, businessDate, atte
           </fieldset>
         );
       })}
-      <button type="button" onClick={() => onChange([...occupants, blankOccupant('', foreign)])}>{t('ci.addGuest')}</button>
+      <div className="row">
+        <button type="button" onClick={() => onChange([...occupants, blankOccupant('', foreign)])}>{t('ci.addGuest')}</button>
+        <button type="button" onClick={() => setRoster(roster === null ? '' : null)}>{t('ci.pasteList')}</button>
+      </div>
+      {roster !== null && (
+        <div className="card inner stack">
+          <label>{t('ci.rosterLabel')}<textarea rows={5} value={roster} onChange={(e) => setRoster(e.target.value)} dir="ltr" placeholder={t('ci.rosterEx')} /></label>
+          <p className="muted small">{t('ci.rosterHelp')}</p>
+          {skipped.length > 0 && <p className="error" role="alert">{t('ci.rosterSkipped', { n: skipped.length })}: {skipped.join(' | ')}</p>}
+          <div className="actions"><button type="button" className="primary" disabled={!roster.trim()} onClick={addRoster}>{t('ci.rosterAdd')}</button></div>
+        </div>)}
       {foreign && <p className="muted small">{t('ci.foreignNote')}</p>}
     </div>
   );
