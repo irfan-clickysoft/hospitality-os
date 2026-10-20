@@ -1016,7 +1016,7 @@ export const uxEn = {
   'mw.contractExpired': 'contract ended',
   'mw.requestNote': 'Your request goes to a manager for approval. They choose who does it.',
   'mw.titleEx': 'e.g. AC switches off by itself',
-  'mw.details': 'What is wrong?',
+  'mw.details': 'More details',
   'mw.detailsEx': 'e.g. TV picture flickers on some channels; fan makes a noise; insects need fumigation',
   'mw.estimate': 'Estimated cost (if known)',
   'mw.send': 'Send request',
@@ -1055,6 +1055,7 @@ export const uxEn = {
   'err.VENDOR_INACTIVE': 'That contractor is no longer active.',
   'err.DUPLICATE_VENDOR': 'A contractor with this name already exists.',
   'st.phoneNote': 'Used to message this person about urgent jobs, for example a repair.',
+  'mw.whoDoes': 'Who does the work',
 } as const;
 
 /** اردو */
@@ -2060,7 +2061,7 @@ export const uxUr: Record<keyof typeof uxEn, string> = {
   'mw.contractExpired': 'معاہدہ ختم',
   'mw.requestNote': 'آپ کی درخواست منظوری کے لیے مینیجر کو جاتی ہے۔ کام کون کرے گا، وہ طے کرتے ہیں۔',
   'mw.titleEx': 'مثلاً اے سی خود بخود بند ہو جاتا ہے',
-  'mw.details': 'کیا خرابی ہے؟',
+  'mw.details': 'مزید تفصیل',
   'mw.detailsEx': 'مثلاً ٹی وی کی تصویر کچھ چینلز پر ہلتی ہے؛ پنکھا شور کرتا ہے؛ کیڑوں کے لیے فیومیگیشن چاہیے',
   'mw.estimate': 'تخمینہ لاگت (اگر معلوم ہو)',
   'mw.send': 'درخواست بھیجیں',
@@ -2099,4 +2100,5 @@ export const uxUr: Record<keyof typeof uxEn, string> = {
   'err.VENDOR_INACTIVE': 'یہ ٹھیکیدار اب فعال نہیں۔',
   'err.DUPLICATE_VENDOR': 'اس نام کا ٹھیکیدار پہلے سے موجود ہے۔',
   'st.phoneNote': 'اس شخص کو ضروری کام (مثلاً مرمت) کا پیغام بھیجنے کے لیے۔',
+  'mw.whoDoes': 'کام کون کرے گا',
 };

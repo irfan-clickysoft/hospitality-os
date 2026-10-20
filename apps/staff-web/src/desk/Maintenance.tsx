@@ -77,7 +77,7 @@ function useAssignees(base: string, enabled: boolean) {
 function AssigneeSelect({ value, onChange, techs, vendors }: { value: string; onChange: (v: string) => void; techs: Array<{ id: string; name: string }>; vendors: Vendor[] }) {
   const { t } = useT();
   return (
-    <label>{t('mt.assignTo')}<select value={value} onChange={(e) => onChange(e.target.value)}><option value="">—</option>
+    <label>{t('mw.whoDoes')}<select value={value} onChange={(e) => onChange(e.target.value)}><option value="">—</option>
       {techs.length > 0 && <optgroup label={t('mw.inhouse')}>{techs.map((x) => <option key={x.id} value={`technician:${x.id}`}>{x.name}</option>)}</optgroup>}
       {vendors.length > 0 && <optgroup label={t('mw.contractorsGroup')}>{vendors.map((v) => <option key={v.id} value={`contractor:${v.id}`}>{v.name} ({t(`mt.c.${v.trade}` as Key) === `mt.c.${v.trade}` ? v.trade : t(`mt.c.${v.trade}` as Key)}){v.contractExpired ? ` — ${t('mw.contractExpired')}` : ''}</option>)}</optgroup>}
     </select></label>

@@ -226,7 +226,7 @@ export class MaintenanceService {
       const p = await this.prop(trx, propertyId);
       let qb = trx.selectFrom('work_order').selectAll().where('property_id', '=', propertyId).orderBy('priority').orderBy(sql`due_date NULLS LAST`).orderBy('created_at').limit(q.limit);
       if (q.status === 'REQUESTED') qb = qb.where('status', '=', 'REQUESTED'); else if (q.status === 'OPEN') qb = qb.where('status', '=', 'OPEN'); else if (q.status === 'ACTIVE') qb = qb.where('status', 'in', ['REQUESTED', ...ACTIVE] as never); else if (q.status === 'DONE') qb = qb.where('status', 'in', ['DONE', 'VERIFIED'] as never);
-      if (q.mine) qb = qb.where('assigned_to', '=', userId);
+      if (q.mine) qb = qb.where((eb) => eb.or([eb('assigned_to', '=', userId), eb('reported_by', '=', userId)]));          // mine = given to me, or asked for by me
       if (q.roomId) qb = qb.where('room_id', '=', q.roomId);
       if (q.kind) qb = qb.where('kind', '=', q.kind);
       if (q.vendorId) qb = qb.where('vendor_id', '=', q.vendorId);
