@@ -48,6 +48,50 @@ Sign in with company code `sunset`, one of the demo users (`manager@sunset.local
 - **To wipe it and start again:** `docker compose -f deploy/docker-compose.yml --env-file deploy/.env down -v` (this deletes the data), then `up -d --build`.
 - **To take it down** when the meeting is over: `docker compose -f deploy/docker-compose.yml --env-file deploy/.env down`.
 
+## A server that already runs other sites (shared staging)
+
+When the server already has a web server on ports 80/443 (other sites, other stagings), do **not** use `deploy/docker-compose.yml`: its web part would fight for those ports. Use `deploy/docker-compose.shared.yml`: the same system, but the staff app and API are published only on `127.0.0.1:8081` (plain http, nothing reachable from outside), the database has no published port and a volume of its own, memory is capped (database 768 MB, API 768 MB, web 128 MB), and the **existing proxy** sends your domain to it and does the HTTPS.
+
+```bash
+git clone https://github.com/irfan-clickysoft/hospitality-os.git hos-pms && cd hos-pms
+cp deploy/.env.example deploy/.env      # fill in as in the steps above: SITE_ADDRESS=pms-s.sunsetbb.com, four passwords, APP_ENCRYPTION_KEY, HOS_TEST_COPY=1, DEMO_PASSWORD
+# if 8081 is taken, add HOS_LOCAL_PORT=8082 (or another free port) to deploy/.env and use it below
+chmod 600 deploy/.env
+C="docker compose -p hos-pms -f deploy/docker-compose.shared.yml --env-file deploy/.env"
+$C up -d --build
+$C logs -f api            # wait for "starting api"
+curl -s http://127.0.0.1:8081/healthz     # answered by the system through the web part (the page at http://127.0.0.1:8081/ should also load)
+```
+`-p hos-pms` keeps this project's containers, network and volume apart from every other stack on the machine; always use the same `C=` line (also for `down`, `logs`, updates and backups).
+
+Then add **one block** to the existing proxy (nothing else is touched), and reload it:
+
+*Caddy* (`/etc/caddy/Caddyfile`; reload with `sudo systemctl reload caddy`):
+```
+pms-s.sunsetbb.com {
+	reverse_proxy 127.0.0.1:8081
+}
+```
+*nginx* (a new file in `/etc/nginx/sites-available/`, linked into `sites-enabled/`; a certificate from `sudo certbot --nginx -d pms-s.sunsetbb.com`; test with `sudo nginx -t`, reload with `sudo systemctl reload nginx`):
+```
+server {
+	server_name pms-s.sunsetbb.com;
+	location / {
+		proxy_pass http://127.0.0.1:8081;
+		proxy_set_header Host $host;
+		proxy_set_header X-Forwarded-For $remote_addr;
+		proxy_set_header X-Forwarded-Proto $scheme;
+		client_max_body_size 12m;
+	}
+	listen 80;   # certbot adds the 443 / certificate lines itself
+}
+```
+If the existing proxy itself runs **in Docker**, `127.0.0.1` inside it is *itself*: point it at the host instead (`host.docker.internal:8081` with `extra_hosts: ["host.docker.internal:host-gateway"]`, or the Docker bridge address, usually `172.17.0.1:8081`) and set `HOS_BIND=0.0.0.0` in `deploy/.env` so the port is reachable from that bridge. Keep 8081 **closed** in the cloud firewall (only 22, 80 and 443 open), so it is still not reachable from the internet.
+
+The address in the browser must be exactly `https://pms-s.sunsetbb.com` (that is what the system accepts as its origin; change `ALLOWED_ORIGINS` in `deploy/.env` if you serve it from another name). Updating, backups and restore work as above with the `C=` line instead of the long command; for backups use `COMPOSE="$C" bash scripts/backup-prod.sh`, which makes the script talk to this project's database.
+
+**Not tested:** this shared layout has been validated (the compose file resolves, publishes only on 127.0.0.1, sets the right origin) but not run on a server; the images were only partly built here (Docker Hub rate limits).
+
 ## Updating it
 
 ```bash
