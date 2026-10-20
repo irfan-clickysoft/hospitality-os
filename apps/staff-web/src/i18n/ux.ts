@@ -419,6 +419,17 @@ export const uxEn = {
   'err.MEDIA_TYPE_UNSUPPORTED': 'Use a JPG, PNG or WebP picture, or an MP4 or WebM video.',
   'err.MEDIA_TOO_LARGE': 'That file is too big. Pictures can be up to 8 MB and videos up to 40 MB.',
   'err.MEDIA_LIMIT': 'A room type can have up to 12 pictures and videos. Remove one first.',
+  'bk.holdFor': 'Hold',
+  'bk.holdHalf': 'For some hours',
+  'bk.holdDays': 'For some days',
+  'bk.holdDate': 'Until a date',
+  'bk.holdHalfCount': 'How long',
+  'bk.hours': 'hours',
+  'bk.holdDaysCount': 'Days (up to 30)',
+  'bk.holdUntil': 'Hold until the end of',
+  'bk.holdNote': 'The room is let go automatically when the hold runs out. A room can be held until the day before arrival at most.',
+  'err.HOLD_INVALID': 'The hold must end in the future.',
+  'err.HOLD_PAST_ARRIVAL': 'A room can only be held until the day before arrival.',
 } as const;
 
 /** اردو */
@@ -842,4 +853,15 @@ export const uxUr: Record<keyof typeof uxEn, string> = {
   'err.MEDIA_TYPE_UNSUPPORTED': 'JPG، PNG یا WebP تصویر، یا MP4 یا WebM ویڈیو استعمال کریں۔',
   'err.MEDIA_TOO_LARGE': 'یہ فائل بہت بڑی ہے۔ تصاویر 8 MB اور ویڈیوز 40 MB تک ہو سکتی ہیں۔',
   'err.MEDIA_LIMIT': 'ایک کمرے کی قسم میں 12 تک تصاویر اور ویڈیوز ہو سکتی ہیں۔ پہلے ایک ہٹائیں۔',
+  'bk.holdFor': 'روکنے کی مدت',
+  'bk.holdHalf': 'چند گھنٹے',
+  'bk.holdDays': 'چند دن',
+  'bk.holdDate': 'ایک تاریخ تک',
+  'bk.holdHalfCount': 'کتنی دیر',
+  'bk.hours': 'گھنٹے',
+  'bk.holdDaysCount': 'دن (زیادہ سے زیادہ 30)',
+  'bk.holdUntil': 'اس تاریخ کے اختتام تک روکیں',
+  'bk.holdNote': 'مدت ختم ہوتے ہی کمرہ خود بخود چھوڑ دیا جاتا ہے۔ کمرہ زیادہ سے زیادہ آمد سے ایک دن پہلے تک روکا جا سکتا ہے۔',
+  'err.HOLD_INVALID': 'روکنے کی مدت آئندہ وقت میں ختم ہونی چاہیے۔',
+  'err.HOLD_PAST_ARRIVAL': 'کمرہ آمد کے دن سے پہلے تک ہی روکا جا سکتا ہے۔',
 };

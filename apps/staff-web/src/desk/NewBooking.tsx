@@ -32,7 +32,8 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   const [options, setOptions] = useState<Option[]>([]); const [chosen, setChosen] = useState<Option | null>(null);
   const [q, setQ] = useState(''); const [hits, setHits] = useState<GuestHit[]>([]); const [guest, setGuest] = useState<GuestHit | null>(null);
   const [nf, setNf] = useState({ fullName: '', phone: '', nationality: 'PK' });
-  const [hold, setHold] = useState(false); const [holdMin, setHoldMin] = useState(120); const [notes, setNotes] = useState(''); const [ext, setExt] = useState('');
+  const [hold, setHold] = useState(false); const [holdKind, setHoldKind] = useState<'half' | 'days' | 'date'>('half'); const [holdHalf, setHoldHalf] = useState(4); const [holdDays, setHoldDays] = useState(3); const [holdDate, setHoldDate] = useState(''); const [notes, setNotes] = useState(''); const [ext, setExt] = useState('');
+  const holdLast = addDays(arrival, -1) < businessDate ? businessDate : addDays(arrival, -1); const holdUntil = holdDate || holdLast;     // default: keep it until the day before arrival
   const [result, setResult] = useState<{ id: string; confirmationNo: string; guarantee: { atRisk: boolean; depositRequired: Amount; deadline: string | null }; totalExTax: Amount; compliance?: Hit[] } | null>(null);
   const key = useMemo(newKey, []);
   const { busy, problem, run, clear } = useAction();
@@ -52,7 +53,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
 
   const book = async (g: { guestId?: string; guest?: Record<string, unknown> }, approval?: string) => {
     lastBook[1]({ g });
-    const body = { ...g, source, lines: [{ quoteToken: chosen!.quoteToken }], ...(hold ? { hold: { minutes: holdMin } } : {}), ...(notes.trim() ? { notesInternal: notes.trim() } : {}), ...(ext.trim() ? { externalRef: ext.trim() } : {}), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
+    const body = { ...g, source, lines: [{ quoteToken: chosen!.quoteToken }], ...(hold ? { hold: holdKind === 'half' ? { minutes: holdHalf * 30 } : holdKind === 'days' ? { days: holdDays } : { untilDate: holdUntil } } : {}), ...(notes.trim() ? { notesInternal: notes.trim() } : {}), ...(ext.trim() ? { externalRef: ext.trim() } : {}), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
     const call = () => api<NonNullable<typeof result>>('POST', `${base}/reservations`, body, { 'idempotency-key': key });
     const r = await run(() => (approval ? withStepUp(call) : call()));
     if (r) { setResult(r); setStep('done'); }
@@ -103,7 +104,15 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
       {step === 'confirm' && chosen && (<>
         <div className="card inner"><strong>{guest ? guest.fullName : nf.fullName}</strong><p className="muted small">{chosen.roomType.name} · {shortDate(arrival, locale)} → {shortDate(departure, locale)} · <strong>{money(chosen.totalExTax)}</strong> {t('d.exTax')}</p></div>
         <label className="check"><input type="checkbox" checked={hold} onChange={(e) => setHold(e.target.checked)} /> {t('bk.hold')}</label>
-        {hold && <label>{t('bk.holdMinutes')}<input type="number" min={15} max={4320} step={15} value={holdMin} onChange={(e) => setHoldMin(Number(e.target.value) || 120)} dir="ltr" /></label>}
+        {hold && (
+          <div className="grid2">
+            <label>{t('bk.holdFor')}<select value={holdKind} onChange={(e) => setHoldKind(e.target.value as typeof holdKind)}><option value="half">{t('bk.holdHalf')}</option><option value="days">{t('bk.holdDays')}</option><option value="date">{t('bk.holdDate')}</option></select></label>
+            {holdKind === 'half' && <label>{t('bk.holdHalfCount')}<select value={holdHalf} onChange={(e) => setHoldHalf(Number(e.target.value))}>{[1, 2, 3, 4, 6, 8, 12, 16, 24, 36, 48].map((n) => <option key={n} value={n}>{n % 2 ? `${Math.floor(n / 2)}½` : n / 2} {t('bk.hours')}</option>)}</select></label>}
+            {holdKind === 'days' && <label>{t('bk.holdDaysCount')}<input type="number" min={1} max={30} value={holdDays} onChange={(e) => setHoldDays(Math.min(30, Math.max(1, Math.floor(Number(e.target.value)) || 1)))} dir="ltr" /></label>}
+            {holdKind === 'date' && <label>{t('bk.holdUntil')}<input type="date" min={businessDate} max={holdLast} value={holdUntil} onChange={(e) => setHoldDate(e.target.value)} dir="ltr" /></label>}
+          </div>
+        )}
+        {hold && <p className="muted small">{t('bk.holdNote')}</p>}
         <label>{t('bk.extRef')} ({t('common.optional')})<input value={ext} onChange={(e) => setExt(e.target.value)} dir="ltr" /></label>
         <label>{t('common.note')} ({t('common.optional')})<input value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
         <ErrorLine code={problem?.code === 'DUPLICATE_GUEST' ? undefined : problem?.code} detail={problem?.detail} />

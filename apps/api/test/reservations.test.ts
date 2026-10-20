@@ -265,6 +265,25 @@ describe('cancellation (72-hour rule), waiver, no-show, reinstatement', () => {
     expect((await avail(w, 'STD', '2026-11-05')).reserved).toBe(0);
   });
 
+  it('a hold runs in half-hour steps, whole days, or until a date — and never past the day before arrival', async () => {
+    const w = await sunset();
+    const body = (hold: Record<string, unknown>) => ({ body: { hold } });
+    expect((await book(w, body({ minutes: 45 }))).statusCode).toBe(400);                                  // not a half-hour step
+    expect((await book(w, body({ minutes: 15 }))).statusCode).toBe(400);
+    expect((await book(w, body({ days: 31 }))).statusCode).toBe(400);
+    expect((await book(w, body({ days: 2, minutes: 30 }))).statusCode).toBe(400);                         // one way of saying it
+    const d = await ok(book(w, body({ days: 3 })), 201);
+    expect(new Date(d.optionExpiresAt).getTime() - testClock.now()).toBeGreaterThan(2.9 * 86_400_000);
+    expect(new Date(d.optionExpiresAt).getTime() - testClock.now()).toBeLessThan(3.1 * 86_400_000);
+    const u = await ok(book(w, body({ untilDate: '2026-11-03' })), 201);                                  // arrival is 2026-11-05
+    expect(new Date(u.optionExpiresAt).toISOString()).toBe('2026-11-03T19:00:00.000Z');                   // midnight Karachi, end of the 3rd
+    const late = await book(w, body({ untilDate: '2026-11-05' }));
+    expect(late.statusCode).toBe(422);
+    expect(late.json().code).toBe('HOLD_PAST_ARRIVAL');
+    const past = await book(w, body({ untilDate: '2026-10-01' }));
+    expect(past.json().code).toBe('HOLD_INVALID');
+  });
+
   it('cancelling an unconfirmed option never carries a fee', async () => {
     const w = await sunset();
     const r = await ok(book(w, { body: { hold: { minutes: 120 } } }), 201);

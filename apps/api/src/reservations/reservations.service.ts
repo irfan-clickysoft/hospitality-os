@@ -26,6 +26,24 @@ const fmt = (m: bigint | string | number, cur: string) => ({ amount: Money.ofMin
 const stale = () => new HttpException({ code: 'VERSION_CONFLICT', message: 'This reservation was changed by someone else. Reload and try again.' }, 412);
 const FRESH_MFA_MS = 15 * 60_000;
 
+/** Milliseconds the zone is ahead of UTC at an instant. */
+function zoneOffsetMs(tz: string, at: number) {
+  const x = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date(at)).map((q) => [q.type, q.value]));
+  return Date.UTC(+x.year!, +x.month! - 1, +x.day!, +x.hour!, +x.minute!, +x.second!) - Math.floor(at / 1000) * 1000;
+}
+/** The instant a date ends in the property's own clock (midnight at the start of the next day). */
+function endOfDateIn(tz: string, date: string) {
+  const guess = Date.parse(`${addDays(date, 1)}T00:00:00Z`);
+  return guess - zoneOffsetMs(tz, guess - zoneOffsetMs(tz, guess));
+}
+/** When a held room is let go: half-hour steps, whole days, or the end of a chosen date. A hold may not run past the arrival day — the room is needed then. */
+export function holdExpiry(h: { minutes?: number; days?: number; untilDate?: string }, now: number, tz: string, businessDate: string, firstArrival: string): Date {
+  const at = h.untilDate !== undefined ? endOfDateIn(tz, h.untilDate) : now + (h.days !== undefined ? h.days * 86_400_000 : h.minutes! * 60_000);
+  if (at <= now) throw new UnprocessableEntityException({ code: 'HOLD_INVALID', message: 'The hold must end in the future' });
+  if (at > endOfDateIn(tz, firstArrival > businessDate ? addDays(firstArrival, -1) : firstArrival) && firstArrival > businessDate) throw new UnprocessableEntityException({ code: 'HOLD_PAST_ARRIVAL', message: 'A room cannot be held past the day before arrival' });
+  return new Date(at);
+}
+
 @Injectable()
 export class ReservationsService {
   constructor(
@@ -145,7 +163,7 @@ export class ReservationsService {
     const deadlineHours = verified.map((v) => v.quote.policy.depositRule?.dueWithinHours).find((h) => h !== undefined);
     const needsGuarantee = !hold && depositTotal > 0n && first.channel !== 'WALKIN' && !first.companyId;
     const guaranteeType = first.companyId ? 'COMPANY' : 'NONE';
-    const optionExpiresAt = hold ? new Date(now + i.hold!.minutes * 60_000) : null;
+    const optionExpiresAt = hold ? holdExpiry(i.hold!, now, p.timezone, p.business_date, verified.map((v) => v.claims.arrival).sort()[0]!) : null;
 
     // 5. numbers, header, lines, price snapshot
     const seq = (await sql<{ v: string }>`INSERT INTO property_counter (tenant_id, property_id, name, value) VALUES (${currentTenant().tenantId}, ${propertyId}, 'confirmation', 1)
