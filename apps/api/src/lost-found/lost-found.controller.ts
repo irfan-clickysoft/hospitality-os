@@ -20,6 +20,8 @@ export class LostFoundController {
   create(@Param('propertyId', uuid()) pid: string, @Body() body: unknown) { return this.svc.create(pid, me(), parse(S.Create, body)); }
   @Get('suggest-owner') @RequirePermission('housekeeping.view', P)
   suggest(@Param('propertyId', uuid()) pid: string, @Query() q: unknown) { return this.svc.suggest(pid, parse(S.SuggestQuery, q)); }
+  @Get('find-guest') @RequirePermission('housekeeping.update', P)
+  findGuest(@Param('propertyId', uuid()) pid: string, @Query('q') q = '') { return this.svc.findGuest(pid, q); }
   @Get(':id') @RequirePermission('housekeeping.view', P)
   get(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string) { return this.svc.get(pid, id); }
   @Patch(':id') @RequirePermission('housekeeping.update', P)

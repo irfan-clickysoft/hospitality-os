@@ -103,6 +103,25 @@ export class LostFoundService {
     });
   }
 
+  /** Find a guest of this property to link — by name or phone — without opening the whole guest book to housekeeping: only guests who stayed here, and only a name and the last stay. */
+  async findGuest(propertyId: string, q: string) {
+    const text = q.trim();
+    if (text.length < 2) return { items: [] };
+    return this.tdb.tx(async (trx) => {
+      const tokens = text.split(/\s+/).map((t) => t.replace(/[%_]/g, '')).filter((t) => t.length >= 2).slice(0, 5);
+      const digits = text.replace(/\D/g, '');
+      const rows = await sql<{ guest_id: string; full_name: string; confirmation_no: string; reservation_id: string; arrival: string; departure: string }>`
+        SELECT DISTINCT ON (g.id) g.id AS guest_id, g.full_name, r.confirmation_no, r.id AS reservation_id, rr.arrival::text, rr.departure::text
+        FROM guest g JOIN reservation r ON r.tenant_id = g.tenant_id AND r.guest_id = g.id AND r.property_id = ${propertyId}
+        JOIN reservation_room rr ON rr.tenant_id = r.tenant_id AND rr.reservation_id = r.id AND rr.status IN ('CHECKED_IN','CHECKED_OUT')
+        WHERE g.tenant_id = ${currentTenant().tenantId}
+          AND (${tokens.length ? sql`(${sql.join(tokens.map((t) => sql`g.full_name ILIKE ${'%' + t + '%'}`), sql` AND `)})` : sql`false`}
+               OR (${digits.length >= 6} AND g.phone_norm LIKE ${'%' + digits.slice(-9)}))
+        ORDER BY g.id, rr.departure DESC LIMIT 10`.execute(trx);
+      return { items: rows.rows.map((x) => ({ guestId: x.guest_id, guestName: x.full_name, reservationId: x.reservation_id, confirmationNo: x.confirmation_no, arrival: x.arrival, departure: x.departure })) };
+    });
+  }
+
   // ───────────── reading ─────────────
   async list(propertyId: string, q: z.infer<typeof S.ListQuery>) {
     return this.tdb.tx(async (trx) => {
@@ -186,7 +205,7 @@ export class LostFoundService {
     return this.tdb.tx(async (trx) => {
       const p = await this.prop(trx, propertyId); const r = await this.row(trx, propertyId, id, true);
       if (!OPEN.includes(r.status)) throw fail(409, 'NOT_OPEN', 'This item is already closed');
-      if (r.dispose_after && r.dispose_after > p.business_date && !i.early) throw fail(409, 'TOO_EARLY', `Items are kept until ${longDate.format(new Date(`${r.dispose_after}T00:00:00Z`))}. Confirm to dispose of it early.`);
+      if (r.dispose_after && r.dispose_after > p.business_date && !i.early) throw fail(409, 'KEEPING_PERIOD', `Items are kept until ${longDate.format(new Date(`${r.dispose_after}T00:00:00Z`))}. Confirm to dispose of it early.`);
       if (r.high_value && r.found_by === userId) throw fail(403, 'SECOND_PERSON_REQUIRED', 'A high-value item must be disposed of by someone other than the person who found it');
       const u = await trx.updateTable('lost_found').set({ status: 'DISPOSED', closed_by: userId, closed_at: new Date(this.clock.now()), closed_note: i.reason, version: sql`version + 1` } as never).where('id', '=', id).returningAll().executeTakeFirstOrThrow();
       await this.event(trx, id, 'DISPOSED', userId, `${i.early ? '(early) ' : ''}${i.reason}`);
@@ -216,7 +235,7 @@ export class LostFoundService {
       return await this.tdb.tx(async (trx) => {
         await this.row(trx, propertyId, id);
         const n = await trx.selectFrom('lost_found_media').select(({ fn }) => fn.countAll<string>().as('n')).where('lost_found_id', '=', id).executeTakeFirstOrThrow();
-        if (Number(n.n) >= 6) throw fail(409, 'MEDIA_LIMIT', 'An item can have up to 6 pictures');
+        if (Number(n.n) >= 6) throw fail(409, 'PHOTO_LIMIT', 'An item can have up to 6 pictures');
         const m = await trx.insertInto('lost_found_media').values({ tenant_id: currentTenant().tenantId, lost_found_id: id, phase, file_name: file, uploaded_by: userId }).returning('id').executeTakeFirstOrThrow();
         await this.event(trx, id, phase === 'HANDOVER' ? 'HANDOVER_PHOTO' : 'PHOTO', userId);
         return { id: m.id, phase };
