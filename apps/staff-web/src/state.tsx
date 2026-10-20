@@ -9,7 +9,7 @@ export interface Property { id: string; code: string; name: string; businessDate
 type Status = 'loading' | 'out' | 'mfa' | 'in';
 
 interface Auth {
-  status: Status; me: Me | null; properties: Property[]; property: Property | null; setPropertyId: (id: string) => void; offlineBoot: boolean;
+  status: Status; me: Me | null; properties: Property[]; property: Property | null; setPropertyId: (id: string) => void; offlineBoot: boolean; refreshProperties: () => Promise<void>;
   can: (permission: string) => boolean;
   login: (tenant: string, email: string, password: string) => Promise<void>; verifyMfa: (code: string) => Promise<void>; logout: () => Promise<void>; setLocale: (l: Locale) => void;
 }
@@ -60,7 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => { try { await api('POST', '/v1/auth/logout'); } catch { /* signed out locally anyway */ } writeCache(null); setCsrf(null); setMe(null); setStatus('out'); }, []);
   const setLocale = useCallback((l: Locale) => { api('POST', '/v1/auth/locale', { locale: l }).catch(() => undefined); }, []);
 
-  const value = useMemo<Auth>(() => ({ status, me, properties, property, setPropertyId, offlineBoot, can, login, verifyMfa, logout, setLocale }), [status, me, properties, property, setPropertyId, offlineBoot, can, login, verifyMfa, logout, setLocale]);
+  const refreshProperties = useCallback(async () => { const props = (await api<{ items: Property[] }>('GET', '/v1/me/properties')).items; setProperties(props); }, []);
+  const value = useMemo<Auth>(() => ({ status, me, properties, property, setPropertyId, offlineBoot, refreshProperties, can, login, verifyMfa, logout, setLocale }), [status, me, properties, property, setPropertyId, offlineBoot, refreshProperties, can, login, verifyMfa, logout, setLocale]);
   return <AuthCtx.Provider value={value}><LocaleProvider initial={me?.user.locale} onChange={setLocale}>{children}</LocaleProvider></AuthCtx.Provider>;
 }
 
