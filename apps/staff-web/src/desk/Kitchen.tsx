@@ -8,8 +8,9 @@ import { useAuth, useLive } from '../state.js';
 import { Badge, Chip, Empty, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 import type { Amount } from './types.js';
 import { ItemCard, type Card, type Tree } from './Menus.js';
+import { RecipeCard } from './Recipes.js';
 
-interface OrderLine { id: string; name: string; variant: string | null; modifiers: Array<{ name: string }>; removed: string[]; quantity: number; total: Amount; note: string | null }
+interface OrderLine { id: string; menuItemId: string; name: string; variant: string | null; modifiers: Array<{ name: string }>; removed: string[]; quantity: number; total: Amount; note: string | null }
 interface Order { id: string; number: string; payDigitally: boolean; status: string; room: string; guest: string; note: string | null; total: Amount; createdAt: string; cancelReason: string | null; lines: OrderLine[] }
 interface Stay { reservationRoomId: string; room: string; guest: string }
 const tone = (s: string) => (s === 'READY' ? 'clean' : s === 'PREPARING' ? 'cleaning' : s === 'DELIVERED' ? 'inspected' : s === 'CANCELLED' ? 'neutral' : 'warn') as 'clean' | 'cleaning' | 'inspected' | 'neutral' | 'warn';
@@ -23,6 +24,7 @@ export function Kitchen() {
   const [view, setView] = useState<'queue' | 'done'>('queue'); const [taking, setTaking] = useState(false);
   const queue = useLive<{ items: Order[] }>(view === 'queue' ? `${base}/orders` : `${base}/orders?status=ALL&limit=40`, 10_000);
   const { busy, problem, run } = useAction();
+  const [card, setCard] = useState<{ itemId: string; name: string } | null>(null);
   const go = async (id: string, tail: string, body: unknown = {}) => { if (await run(() => api('POST', `${base}/orders/${id}/${tail}`, body))) queue.reload(); };
   const manage = can('fnb.manage');
   return (
@@ -36,7 +38,7 @@ export function Kitchen() {
           <li key={o.id} className="card stack small">
             <div className="row between"><strong>{t('d.room')} {o.room} · {o.guest}</strong><Badge tone={tone(o.status)}>{t(`kt.s.${o.status}` as Key)}</Badge></div>
             <span className="muted">{o.number} · {t('kt.minutes', { n: age(o.createdAt) })} · {money(o.total)}{o.payDigitally ? ` · ${t('kt.digital')}` : ''}</span>
-            <ul className="plain">{o.lines.map((l) => <li key={l.id}><strong>{l.quantity} ×</strong> {l.name}{l.variant ? ` (${l.variant})` : ''}{l.modifiers.length ? ` + ${l.modifiers.map((m) => m.name).join(', ')}` : ''}{l.removed.length ? ` — ${t('kt.no')} ${l.removed.join(', ')}` : ''}{l.note ? <span className="muted"> — {l.note}</span> : null}</li>)}</ul>
+            <ul className="plain">{o.lines.map((l) => <li key={l.id}><strong>{l.quantity} ×</strong> {l.name}{l.variant ? ` (${l.variant})` : ''}{l.modifiers.length ? ` + ${l.modifiers.map((m) => m.name).join(', ')}` : ''}{l.removed.length ? ` — ${t('kt.no')} ${l.removed.join(', ')}` : ''}{l.note ? <span className="muted"> — {l.note}</span> : null} <button className="link" onClick={() => setCard({ itemId: l.menuItemId, name: l.name })}>{t('rc.howTo')}</button></li>)}</ul>
             {o.note && <span className="warnbox">{o.note}</span>}{o.cancelReason && <span className="muted">{o.cancelReason}</span>}
             {['NEW', 'PREPARING', 'READY'].includes(o.status) && (
               <div className="row">
@@ -46,6 +48,7 @@ export function Kitchen() {
                 <button className="link" disabled={busy} onClick={() => { const r = window.prompt(t('kt.cancelWhy')); if (r && r.trim().length >= 3) void go(o.id, 'cancel', { reason: r.trim() }); }}>{t('kt.cancel')}</button>
               </div>)}
           </li>))}</ul>)}
+      {card && <RecipeCard base={`/v1/properties/${property!.id}`} itemId={card.itemId} name={card.name} onClose={() => setCard(null)} />}
       {taking && <TakeOrder base={base} locale={locale} onDone={() => { setTaking(false); queue.reload(); }} onClose={() => setTaking(false)} />}
     </section>
   );

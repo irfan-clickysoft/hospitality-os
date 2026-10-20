@@ -97,7 +97,7 @@ export class FnbService {
   private async view(trx: Trx, o: Order) {
     const lines = await trx.selectFrom('fnb_order_line').selectAll().where('order_id', '=', o.id).orderBy('name').execute();
     return { id: o.id, number: o.number, payDigitally: o.pay_digital, status: o.status, room: o.room_number, guest: o.guest_name, reservationId: o.reservation_id, note: o.note, total: fmt(o.total_minor, o.currency), createdAt: o.created_at, readyAt: o.ready_at, deliveredAt: o.delivered_at,
-      businessDate: o.business_date, cancelReason: o.cancel_reason, version: o.version, lines: lines.map((l) => ({ id: l.id, name: l.name, variant: l.variant_name, modifiers: l.modifiers, removed: l.removed, quantity: l.quantity, unitPrice: fmt(l.unit_price_minor, o.currency), total: fmt(l.line_minor, o.currency), note: l.note, posted: !!l.posting_id })) };
+      businessDate: o.business_date, cancelReason: o.cancel_reason, version: o.version, lines: lines.map((l) => ({ id: l.id, menuItemId: l.menu_item_id, name: l.name, variant: l.variant_name, modifiers: l.modifiers, removed: l.removed, quantity: l.quantity, unitPrice: fmt(l.unit_price_minor, o.currency), total: fmt(l.line_minor, o.currency), note: l.note, posted: !!l.posting_id })) };
   }
   async create(propertyId: string, userId: string, i: z.infer<typeof S.CreateOrder>) {
     return this.tdb.tx(async (trx) => {

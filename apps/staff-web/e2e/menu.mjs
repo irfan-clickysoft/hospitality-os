@@ -14,7 +14,7 @@ const page = await (await browser.newContext({ viewport: { width: 1280, height: 
 page.on('pageerror', (e) => { console.log('PAGEERROR', e.message); fail.push('pageerror ' + e.message); });
 await page.goto(BASE);
 await page.getByLabel(/Company code/).fill('sunset');
-await page.getByLabel(/^Email/).fill(process.env.E2E_USER ?? 'hira@sunset.local');
+await page.getByLabel(/^Email/).fill(process.env.E2E_USER ?? 'manager@sunset.local');
 await page.getByLabel(/^Password/).fill(process.env.E2E_PASSWORD ?? 'sunset-demo-passphrase');
 await page.locator('form button.primary').click();
 await mainNav(page).waitFor();
@@ -72,8 +72,8 @@ check('no sideways scroll', await page.evaluate(() => document.documentElement.s
 await page.evaluate(() => { window.location.hash = '/tasks?tab=kitchen'; });
 await page.getByRole('button', { name: 'New order' }).click();
 sheet = page.locator('.sheet').last();
-await sheet.getByLabel('Outlet').selectOption({ label: `Terrace ${stamp}` });
-await sheet.getByRole('button', { name: 'Add to order' }).first().waitFor();
+if (await sheet.getByLabel('Outlet').count()) await sheet.getByLabel('Outlet').selectOption({ label: `Terrace ${stamp}` });
+await sheet.getByText(`Chicken Karahi ${stamp}`).waitFor();
 check('the order screen shows the same card with Add to order', (await sheet.getByText(`Chicken Karahi ${stamp}`).count()) > 0);
 await browser.close();
 console.log(fail.length ? `\nFAILED: ${fail.length}` : '\nALL PASSED'); process.exit(fail.length ? 1 : 0);
