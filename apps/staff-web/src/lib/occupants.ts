@@ -1,7 +1,11 @@
 import type { Key } from '../i18n/en.js';
 
 /** One person on a registration card, as typed. */
-export interface Occupant { fullName: string; idType: string; idNumber: string; nationality: string; idExpiry: string; ageGroup: 'ADULT' | 'CHILD' }
+export interface Occupant {
+  fullName: string; idType: string; idNumber: string; nationality: string; idExpiry: string; ageGroup: 'ADULT' | 'CHILD';
+  /** The kind of guest; empty means "worked out from the card". */
+  guestType: string; docs: Record<string, { state: 'SEEN' | 'NOT_AVAILABLE'; note?: string }>; foreign: Record<string, string | boolean>; /** Position of the accompanying adult on the card. */ guardian: number | null;
+}
 export type OccErrors = Partial<Record<'fullName' | 'idType' | 'idNumber' | 'nationality' | 'idExpiry', Key>>;
 
 const digits = (s: string) => s.replace(/[\s-]/g, '');
@@ -40,3 +44,41 @@ export function checkOccupant(o: Occupant, i: number, foreign: boolean, business
 }
 
 export const hasErrors = (all: OccErrors[]) => all.some((e) => Object.keys(e).length > 0);
+
+// ───────────── the document matrix ─────────────
+export interface MatrixType { type: string; minor: boolean; foreignDetails: boolean; requirements: Array<{ key: string; required: boolean; supplementary: boolean }>; requirementsCorporate: Array<{ key: string; required: boolean; supplementary: boolean }> }
+export interface Matrix { strict: boolean; nicopAloneOk: boolean; foreignDetailKeys: string[]; types: MatrixType[] }
+export type DocMap = Record<string, { state: 'SEEN' | 'NOT_AVAILABLE'; note?: string }>;
+export const FOREIGN_FIELDS = ['passportIssuePlace', 'visaType', 'stayExpiry', 'entryDate', 'entryPort', 'localAddress', 'nextDestination'] as const;
+
+/** The kind of guest the card suggests: the desk can always change it. */
+export function suggestType(o: { nationality: string; ageGroup: 'ADULT' | 'CHILD'; idType: string }): string {
+  const pk = o.nationality.trim() ? o.nationality.trim().toUpperCase() === 'PK' : o.idType !== 'PASSPORT';          // no nationality yet and a passport: a foreign guest, until told otherwise
+  if (o.ageGroup === 'CHILD') return pk ? 'PAKISTANI_MINOR' : 'FOREIGN_MINOR';
+  if (!pk) return 'FOREIGN_ADULT';
+  return o.idType === 'NICOP' ? 'OVERSEAS_PAKISTANI' : 'PAKISTANI_ADULT';
+}
+export const typeOf = (o: Occupant) => o.guestType || suggestType(o);
+
+export interface Gap { kind: 'ID' | 'DOCUMENT' | 'DETAIL' | 'GUARDIAN'; key: string }
+/** What is still missing for one person, by the matrix the server sent (the server checks again when the card is submitted). */
+export function gapsFor(o: Occupant, index: number, all: Occupant[], m: Matrix | null, corporate = false): Gap[] {
+  if (!m) return [];
+  const t = m.types.find((x) => x.type === typeOf(o));
+  if (!t) return [];
+  const gaps: Gap[] = [];
+  if (o.ageGroup === 'ADULT' && !o.idNumber.trim()) gaps.push({ kind: 'ID', key: 'ID' });
+  for (const r of corporate ? t.requirementsCorporate : t.requirements) {
+    if (!r.required) continue;
+    if (r.key === 'GUARDIAN_ID') { const g = o.guardian; if (g === null || g === undefined || g === index || !all[g] || all[g]!.ageGroup !== 'ADULT' || !all[g]!.idNumber.trim()) gaps.push({ kind: 'GUARDIAN', key: r.key }); continue; }
+    const d = o.docs[r.key];
+    if (d?.state === 'SEEN') continue;
+    if (d?.state === 'NOT_AVAILABLE' && (d.note ?? '').trim().length >= 3) continue;
+    gaps.push({ kind: 'DOCUMENT', key: r.key });
+  }
+  if (t.foreignDetails) {
+    for (const k of FOREIGN_FIELDS) if (!String(o.foreign[k] ?? '').trim()) gaps.push({ kind: 'DETAIL', key: k });
+    if (o.ageGroup === 'ADULT' && !o.idExpiry) gaps.push({ kind: 'DETAIL', key: 'passportExpiry' });
+  }
+  return gaps;
+}

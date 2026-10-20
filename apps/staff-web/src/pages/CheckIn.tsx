@@ -4,10 +4,11 @@ import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
 import { useAction } from '../lib/action.js';
 import { StepUpSlot, useStepUp } from '../lib/stepup.js';
-import { useAuth, useWork } from '../state.js';
+import { useAuth, useLive, useWork } from '../state.js';
 import { ApprovalBox } from '../desk/ComplianceBits.js';
 import { blankOccupant, occupantBody } from '../desk/CheckInSheet.js';
-import { checkOccupant, formatId, type OccErrors, type Occupant } from '../lib/occupants.js';
+import { checkOccupant, formatId, gapsFor, type Matrix, type OccErrors, type Occupant } from '../lib/occupants.js';
+import { OccupantDocs } from '../desk/OccupantDocs.js';
 import { RoomPicker } from '../desk/RoomPicker.js';
 import type { ReservationDetail } from '../desk/types.js';
 import { Banner, Field, RoomState, SaveState, StatusBadge, type SaveStatus } from '../ui/ds.js';
@@ -22,7 +23,7 @@ const LABEL: Record<keyof Errors, Key> = { fullName: 'ci.name', idType: 'ci.idTy
 
 const draftKey = (lineId: string) => `hos.draft.checkin.v1.${lineId}`;
 /** The draft lives on this device. ID numbers are never written to it: they are sensitive, and a shared desk PC is not a safe place for them. */
-const loadDraft = (lineId: string): Occupant[] | null => { try { const d = JSON.parse(localStorage.getItem(draftKey(lineId)) ?? 'null') as { occupants: Omit<Occupant, 'idNumber'>[] } | null; return d ? d.occupants.map((o) => ({ ...o, idNumber: '' })) : null; } catch { return null; } };
+const loadDraft = (lineId: string): Occupant[] | null => { try { const d = JSON.parse(localStorage.getItem(draftKey(lineId)) ?? 'null') as { occupants: Omit<Occupant, 'idNumber'>[] } | null; return d ? d.occupants.map((o) => ({ ...blankOccupant(), ...o, idNumber: '' })) : null; } catch { return null; } };
 
 /** Full-page check-in inside the workspace: room, guests, confirm. The context rail stays on screen; problems are shown where they are and before anything is submitted. */
 export function CheckIn({ stay }: { stay: Stay }) {
@@ -33,6 +34,7 @@ export function CheckIn({ stay }: { stay: Stay }) {
   const res = r!, ln = line!;
   const foreign = res.residency === 'NON_RESIDENT';
   const [occ, setOcc] = useState<Occupant[]>(() => loadDraft(ln.id) ?? [blankOccupant(res.guest.fullName, foreign)]);
+  const matrix = useLive<Matrix>(`/v1/properties/${property!.id}/registration/requirements`, 600_000).data ?? null;
   const [picked, setPicked] = useState<{ id: string; hk: string } | null>(null); const [changeRoom, setChangeRoom] = useState(false); const [pickerKey, setPickerKey] = useState(0);
   const [override, setOverride] = useState(false); const [attempted, setAttempted] = useState(false); const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [save, setSave] = useState<SaveStatus>({ kind: 'idle' });
@@ -124,7 +126,8 @@ export function CheckIn({ stay }: { stay: Stay }) {
                 <Field label={t('ci.nationality')} required={i === 0} hint={t('ci.nationalityHint')} error={show('nationality')}>{(p) => <input {...p} value={o.nationality} maxLength={2} dir="ltr" placeholder="PK" onChange={(x) => set(i, { nationality: x.target.value.toUpperCase() })} onBlur={() => blur('nationality')} />}</Field>
                 {o.idType === 'PASSPORT' && <Field label={t('ci.expiry')} error={show('idExpiry')}>{(p) => <input {...p} type="date" value={o.idExpiry} dir="ltr" onChange={(x) => set(i, { idExpiry: x.target.value })} onBlur={() => blur('idExpiry')} />}</Field>}
               </div>
-              {i > 0 && <div className="row between"><label className="check"><input type="checkbox" checked={o.ageGroup === 'CHILD'} onChange={(x) => set(i, { ageGroup: x.target.checked ? 'CHILD' : 'ADULT' })} /> {t('ci.child')}</label><button className="link" onClick={() => { edited.current = true; setOcc((x) => x.filter((_, k) => k !== i)); }}>{t('ci.remove')}</button></div>}
+              <OccupantDocs index={i} all={occ} matrix={matrix} corporate={!!res.companyId} onChange={(patch) => set(i, patch)} />
+              {i > 0 && <div className="row between"><label className="check"><input type="checkbox" checked={o.ageGroup === 'CHILD'} onChange={(x) => set(i, { ageGroup: x.target.checked ? 'CHILD' : 'ADULT' })} /> {t('ci.child')}</label><button className="link" onClick={() => { edited.current = true; setOcc((x) => x.filter((_, k) => k !== i).map((y) => ({ ...y, guardian: y.guardian === null ? null : y.guardian === i ? null : y.guardian > i ? y.guardian - 1 : y.guardian }))); }}>{t('ci.remove')}</button></div>}
             </fieldset>);
         })}
         <button type="button" onClick={() => { edited.current = true; setOcc((x) => [...x, blankOccupant('', foreign)]); }}>{t('ci.addGuest')}</button>

@@ -10,6 +10,7 @@ import { ErrorLine, Sheet } from '../ui/kit.js';
 import { useStepUp } from '../lib/stepup.js';
 import { ApprovalBox } from './ComplianceBits.js';
 import { blankOccupant, OccupantsForm, occupantBody, type Occupant } from './CheckInSheet.js';
+import type { Matrix } from '../lib/occupants.js';
 import type { Amount, RackData } from './types.js';
 
 interface PlanOption { roomType: { id: string }; plan: { id: string; name: string; mealPlan: string }; totalExTax: Amount; bookable: boolean }
@@ -21,6 +22,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
   const { property } = useAuth();
   const base = `/v1/properties/${property!.id}`;
   const rack = useLive<RackData>(`${base}/rack?days=1`, 30_000);
+  const matrix = useLive<Matrix>(`${base}/registration/requirements`, 600_000).data;
   const key = useMemo(newKey, []);
   const [typeId, setTypeId] = useState(''); const [nights, setNights] = useState(1); const [adults, setAdults] = useState(2); const [children, setChildren] = useState(0); const [extraBeds, setExtraBeds] = useState(0); const [foreign, setForeign] = useState(false);
   const [planId, setPlanId] = useState('');
@@ -98,7 +100,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
         </>}
         <h3>{t('ci.guests')}</h3>
         <p className="muted small">{t('wi.idNote')}</p>
-        <OccupantsForm occupants={occ} onChange={setOcc} foreign={foreign} businessDate={businessDate} attempted={attempted} />
+        <OccupantsForm occupants={occ} onChange={setOcc} foreign={foreign} businessDate={businessDate} attempted={attempted} matrix={matrix} />
         {attempted && hasErrors(errors) && <Banner level="ACTION" title={t('ci.e.fix')} />}
         <ErrorLine code={problem?.code} detail={problem?.detail} />
         <ApprovalBox problem={problem} busy={busy} onApprove={(r) => void submit(r)} />

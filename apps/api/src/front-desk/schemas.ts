@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { money } from '../folio/schemas.js';
+import { DOCUMENT_KEYS, GUEST_TYPES } from '../registration/rules.js';
 import { CreateGuest } from '../guests/schemas.js';
 import { businessDate, uuid } from '../property-setup/schemas.js';
 
@@ -12,6 +13,18 @@ export const Occupant = z.object({
   idNumber: z.string().trim().max(40).nullish(),
   nationality: z.string().regex(/^[A-Za-z]{2}$/, 'two-letter country code like PK').transform((v) => v.toUpperCase()).nullish(),
   idExpiry: businessDate.nullish(),
+  /** The kind of guest, which decides the documents asked for; worked out from the card if not given. */
+  guestType: z.enum(GUEST_TYPES).nullish(),
+  /** For each document: seen, or not available with the reason. */
+  documents: z.partialRecord(z.enum(DOCUMENT_KEYS), z.object({ state: z.enum(['SEEN', 'NOT_AVAILABLE']), note: z.string().trim().max(200).nullish() })).default({}),
+  /** The foreign-guest record kept under the Foreigners Act. */
+  foreign: z.object({
+    passportIssuePlace: z.string().trim().max(120).nullish(), visaType: z.string().trim().max(80).nullish(), stayExpiry: businessDate.nullish(), entryDate: businessDate.nullish(), entryPort: z.string().trim().max(120).nullish(),
+    localAddress: z.string().trim().max(300).nullish(), nextDestination: z.string().trim().max(160).nullish(), froInstruction: z.boolean().nullish(), formCRef: z.string().trim().max(80).nullish(),
+    residentialPermitRef: z.string().trim().max(80).nullish(), remarks: z.string().trim().max(500).nullish(),
+  }).nullish(),
+  /** Which other person on the card is this child's accompanying adult (their position in the list, from 0). */
+  guardianIndex: z.number().int().min(0).max(11).nullish(),
 });
 export const Occupants = z.array(Occupant.refine((o) => !!o.idNumber === !!o.idType, { message: 'Give both the type and the number of the ID, or neither', path: ['idNumber'] })).min(1).max(12);
 
