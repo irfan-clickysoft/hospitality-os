@@ -51,7 +51,7 @@ describe('the night audit closes a day', () => {
   it('posts the night, charges no-shows, expires options, snapshots the day, rolls the date and prepares tomorrow', async () => {
     const w = await sunset();
     at('2026-11-05', '10:00');
-    const g1 = await book(w, { departure: '2026-11-07' }), g2 = await book(w, { departure: '2026-11-06' }), g3 = await book(w), hold = await book(w, { arrival: '2026-11-06', departure: '2026-11-07', hold: 15 });
+    const g1 = await book(w, { departure: '2026-11-07' }), g2 = await book(w, { departure: '2026-11-06' }), g3 = await book(w), hold = await book(w, { arrival: '2026-11-06', departure: '2026-11-07', hold: 30 });
     await setBd(w, '2026-11-05'); await checkIn(w, g1, '101'); await checkIn(w, g2, '102');
     // money in the day: cash (counted and closed), a wallet payment, a charge
     const s = await ok(call('POST', u(w, 'cashier/sessions'), O, { openingFloat: '1000' }), 201);

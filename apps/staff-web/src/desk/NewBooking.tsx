@@ -13,7 +13,7 @@ import type { Amount } from './types.js';
 
 interface Option {
   roomType: { id: string; code: string; name: string }; plan: { id: string; code: string; name: string; mealPlan: string }; roomsLeft: number; bookable: boolean; reasons: Array<{ code: string; message: string }>;
-  nights: Array<{ date: string; total: string }>; totalExTax: Amount; taxes?: Array<{ code: string; ratePercent: number; tax: Amount }>; taxTotal?: Amount; totalIncTax?: Amount; depositDue: Amount; policy: Parameters<typeof policyLines>[1]; quoteToken: string | null; discount: unknown;
+  nights: Array<{ date: string; total: string; discountPct: number; discount: string; payable: string }>; totalExTax: Amount; taxes?: Array<{ code: string; ratePercent: number; tax: Amount }>; taxTotal?: Amount; totalIncTax?: Amount; depositDue: Amount; policy: Parameters<typeof policyLines>[1]; quoteToken: string | null; discount: unknown;
 }
 interface GuestHit { id: string; fullName: string; phone: string | null; email: string | null; nationality: string | null; residency: 'RESIDENT' | 'NON_RESIDENT'; vip: boolean }
 const SOURCES = ['PHONE', 'WHATSAPP', 'WEBSITE', 'CORPORATE', 'TRAVEL_AGENT', 'OTHER'] as const;
@@ -35,16 +35,30 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   const [hold, setHold] = useState(false); const [holdKind, setHoldKind] = useState<'half' | 'days' | 'date'>('half'); const [holdHalf, setHoldHalf] = useState(4); const [holdDays, setHoldDays] = useState(3); const [holdDate, setHoldDate] = useState(''); const [notes, setNotes] = useState(''); const [ext, setExt] = useState('');
   const holdLast = addDays(arrival, -1) < businessDate ? businessDate : addDays(arrival, -1); const holdUntil = holdDate || holdLast;     // default: keep it until the day before arrival
   const [result, setResult] = useState<{ id: string; confirmationNo: string; guarantee: { atRisk: boolean; depositRequired: Amount; deadline: string | null }; totalExTax: Amount; compliance?: Hit[] } | null>(null);
+  const [discAll, setDiscAll] = useState(''); const [nightPct, setNightPct] = useState<Record<string, string>>({});
   const key = useMemo(newKey, []);
   const { busy, problem, run, clear } = useAction();
   const withStepUp = useStepUp();
   const lastBook = useState<{ g: { guestId?: string; guest?: Record<string, unknown> } } | null>(null);
   const departure = addDays(arrival, nights);
 
+  const pct = (v: string) => Math.min(100, Math.max(0, Number(v) || 0));
+  const quoteBody = () => ({ arrival, departure, adults, children, channel: CHANNEL[source], residency: foreign ? 'NON_RESIDENT' : 'RESIDENT', ...(companyId ? { companyId } : {}), ...(initial.roomTypeId ? { roomTypeId: initial.roomTypeId } : {}),
+    discountPct: pct(discAll), nightDiscounts: Object.entries(nightPct).filter(([, v]) => v !== '').map(([date, v]) => ({ date, pct: pct(v) })) });
   const search = async () => {
-    const r = await run(() => api<{ options: Option[] }>('POST', `${base}/quotes`, { arrival, departure, adults, children, channel: CHANNEL[source], residency: foreign ? 'NON_RESIDENT' : 'RESIDENT', ...(companyId ? { companyId } : {}), ...(initial.roomTypeId ? { roomTypeId: initial.roomTypeId } : {}) }));
-    if (r) { setOptions(r.options.filter((o) => o.bookable)); setStep('options'); }
+    const r = await run(() => api<{ options: Option[] }>('POST', `${base}/quotes`, quoteBody()));
+    if (r) { setOptions(r.options); setStep('options'); }
   };
+  // changing a discount re-prices the options a moment later, so what is shown is always what the server will sign
+  const [repricing, setRepricing] = useState(false);
+  useEffect(() => {
+    if (step !== 'options') return;
+    setRepricing(true);
+    const h = setTimeout(() => { api<{ options: Option[] }>('POST', `${base}/quotes`, quoteBody()).then((r) => setOptions(r.options)).catch(() => undefined).finally(() => setRepricing(false)); }, 450);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discAll, nightPct]);
+  const stayDates = useMemo(() => Array.from({ length: nights }, (_, k) => addDays(arrival, k)), [arrival, nights]);
   useEffect(() => {
     if (step !== 'guest' || q.trim().length < 2) { setHits([]); return; }
     const h = setTimeout(() => { api<{ items: GuestHit[] }>('GET', `/v1/guests/search?q=${encodeURIComponent(q.trim())}`).then((r) => setHits(r.items)).catch(() => setHits([])); }, 250);
@@ -75,16 +89,26 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
 
       {step === 'options' && (<>
         <p className="muted small">{shortDate(arrival, locale)} → {shortDate(departure, locale)} · {t('d.nights', { n: nights })} · {adults} {t('d.adults')} · {t('bk.exTaxNote')}</p>
+        <fieldset className="guestcard"><legend>{t('bk.discounts')}</legend>
+          <p className="muted small">{t('bk.discountsHint')}</p>
+          <label>{t('bk.discAll')}<input type="number" min={0} max={100} step={0.5} inputMode="decimal" dir="ltr" value={discAll} onChange={(e) => setDiscAll(e.target.value)} placeholder="0" /></label>
+          <div className="nightpct">{stayDates.map((d) => (
+            <label key={d}>{shortDate(d, locale)}<input type="number" min={0} max={100} step={0.5} inputMode="decimal" dir="ltr" aria-label={`${t('bk.discOn')} ${shortDate(d, locale)} (%)`} value={nightPct[d] ?? ''} placeholder={discAll || '0'} onChange={(e) => setNightPct({ ...nightPct, [d]: e.target.value })} /></label>))}
+          </div>
+          {repricing && <p className="muted small" aria-live="polite">{t('bk.repricing')}</p>}
+        </fieldset>
         {options.length === 0 && <p className="warnbox">{t('bk.noRooms')}</p>}
         {options.map((o) => (
           <div key={`${o.roomType.id}-${o.plan.id}`} className="card inner stack">
             <div className="row between"><strong>{o.roomType.name}</strong><span className="muted small">{o.plan.name}</span></div>
             <div className="row between"><span className="big">{money(o.totalExTax)}</span><Badge tone="neutral">{t('bk.left', { n: o.roomsLeft })}</Badge></div>
-            <p className="muted small">{o.nights.map((n) => `${shortDate(n.date, locale)}: ${money(n.total)}`).join(' · ')}</p>
+            <table className="nighttable small"><thead><tr><th scope="col">{t('bk.night')}</th><th scope="col">{t('bk.rate')}</th><th scope="col">{t('bk.discount')}</th><th scope="col">{t('bk.youCharge')}</th></tr></thead>
+              <tbody>{o.nights.map((n) => <tr key={n.date}><th scope="row">{shortDate(n.date, locale)}</th><td dir="ltr">{money({ amount: n.total, currency: o.totalExTax.currency })}</td><td dir="ltr">{n.discountPct > 0 ? `−${n.discountPct}%` : '—'}</td><td dir="ltr"><strong>{money({ amount: n.payable, currency: o.totalExTax.currency })}</strong></td></tr>)}</tbody></table>
+            {!o.bookable && <p className="warnbox small">{t('bk.needsApproval')}</p>}
             {o.taxes && o.taxes.length > 0 && o.taxTotal && o.totalIncTax && <div className="small">{o.taxes.map((x) => <div key={x.code + x.ratePercent} className="row between muted"><span>{x.code} {x.ratePercent}%</span><span dir="ltr">{money(x.tax)}</span></div>)}<div className="row between"><strong>{t('bk.totalIncTax')}</strong><strong>{money(o.totalIncTax)}</strong></div></div>}
             {o.depositDue.amount !== '0.00' && <p className="small">{t('bk.deposit')}: {money(o.depositDue)}</p>}
             <ul className="small muted">{policyLines(t, o.policy).map((l) => <li key={l}>{l}</li>)}</ul>
-            <div className="actions"><button className="primary" onClick={() => { setChosen(o); setStep('guest'); clear(); }}>{t('bk.select')}</button></div>
+            <div className="actions"><button className="primary" disabled={!o.bookable || repricing} onClick={() => { setChosen(o); setStep('guest'); clear(); }}>{t('bk.select')}</button></div>
           </div>
         ))}
         <div className="actions"><button onClick={() => setStep('search')}>{t('common.back')}</button></div>

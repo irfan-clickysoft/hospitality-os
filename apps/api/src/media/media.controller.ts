@@ -17,6 +17,7 @@ export class MediaController implements OnModuleInit {
 
   /** Teaches the web server to accept file uploads (before it starts listening). */
   async onModuleInit() {
+    if (!this.host.httpAdapter) return;                  // scripts that start the app without a web server (seeding)
     const app = this.host.httpAdapter.getInstance();
     if (!app.hasContentTypeParser('multipart/form-data')) await app.register(multipart, { limits: { fileSize: MAX_VIDEO + 1, files: 1, fields: 4 } });
   }

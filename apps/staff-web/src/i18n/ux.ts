@@ -430,6 +430,16 @@ export const uxEn = {
   'bk.holdNote': 'The room is let go automatically when the hold runs out. A room can be held until the day before arrival at most.',
   'err.HOLD_INVALID': 'The hold must end in the future.',
   'err.HOLD_PAST_ARRIVAL': 'A room can only be held until the day before arrival.',
+  'bk.discounts': 'Discounts',
+  'bk.discountsHint': 'Rates change with the season and how full the house is. Give a discount on the whole stay, or on particular nights — for example more on an empty first night and less after. Prices update as you type.',
+  'bk.discAll': 'Discount on every night (%)',
+  'bk.discOn': 'Discount on',
+  'bk.repricing': 'Updating prices…',
+  'bk.night': 'Night',
+  'bk.rate': 'Rate',
+  'bk.discount': 'Discount',
+  'bk.youCharge': 'You charge',
+  'bk.needsApproval': 'This discount is more than you may give. Ask a manager, or lower it.',
 } as const;
 
 /** اردو */
@@ -864,4 +874,14 @@ export const uxUr: Record<keyof typeof uxEn, string> = {
   'bk.holdNote': 'مدت ختم ہوتے ہی کمرہ خود بخود چھوڑ دیا جاتا ہے۔ کمرہ زیادہ سے زیادہ آمد سے ایک دن پہلے تک روکا جا سکتا ہے۔',
   'err.HOLD_INVALID': 'روکنے کی مدت آئندہ وقت میں ختم ہونی چاہیے۔',
   'err.HOLD_PAST_ARRIVAL': 'کمرہ آمد کے دن سے پہلے تک ہی روکا جا سکتا ہے۔',
+  'bk.discounts': 'رعایت',
+  'bk.discountsHint': 'سیزن اور ہوٹل کتنا بھرا ہے اس کے مطابق ریٹ بدلتے ہیں۔ پورے قیام پر یا مخصوص راتوں پر رعایت دیں — مثلاً خالی پہلی رات پر زیادہ اور بعد میں کم۔ لکھتے ہی قیمتیں اپ ڈیٹ ہو جاتی ہیں۔',
+  'bk.discAll': 'ہر رات پر رعایت (%)',
+  'bk.discOn': 'رعایت',
+  'bk.repricing': 'قیمتیں اپ ڈیٹ ہو رہی ہیں…',
+  'bk.night': 'رات',
+  'bk.rate': 'ریٹ',
+  'bk.discount': 'رعایت',
+  'bk.youCharge': 'آپ وصول کریں',
+  'bk.needsApproval': 'یہ رعایت آپ کی حد سے زیادہ ہے۔ مینیجر سے پوچھیں، یا کم کریں۔',
 };

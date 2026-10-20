@@ -147,3 +147,6 @@ a:not([class]) { color: var(--info-fg); }
 .media-tile .st { position: absolute; top: 6px; inset-inline-start: 6px; }
 .media-tile figcaption { display: grid; gap: 6px; padding-inline: 8px; } .media-tile figcaption input { width: 100%; }
 .media-tile figcaption .row { display: flex; gap: 6px; flex-wrap: wrap; } .media-tile figcaption button { min-height: 32px; padding: 2px 8px; font-size: .8rem; }
+
+.nightpct { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.nighttable { width: 100%; border-collapse: collapse; } .nighttable th, .nighttable td { text-align: start; padding: 4px 6px; border-bottom: 1px solid var(--line-strong); font-weight: normal; } .nighttable thead th { font-weight: 700; }
