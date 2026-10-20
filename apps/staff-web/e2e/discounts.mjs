@@ -49,6 +49,11 @@ await sheet.getByRole('button', { name: 'Continue with this guest' }).click();
 await sheet.getByRole('button', { name: 'Confirm booking' }).click();
 await sheet.locator('.ok.big').waitFor();
 check('the booking is made at the discounted prices', true);
+const msg = await sheet.locator('textarea').inputValue();
+check('the WhatsApp confirmation uses the hotel wording', /^Dear Late Walkin \d+,\n\nGreetings from Sunset BnB/.test(msg) && /Booking reference: [A-Z]+-\d+/.test(msg) && /Check-in: \d+ \w+ 20\d\d at 2:00 PM/.test(msg) && /Check-out: \d+ \w+ 20\d\d at 12:00 PM/.test(msg) && /Warm regards,\n.+\nSunset BnB/.test(msg));
+await sheet.locator('details select').selectOption('Mr.');
+check('choosing Mr. changes the greeting', (await sheet.locator('textarea').inputValue()).startsWith('Dear Mr. Late Walkin'));
+check('there is a send link to WhatsApp', (await sheet.getByRole('link', { name: 'Send on WhatsApp' }).getAttribute('href'))?.startsWith('https://wa.me/92346') === true);
 await browser.close();
 if (fail.length) { console.log('\nFAILED:', fail.join('; ')); process.exit(1); }
 console.log('\nALL PASSED');

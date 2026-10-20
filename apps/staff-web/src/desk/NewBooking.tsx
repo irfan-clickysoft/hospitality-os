@@ -3,9 +3,10 @@ import { api } from '../api/client.js';
 import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
 import { useAction } from '../lib/action.js';
-import { addDays, money, newKey, shortDate, whatsappNumber } from '../lib/format.js';
+import { addDays, money, newKey, shortDate } from '../lib/format.js';
 import { useAuth, useLive } from '../state.js';
 import { useStepUp } from '../lib/stepup.js';
+import { ConfirmationMessage } from './ConfirmationMessage.js';
 import { ApprovalBox, ComplianceNotes, type Hit } from './ComplianceBits.js';
 import { Badge, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 import { policyLines } from './policy.js';
@@ -72,7 +73,6 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
     const r = await run(() => (approval ? withStepUp(call) : call()));
     if (r) { setResult(r); setStep('done'); }
   };
-  const wa = result && guest ? whatsappNumber(guest.phone) : result ? whatsappNumber(nf.phone) : null;
   const name = guest?.fullName ?? nf.fullName;
   return (
     <Sheet title={t('bk.new')} onClose={onClose}>
@@ -150,9 +150,9 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
         <p>{name} · {money(result.totalExTax)} {t('d.exTax')}</p>
         <ComplianceNotes hits={result.compliance ?? []} />
         {result.guarantee.atRisk && <p className="warnbox">⚠ {t('rs.atRisk')} · {t('rs.depositNeeded')}: {money(result.guarantee.depositRequired)}</p>}
+        <details open className="block"><summary>{t('wa.title')}</summary><ConfirmationMessage guestName={name} phone={guest?.phone ?? nf.phone} confirmationNo={result.confirmationNo} arrival={arrival} departure={departure} /></details>
         <div className="actions">
           <button className="primary" onClick={() => onOpenReservation(result.id)}>{t('bk.open')}</button>
-          {wa && <a className="button" href={`https://wa.me/${wa}?text=${encodeURIComponent(t('wa.confirm', { name, no: result.confirmationNo, from: arrival, to: departure, property: property!.name }))}`} target="_blank" rel="noreferrer">{t('wa.send')}</a>}
           <button onClick={onClose}>{t('common.close')}</button>
         </div>
       </>)}
