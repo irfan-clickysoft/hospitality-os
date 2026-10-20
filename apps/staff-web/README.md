@@ -41,3 +41,11 @@ Translations live in `src/i18n/en.ts` and `ur.ts`; Urdu must define exactly the 
 
 ## Structure
 `src/shell/` the frame (router, navigation model, command palette, top bar) · `src/pages/` Today, Inbox, the reservation workspace and the check-in, move-room and check-out workflows · `src/ui/ds.tsx` the shared parts (status badge, banner, save state, side panel, tabs, field, inline confirm) · `src/shell.css` their styles and the contrast-checked colour tokens · `src/desk/`, `src/screens/` the earlier screens, now tabs inside the sections.
+
+## Urdu review
+The Urdu wording is a first draft. `docs/urdu-review.csv` lists every text (1,400+) with where it appears, the English and the current Urdu, and an empty "Urdu (your correction)" column. Give it to a native Urdu speaker (open in Excel or Google Sheets, UTF-8) to fill in only where the Urdu is wrong or awkward; keep `{placeholders}` such as `{n}` or `{name}` exactly as in the English. Then apply it:
+```bash
+pnpm exec tsx scripts/import-translations.ts path/to/reviewed.csv   # edits the Urdu source files; refuses corrections that change a placeholder or use an unknown key
+git diff apps/staff-web/src/i18n && pnpm --filter @hos/staff-web test
+pnpm exec tsx scripts/export-translations.ts                         # regenerates docs/urdu-review.csv after texts change
+```
