@@ -66,6 +66,15 @@ await palette.getByRole('combobox').press('Enter');
 await page.getByRole('heading', { name: `Faisal Raza ${stamp}`, level: 1 }).waitFor();
 check('… and opens the reservation workspace', page.url().includes(`#/reservations/${faisal.id}`));
 
+// keyboard shortcut help: "?" lists every shortcut; Escape closes it and returns focus
+await page.keyboard.press('?');
+const help = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+await help.waitFor();
+check('"?" opens the shortcut list with the palette and reservation shortcuts', await help.getByText('Check the guest in').count() === 1 && await help.getByText('Search and commands').count() === 1);
+await page.keyboard.press('Escape');
+await help.waitFor({ state: 'detached' });
+check('Escape closes the shortcut list', true);
+
 // ═════════ A — late-arrival check-in with missing information ═════════
 const rail = page.getByRole('region', { name: 'Guest, stay, room and balance' });
 check('workspace keeps guest, stay, room and balance in a rail', await rail.getByText(`Faisal Raza ${stamp}`).count() === 1 && await rail.getByText('Needs cleaning').count() === 1);

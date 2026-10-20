@@ -4,7 +4,7 @@ import type { Key } from '../i18n/en.js';
 import { shortDate, weekday } from '../lib/format.js';
 import { useAuth, useLive, useWork } from '../state.js';
 import { Account } from '../desk/Account.js';
-import { Skeleton } from '../ui/ds.js';
+import { SidePanel, Skeleton } from '../ui/ds.js';
 import { Icon } from '../ui/icons.js';
 import { CommandPalette } from './CommandPalette.js';
 import { CommandsProvider, InboxProvider, type InboxData } from './context.js';
@@ -43,7 +43,7 @@ function Frame() {
   const { me, property, properties, setPropertyId, can, logout, offlineBoot } = useAuth();
   const work = useWork();
   const route = useRoute();
-  const [account, setAccount] = useState(false); const [palette, setPalette] = useState(false); const [more, setMore] = useState(false);
+  const [account, setAccount] = useState(false); const [palette, setPalette] = useState(false); const [help, setHelp] = useState(false); const [more, setMore] = useState(false);
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(COLLAPSE) === '1'; } catch { return false; } });
   const sections = useMemo(() => SECTIONS.filter((s) => s.show(can)), [can]);
   const section = sectionFor(route.path);
@@ -61,6 +61,7 @@ function Frame() {
     const key = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPalette(true); return; }
       const el = e.target as HTMLElement | null;
+      if (e.key === '?' && !(el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) && !document.querySelector('[role="dialog"][aria-modal="true"]')) { e.preventDefault(); setHelp(true); return; }
       if (e.key === '/' && !(el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) && !document.querySelector('[role="dialog"][aria-modal="true"]')) { e.preventDefault(); setPalette(true); }
     };
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
@@ -152,7 +153,22 @@ function Frame() {
         </main>
       </InboxProvider>
       <p className="sr-only" aria-live="polite">{attention > 0 ? t('shell.alertsN', { n: attention }) : ''}</p>
-      {palette && <CommandPalette onClose={() => setPalette(false)} />}
+      {palette && <CommandPalette onClose={() => setPalette(false)} onHelp={() => setHelp(true)} />}
+      {help && <ShortcutHelp onClose={() => setHelp(false)} />}
     </div>
+  );
+}
+
+const SHORTCUTS: Array<{ keys: string; label: Key }> = [
+  { keys: 'Ctrl K', label: 'sc.palette' }, { keys: '/', label: 'sc.search' }, { keys: '?', label: 'sc.help' }, { keys: 'Esc', label: 'sc.close' },
+  { keys: 'C', label: 'sc.checkin' }, { keys: 'O', label: 'sc.checkout' }, { keys: 'M', label: 'sc.move' }, { keys: 'P', label: 'sc.pay' },
+];
+/** Every keyboard shortcut in one place. The single letters work on a reservation page and are ignored while typing. */
+function ShortcutHelp({ onClose }: { onClose: () => void }) {
+  const { t } = useT();
+  return (
+    <SidePanel title={t('sc.title')} subtitle={t('sc.subtitle')} onClose={onClose}>
+      <dl className="shortcuts">{SHORTCUTS.map((x) => <div key={x.keys}><dt><kbd>{x.keys}</kbd></dt><dd>{t(x.label)}</dd></div>)}</dl>
+    </SidePanel>
   );
 }

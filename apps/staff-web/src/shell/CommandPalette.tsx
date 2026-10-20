@@ -12,7 +12,7 @@ import type { ListItem } from '../desk/types.js';
 interface Entry { id: string; group: string; label: string; hint?: string; icon: IconName; keys?: string; run: () => void }
 
 /** Search for a guest, booking or room, or run a command. One box, reachable from anywhere with Ctrl K or "/". Arrow keys move, Enter runs, Esc closes. */
-export function CommandPalette({ onClose }: { onClose: () => void }) {
+export function CommandPalette({ onClose, onHelp }: { onClose: () => void; onHelp?: () => void }) {
   const { t, locale, setLocale } = useT();
   const { property, properties, setPropertyId, can, logout } = useAuth();
   const { commands } = useCommands();
@@ -30,6 +30,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       ...(s.tabs ?? []).filter((x) => x.show(can) && s.tabs!.length > 1).map((x) => ({ id: `go-${s.id}-${x.id}`, group: t('cp.go'), label: `${t(s.label)} · ${t(x.label)}`, icon: s.icon, run: done(() => navigate(`${s.path}?tab=${x.id}`)) } as Entry)),
     ]);
     const other: Entry[] = [
+      ...(onHelp ? [{ id: 'help', group: t('cp.other'), label: t('sc.title'), icon: 'info' as IconName, keys: '?', run: done(onHelp) }] : []),
       { id: 'lang', group: t('cp.other'), label: t('nav.language'), icon: 'chevron', run: done(() => setLocale(locale === 'ur' ? 'en' : 'ur')) },
       ...properties.filter((p) => p.id !== property?.id).map((p) => ({ id: `prop-${p.id}`, group: t('cp.other'), label: t('cp.switchTo', { name: p.name }), icon: 'rooms' as IconName, run: done(() => { setPropertyId(p.id); navigate('/today'); }) })),
       { id: 'out', group: t('cp.other'), label: t('nav.logout'), icon: 'lock', run: done(() => void logout()) },
@@ -38,7 +39,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const needle = q.trim().toLowerCase();
     const match = (e: Entry) => !needle || `${e.label} ${e.hint ?? ''}`.toLowerCase().includes(needle);
     return [...(needle.length >= 2 ? people : []), ...here.filter(match), ...go.filter(match), ...(needle ? other.filter(match) : other)];
-  }, [commands, found.data, q, can, properties, property, locale, t, onClose, setLocale, setPropertyId, logout]);
+  }, [commands, found.data, q, can, properties, property, locale, t, onClose, onHelp, setLocale, setPropertyId, logout]);
 
   useEffect(() => { setAt(0); }, [q, found.data]);
   const key = (e: React.KeyboardEvent) => {
