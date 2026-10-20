@@ -13,11 +13,12 @@ export const onUnauthenticated = (fn: Listener) => { unauth.add(fn); return () =
 
 export async function api<T = unknown>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
   const h: Record<string, string> = { accept: 'application/json', ...headers };
-  if (body !== undefined) h['content-type'] = 'application/json';
+  const form = typeof FormData !== 'undefined' && body instanceof FormData;     // a file upload: the browser sets the multipart boundary itself
+  if (body !== undefined && !form) h['content-type'] = 'application/json';
   if (method !== 'GET' && csrf) h['x-csrf-token'] = csrf;
   let res: Response;
   try {
-    res = await fetch(path, { method, headers: h, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body) });
+    res = await fetch(path, { method, headers: h, credentials: 'same-origin', body: body === undefined ? undefined : form ? (body as FormData) : JSON.stringify(body) });
   } catch {
     throw new NetworkError('network');
   }
