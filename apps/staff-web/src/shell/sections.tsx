@@ -45,9 +45,10 @@ export const SECTIONS: Section[] = [
     { id: 'nightaudit', label: 'nav.audit', show: any('nightaudit.run'), Page: L(() => import('../desk/NightAudit.js'), 'NightAudit') },
     { id: 'trail', label: 'nav.audit2', show: any('audit.view'), Page: L(() => import('../desk/AuditLog.js'), 'AuditLog') },
   ] },
-  { id: 'admin', path: '/admin', label: 'nav.admin', icon: 'admin', show: any('property.manage', 'rate.manage', 'tax.configure', 'tax.approve', 'paymentaccount.view', 'management.view', 'user.manage', 'data.import'), tabs: [
+  { id: 'admin', path: '/admin', label: 'nav.admin', icon: 'admin', show: any('property.manage', 'rate.manage', 'tax.configure', 'tax.approve', 'paymentaccount.view', 'management.view', 'user.manage', 'data.import', 'fnb.manage'), tabs: [
     { id: 'properties', label: 'nav.properties', show: any('property.manage'), Page: L(() => import('../pages/PropertyAdmin.js'), 'PropertiesTab') },
     { id: 'rooms', label: 'nav.rooms', show: any('property.manage'), Page: L(() => import('../desk/Rooms.js'), 'Rooms') },
+    { id: 'menus', label: 'mn.nav', show: any('fnb.manage'), Page: L(() => import('../desk/Menus.js'), 'Menus') },
     { id: 'rates', label: 'nav.rates', show: any('rate.manage'), Page: L(() => import('../desk/Rates.js'), 'Rates') },
     { id: 'tax', label: 'nav.tax', show: any('tax.configure', 'tax.approve'), Page: L(() => import('../desk/Tax.js'), 'Tax') },
     { id: 'accounts', label: 'nav.accounts', show: any('paymentaccount.view'), Page: L(() => import('../desk/Accounts.js'), 'Accounts') },
