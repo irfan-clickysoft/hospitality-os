@@ -26,6 +26,10 @@ Warm regards,
 Hira Khan
 Sunset BnB Boulevard, Karachi`);
   });
+  it('adds the guest’s own booking page when there is one', () => {
+    const text = confirmationText({ guestName: 'Sara', salutation: '', manager: 'Hira', propertyName: 'Sunset BnB', confirmationNo: 'X-1', arrival: '2026-11-05', departure: '2026-11-07', mapsUrl: 'https://m/x', bookingUrl: 'https://pms.example/#/b/abc' });
+    expect(text).toContain('Location: https://m/x\nBooking details and requests: https://pms.example/#/b/abc\n\nWe look forward');
+  });
   it('leaves out what is not known instead of printing a blank', () => {
     const text = confirmationText({ guestName: 'Sara', salutation: '', manager: 'Hira', propertyName: 'Sunset BnB Creek', confirmationNo: 'CRK-2600001', arrival: '2026-11-05', departure: '2026-11-07' });
     expect(text).toContain('Dear Sara,'); expect(text).not.toContain('Location'); expect(text).toContain('Greetings from Sunset BnB Creek.'); expect(text).toContain('Check-in: 5 November 2026\n');

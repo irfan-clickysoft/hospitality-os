@@ -252,7 +252,7 @@ export function Workspace({ id, flow }: { id: string; flow?: string }) {
                   <Notes r={r} onSaved={stay.refresh} />
                   <section className="block" aria-labelledby="h-msg"><h2 id="h-msg">{t('ws.messages')}</h2>
                     {r.guest.phone ? <p><a className="button" href={`tel:${r.guest.phone}`}><Icon name="user" size={16} /> {t('ws.call')}</a></p> : <Banner level="ACTION" title={t('ws.noPhone')}>{t('ws.noPhoneText')}</Banner>}
-                    <details className="block"><summary>{t('wa.title')}</summary><ConfirmationMessage guestName={r.guest.fullName} phone={r.guest.phone} confirmationNo={r.confirmationNo} arrival={r.lines[0]?.arrival ?? ''} departure={r.lines[0]?.departure ?? ''} /></details>
+                    <details className="block"><summary>{t('wa.title')}</summary><ConfirmationMessage reservationId={r.id} guestName={r.guest.fullName} phone={r.guest.phone} confirmationNo={r.confirmationNo} arrival={r.lines[0]?.arrival ?? ''} departure={r.lines[0]?.departure ?? ''} /></details>
                     <p className="muted small">{t('ws.messagesNote')}</p></section>
                   <section className="block" aria-labelledby="h-tasks"><h2 id="h-tasks">{t('ws.tasks')}</h2>
                     {comp.data && <ComplianceNotes hits={comp.data.hits.map((h) => ({ name: h.rule, action: h.action, message: h.message, approved: h.approved }))} />}

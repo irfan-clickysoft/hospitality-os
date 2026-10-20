@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
+import { LocaleProvider } from './i18n/index.js';
 import { Login } from './screens/Login.js';
 import { Invite } from './screens/Invite.js';
 import { StepUpProvider } from './lib/stepup.js';
 import { AuthProvider, useAuth, WorkProvider } from './state.js';
 import { Spinner } from './ui/kit.js';
 import { AppShell } from './shell/AppShell.js';
+
+const GuestBooking = lazy(() => import('./pages/GuestBooking.js').then((m) => ({ default: m.GuestBooking })));
 
 function Gate() {
   const { status, me } = useAuth();
@@ -14,4 +17,10 @@ function Gate() {
   if (status === 'out' || status === 'mfa') return <Login />;
   return <WorkProvider userId={me!.user.id}><StepUpProvider><AppShell /></StepUpProvider></WorkProvider>;
 }
-export function App() { return <AuthProvider><Gate /></AuthProvider>; }
+/** The guest's own booking page opens from a link and needs no sign-in, so it never touches the staff session. */
+const guestToken = () => /^#\/b\/([0-9a-f]{32}-[0-9a-f]{32})$/.exec(window.location.hash)?.[1] ?? null;
+export function App() {
+  const token = guestToken();
+  if (token) return <LocaleProvider><Suspense fallback={<Spinner />}><GuestBooking token={token} /></Suspense></LocaleProvider>;
+  return <AuthProvider><Gate /></AuthProvider>;
+}
