@@ -72,7 +72,7 @@ check('no sideways scroll', await page.evaluate(() => document.documentElement.s
 await page.evaluate(() => { window.location.hash = '/tasks?tab=kitchen'; });
 await page.getByRole('button', { name: 'New order' }).click();
 sheet = page.locator('.sheet').last();
-if (await sheet.getByLabel('Outlet').count()) await sheet.getByLabel('Outlet').selectOption({ label: `Terrace ${stamp}` });
+await sheet.getByLabel('Outlet').selectOption({ label: `Terrace ${stamp}` });
 await sheet.getByText(`Chicken Karahi ${stamp}`).waitFor();
 check('the order screen shows the same card with Add to order', (await sheet.getByText(`Chicken Karahi ${stamp}`).count()) > 0);
 await browser.close();
