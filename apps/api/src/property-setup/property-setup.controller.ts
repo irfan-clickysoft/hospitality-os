@@ -12,6 +12,9 @@ const uuid = () => new ParseUUIDPipe();
 export class PropertySetupController {
   constructor(@Inject(PropertySetupService) private readonly svc: PropertySetupService) {}
 
+  @Get('property-owners') @RequirePermission('property.manage')
+  legalEntities() { return this.svc.listLegalEntities().then((items) => ({ items })); }
+
   // properties
   @Get('me/properties') @Authenticated()
   mine() { return this.svc.myProperties(currentTenant().actorId!).then((items) => ({ items })); }

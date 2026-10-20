@@ -36,6 +36,9 @@ export class PropertySetupService {
   }
 
   /** Properties the current user may view (property-scoped users see only theirs). */
+  /** The companies that can own a property (a new property needs one). */
+  async listLegalEntities() { return this.tdb.tx((trx) => trx.selectFrom('legal_entity').select(['id', 'name']).orderBy('name').execute()); }
+
   async listProperties(userId: string) {
     const grants = await this.authz.loadGrants(userId);
     const rows = await this.tdb.tx((trx) => trx.selectFrom('property').selectAll().orderBy('name').execute());
