@@ -140,3 +140,10 @@ a:not([class]) { color: var(--info-fg); }
 .rowwrap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .rowwrap > .qrow { flex: 1 1 320px; width: auto; }
 .shortcuts { display: grid; gap: 8px; margin: 0; } .shortcuts div { display: flex; gap: 16px; align-items: center; min-height: 44px; border-bottom: 1px solid var(--line); } .shortcuts dt { min-width: 84px; } .shortcuts dd { margin: 0; }
 .b-danger button.primary, .b-warn button.primary, .b-info button.primary, .b-danger .button.primary, .b-warn .button.primary, .b-info .button.primary { color: var(--brand-ink); }
+
+.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.media-tile { margin: 0; border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; display: grid; gap: 6px; padding-bottom: 8px; position: relative; }
+.media-tile img, .media-tile video { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--line-strong); display: block; }
+.media-tile .st { position: absolute; top: 6px; inset-inline-start: 6px; }
+.media-tile figcaption { display: grid; gap: 6px; padding-inline: 8px; } .media-tile figcaption input { width: 100%; }
+.media-tile figcaption .row { display: flex; gap: 6px; flex-wrap: wrap; } .media-tile figcaption button { min-height: 32px; padding: 2px 8px; font-size: .8rem; }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
@@ -206,8 +206,47 @@ function RoomTypePanel({ base, rt, amenities, onAmenity, onClose, onDone }: { ba
         <div className="row"><Field label={t('ps.newAmenity')}>{(p) => <input {...p} value={newAm} onChange={(e) => setNewAm(e.target.value)} placeholder={t('ps.newAmenityEx')} />}</Field><button disabled={am.busy || newAm.trim().length < 2} onClick={() => void addAmenity()}>{t('ps.addAmenity')}</button></div>
         <ErrorLine code={am.problem?.code} detail={am.problem?.detail} />
       </fieldset>
+      {rt ? <RoomMedia base={`${base}/room-types/${rt.id}/media`} /> : <p className="muted small">{t('ps.mediaAfterSave')}</p>}
       <ErrorLine code={problem?.code} detail={problem?.detail} />
     </SidePanel>
+  );
+}
+
+interface Media { id: string; kind: 'IMAGE' | 'VIDEO'; url: string; caption: string | null }
+/** The pictures and videos guests see in their booking confirmation. Changes apply at once (no Save needed). */
+function RoomMedia({ base }: { base: string }) {
+  const { t } = useT();
+  const list = useLive<{ items: Media[] }>(base, 600_000);
+  const { busy, problem, run } = useAction();
+  const items = list.data?.items ?? []; const pick = useRef<HTMLInputElement>(null);
+  const upload = async (files: FileList | null) => {
+    for (const file of Array.from(files ?? [])) { const fd = new FormData(); fd.append('file', file); if (!(await run(() => api('POST', base, fd)))) break; }
+    list.reload();
+  };
+  const act = async (fn: () => Promise<unknown>) => { if (await run(fn)) list.reload(); };
+  return (
+    <fieldset className="guestcard"><legend>{t('ps.media')}</legend>
+      <p className="muted small">{t('ps.mediaHint')}</p>
+      {items.length === 0 && !list.loading && <p className="muted small">{t('ps.mediaNone')}</p>}
+      <div className="media-grid">
+        {items.map((m, i) => (
+          <figure key={m.id} className="media-tile">
+            {m.kind === 'IMAGE' ? <img src={m.url} alt={m.caption ?? ''} loading="lazy" /> : <video src={m.url} controls preload="metadata" />}
+            {i === 0 && <StatusBadge tone="info" icon="check">{t('ps.cover')}</StatusBadge>}
+            <figcaption>
+              <input aria-label={t('ps.caption')} placeholder={t('ps.caption')} defaultValue={m.caption ?? ''} maxLength={160} onBlur={(e) => { if (e.target.value !== (m.caption ?? '')) void act(() => api('PATCH', `${base}/${m.id}`, { caption: e.target.value })); }} />
+              <span className="row">
+                {i > 0 && <button onClick={() => void act(() => api('PATCH', `${base}/${m.id}`, { makeFirst: true }))} disabled={busy}>{t('ps.makeCover')}</button>}
+                <button onClick={() => void act(() => api('DELETE', `${base}/${m.id}`))} disabled={busy}>{t('ps.removeMedia')}</button>
+              </span>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+      <input ref={pick} type="file" hidden accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" multiple onChange={(e) => { void upload(e.target.files); e.target.value = ''; }} />
+      <button type="button" disabled={busy} onClick={() => pick.current?.click()}>{busy ? t('ps.uploading') : t('ps.addMedia')}</button>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+    </fieldset>
   );
 }
 

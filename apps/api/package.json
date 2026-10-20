@@ -17,6 +17,7 @@
     "roles:sync": "tsx --env-file=../../.env src/cli/sync-roles.ts"
   },
   "dependencies": {
+    "@fastify/multipart": "^9.4.0",
     "@hos/auth": "workspace:*",
     "@hos/db": "workspace:*",
     "@hos/domain-types": "workspace:*",
