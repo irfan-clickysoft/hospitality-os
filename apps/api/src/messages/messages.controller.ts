@@ -25,4 +25,8 @@ export class MessagesController {
   /** Staff get a message ready to send for a booking. */
   @Post('properties/:propertyId/messages/compose') @RequirePermission('reservation.view', P) @HttpCode(200)
   compose(@Param('propertyId', new ParseUUIDPipe()) p: string, @Body() body: unknown) { return this.svc.compose(p, parse(S.Compose, body)); }
+
+  /** Tells a technician or contractor about a job. */
+  @Post('properties/:propertyId/work-orders/:workOrderId/message') @RequirePermission('maintenance.view', P) @HttpCode(200)
+  workOrder(@Param('propertyId', new ParseUUIDPipe()) p: string, @Param('workOrderId', new ParseUUIDPipe()) w: string) { return this.svc.composeWorkOrder(p, w); }
 }

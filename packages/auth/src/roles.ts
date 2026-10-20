@@ -23,7 +23,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
   { key: 'front_desk_agent', name: 'Front Desk Agent', permissions: [
     'property.view', 'reservation.view', 'reservation.create', 'reservation.modify', 'reservation.cancel', 'guest.view', 'guest.manage', 'folio.view', 'folio.post', 'payment.take', 'cashier.operate', 'report.view', 'frontdesk.check_in', 'frontdesk.check_out', 'housekeeping.view', 'housekeeping.update', 'invoice.issue', 'company.view', 'ar.bill', 'maintenance.view', 'compliance.view', 'compliance.task', 'fnb.order', 'space.view', 'space.book', 'visitor.log', 'arrivals.view_masked', 'maintenance.request'] },
   { key: 'cashier', name: 'Cashier', permissions: ['property.view', 'folio.view', 'folio.post', 'payment.take', 'cashier.operate'] },
-  { key: 'night_auditor', name: 'Night Auditor', permissions: [...READ, 'nightaudit.run', 'cashier.operate', 'folio.post', 'maintenance.request'] },
+  { key: 'night_auditor', name: 'Night Auditor', permissions: [...READ, 'nightaudit.run', 'cashier.operate', 'folio.post', 'maintenance.request', 'maintenance.view'] },
   { key: 'accountant', name: 'Accountant', permissions: [...READ, 'folio.adjust', 'payment.take', 'tax.configure', 'payment.verify', 'cashier.review', 'invoice.issue', 'invoice.credit', 'company.view', 'company.manage', 'ar.bill', 'ar.receipt', 'ar.verify', 'management.view', 'ota.claim', 'data.import', 'maintenance.view', 'paymentaccount.view', 'paymentaccount.manage', 'space.view', 'maintenance.request'] },
   { key: 'read_only', name: 'Read-only', permissions: [...READ] },
   // Sunset staffing model (per property: manager, front desk/night auditor, housekeeping, kitchen, guards; central: GM, accountant, bookings)
@@ -38,12 +38,12 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
     'frontdesk.check_in', 'frontdesk.check_out', 'frontdesk.override_room', 'frontdesk.view_id', 'housekeeping.view', 'housekeeping.update', 'housekeeping.assign', 'payment.verify', 'cashier.review', 'folio.checkout_with_balance', 'nightaudit.override', 'nightaudit.run', 'invoice.issue', 'invoice.credit', 'company.view', 'company.manage', 'ar.bill', 'ar.override_credit', 'ar.receipt', 'ar.verify', 'management.view', 'ota.claim', 'data.import', 'maintenance.view', 'maintenance.manage', 'maintenance.work', 'compliance.view', 'compliance.manage', 'compliance.approve', 'compliance.task', 'paymentaccount.view', 'fnb.order', 'fnb.manage', 'recipe.approve', 'space.view', 'space.book', 'space.manage', 'cashier.handover', 'visitor.log', 'arrivals.view_masked', 'maintenance.request', 'maintenance.approve', 'maintenance.vendor'] },
   { key: 'central_bookings_manager', name: 'Central Bookings Manager', permissions: [
     'property.view', 'reservation.view', 'reservation.create', 'reservation.modify', 'reservation.cancel', 'guest.view', 'guest.manage', 'rate.manage', 'report.view', 'company.view', 'compliance.view', 'space.view', 'space.book'] },
-  { key: 'reservation_agent', name: 'Reservation Agent', permissions: ['property.view', 'reservation.view', 'reservation.create', 'reservation.modify', 'guest.view', 'guest.manage', 'compliance.view', 'space.view', 'space.book', 'maintenance.request'] },
+  { key: 'reservation_agent', name: 'Reservation Agent', permissions: ['property.view', 'reservation.view', 'reservation.create', 'reservation.modify', 'guest.view', 'guest.manage', 'compliance.view', 'space.view', 'space.book', 'maintenance.request', 'maintenance.view'] },
   { key: 'housekeeping_supervisor', name: 'Housekeeping Supervisor', permissions: ['property.view', 'housekeeping.view', 'housekeeping.update', 'housekeeping.assign', 'maintenance.view', 'maintenance.request'] },
-  { key: 'housekeeper', name: 'Housekeeper', permissions: ['housekeeping.view', 'housekeeping.update', 'maintenance.request'] },
+  { key: 'housekeeper', name: 'Housekeeper', permissions: ['housekeeping.view', 'housekeeping.update', 'maintenance.request', 'maintenance.view'] },
   { key: 'maintenance_technician', name: 'Maintenance Technician', permissions: ['property.view', 'maintenance.view', 'maintenance.work', 'housekeeping.view', 'maintenance.request'] },
-  { key: 'kitchen_cook', name: 'Cook', permissions: ['fnb.order', 'fnb.manage', 'maintenance.request'] },
-  { key: 'head_chef', name: 'Head Chef', permissions: ['fnb.order', 'fnb.manage', 'recipe.approve', 'maintenance.request'] },
+  { key: 'kitchen_cook', name: 'Cook', permissions: ['fnb.order', 'fnb.manage', 'maintenance.request', 'maintenance.view'] },
+  { key: 'head_chef', name: 'Head Chef', permissions: ['fnb.order', 'fnb.manage', 'recipe.approve', 'maintenance.request', 'maintenance.view'] },
   { key: 'kitchen_support', name: 'Kitchen Support', permissions: ['fnb.order'] },
-  { key: 'gate_security', name: 'Gate Security', permissions: ['arrivals.view_masked', 'visitor.log', 'compliance.view', 'compliance.task', 'maintenance.request'] },
+  { key: 'gate_security', name: 'Gate Security', permissions: ['arrivals.view_masked', 'visitor.log', 'compliance.view', 'compliance.task'] },
 ];

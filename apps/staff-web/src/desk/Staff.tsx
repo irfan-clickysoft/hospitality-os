@@ -8,7 +8,7 @@ import { useAuth, useLive } from '../state.js';
 import { Badge, Empty, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 
 interface Assignment { id: string; roleKey: string; role: string; scopeType: string; scopeId: string | null; scope: string | null; validTo: string | null }
-interface User { id: string; email: string; fullName: string; status: string; mfaEnabled: boolean; locale: string; lastLogin: string | null; assignments: Assignment[] }
+interface User { id: string; email: string; fullName: string; phone: string | null; status: string; mfaEnabled: boolean; locale: string; lastLogin: string | null; assignments: Assignment[] }
 interface Role { key: string; name: string; permissions: string[] }
 interface Preset { key: string; name: string; description: string; roles: string[] }
 const tone = (s: string) => (s === 'ACTIVE' ? 'clean' : s === 'INVITED' ? 'warn' : 'neutral') as 'clean' | 'warn' | 'neutral';
@@ -72,7 +72,7 @@ function UserSheet({ user, onChanged, onLink, onClose, stepUp }: { user: User; o
   const { me, property } = useAuth();
   const roles = useLive<{ items: Role[]; presets: Preset[]; permissionLabels: Record<string, string> }>('/v1/roles', 300_000);
   const props = useLive<{ items: Array<{ id: string; name: string }> }>('/v1/properties', 300_000);
-  const [pick, setPick] = useState<string[]>([]); const [drop, setDrop] = useState<string[]>([]); const [scope, setScope] = useState<string>(property?.id ?? 'TENANT'); const [reason, setReason] = useState('');
+  const [phone, setPhone] = useState(user.phone ?? ''); const [pick, setPick] = useState<string[]>([]); const [drop, setDrop] = useState<string[]>([]); const [scope, setScope] = useState<string>(property?.id ?? 'TENANT'); const [reason, setReason] = useState('');
   const [note, setNote] = useState<string | null>(null);
   const { busy, problem, run } = useAction();
   const self = me?.user.id === user.id;
@@ -91,6 +91,8 @@ function UserSheet({ user, onChanged, onLink, onClose, stepUp }: { user: User; o
   return (
     <Sheet title={user.fullName} onClose={onClose}>
       <p className="muted small" dir="ltr">{user.email} · <Badge tone={tone(user.status)}>{t(`st.s.${user.status}` as Key)}</Badge>{user.lastLogin ? ` · ${new Date(user.lastLogin).toLocaleDateString()}` : ''}</p>
+      <div className="row"><label>{t('bk.phone')}<input value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" inputMode="tel" /></label><button disabled={busy || phone.trim() === (user.phone ?? '')} onClick={() => act(() => api('PUT', `/v1/users/${user.id}/phone`, { phone: phone.trim() || null }))}>{t('common.save')}</button></div>
+      <p className="muted small">{t('st.phoneNote')}</p>
       <h3>{t('st.roles')}</h3>
       {user.assignments.length === 0 && <p className="muted small">{t('st.noRoles')}</p>}
       <ul className="plain">{user.assignments.map((a) => (

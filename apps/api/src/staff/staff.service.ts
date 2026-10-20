@@ -36,15 +36,25 @@ export class StaffService {
       return { permissionLabels: Object.fromEntries(labels.map((p) => [p.key, p.description])), presets: ROLE_PRESETS.map((p) => ({ ...p, roles: p.roles.filter((k) => have.has(k)) })).filter((p) => p.roles.length >= 2), items: roles.map((r) => ({ key: r.key, name: r.name, system: r.is_system, permissions: perms.filter((p) => p.role_id === r.id).map((p) => p.permission_key).sort() })) };
     });
   }
+  /** A number to reach the person on, e.g. to message a technician about an urgent job. */
+  async setPhone(actorId: string, id: string, phone: string | null) {
+    return this.tdb.tx(async (trx) => {
+      const u = await trx.updateTable('staff_user').set({ phone }).where('id', '=', id).returning('id').executeTakeFirst();
+      if (!u) throw new NotFoundException({ code: 'NOT_FOUND', message: 'User not found' });
+      await this.audit.record(trx, { action: 'user.phone', resourceType: 'staff_user', resourceId: id, after: { phoneSet: !!phone } });
+      void actorId;
+      return { id, phone };
+    });
+  }
   async list() {
     return this.tdb.tx(async (trx) => {
-      const users = await trx.selectFrom('staff_user').select(['id', 'email', 'full_name', 'status', 'mfa_enabled', 'preferred_locale', 'created_at']).orderBy('full_name').execute();
+      const users = await trx.selectFrom('staff_user').select(['id', 'email', 'full_name', 'phone', 'status', 'mfa_enabled', 'preferred_locale', 'created_at']).orderBy('full_name').execute();
       const asg = await sql<{ id: string; user_id: string; key: string; name: string; scope_type: string; scope_id: string | null; scope_name: string | null; valid_to: string | null; limits: unknown }>`
         SELECT ra.id, ra.user_id, r.key, r.name, ra.scope_type, ra.scope_id, p.name AS scope_name, ra.valid_to::text, ra.limits FROM role_assignment ra JOIN role r ON r.tenant_id = ra.tenant_id AND r.id = ra.role_id
         LEFT JOIN property p ON p.tenant_id = ra.tenant_id AND p.id = ra.scope_id AND ra.scope_type = 'PROPERTY'
         WHERE ra.tenant_id = ${currentTenant().tenantId} AND ra.valid_from <= now() AND (ra.valid_to IS NULL OR ra.valid_to > now()) ORDER BY r.name`.execute(trx);
       const lastSeen = await sql<{ user_id: string; at: string }>`SELECT user_id, max(created_at)::text AS at FROM user_session WHERE tenant_id = ${currentTenant().tenantId} GROUP BY user_id`.execute(trx);
-      return { items: users.map((u) => ({ id: u.id, email: u.email, fullName: u.full_name, status: u.status, mfaEnabled: u.mfa_enabled, locale: u.preferred_locale, lastLogin: lastSeen.rows.find((x) => x.user_id === u.id)?.at ?? null,
+      return { items: users.map((u) => ({ id: u.id, email: u.email, fullName: u.full_name, phone: u.phone, status: u.status, mfaEnabled: u.mfa_enabled, locale: u.preferred_locale, lastLogin: lastSeen.rows.find((x) => x.user_id === u.id)?.at ?? null,
         assignments: asg.rows.filter((a) => a.user_id === u.id).map((a) => ({ id: a.id, roleKey: a.key, role: a.name, scopeType: a.scope_type, scopeId: a.scope_id, scope: a.scope_type === 'TENANT' ? null : a.scope_name, validTo: a.valid_to, limits: a.limits })) })) };
     });
   }

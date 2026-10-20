@@ -176,7 +176,7 @@ export class MaintenanceService {
   start(propertyId: string, id: string, userId: string) {
     return this.step(propertyId, id, userId, 'START', async (_t, r, _bd, mgr) => { this.bad(r, ['OPEN', 'ASSIGNED', 'WAITING']);
       if (r.status === 'OPEN' && !mgr) throw fail(409, 'NOT_ASSIGNED', 'Ask a manager to assign this work order first');
-      return { to: 'IN_PROGRESS', patch: { started_at: r.started_at ?? new Date(this.clock.now()), assigned_to: r.assigned_to ?? userId } }; }, 'assignee');
+      return { to: 'IN_PROGRESS', patch: { started_at: r.started_at ?? new Date(this.clock.now()), ...(r.vendor_id ? {} : { assigned_to: r.assigned_to ?? userId }) } }; }, 'assignee');
   }
   wait(propertyId: string, id: string, userId: string, i: z.infer<typeof S.Wait>) {
     return this.step(propertyId, id, userId, 'WAIT', async (_t, r) => { this.bad(r, ['IN_PROGRESS', 'ASSIGNED']); return { to: 'WAITING', note: i.reason }; }, 'assignee');
@@ -225,7 +225,7 @@ export class MaintenanceService {
     return this.tdb.tx(async (trx) => {
       const p = await this.prop(trx, propertyId);
       let qb = trx.selectFrom('work_order').selectAll().where('property_id', '=', propertyId).orderBy('priority').orderBy(sql`due_date NULLS LAST`).orderBy('created_at').limit(q.limit);
-      if (q.status === 'REQUESTED') qb = qb.where('status', '=', 'REQUESTED'); else if (q.status === 'OPEN') qb = qb.where('status', '=', 'OPEN'); else if (q.status === 'ACTIVE') qb = qb.where('status', 'in', ACTIVE as never); else if (q.status === 'DONE') qb = qb.where('status', 'in', ['DONE', 'VERIFIED'] as never);
+      if (q.status === 'REQUESTED') qb = qb.where('status', '=', 'REQUESTED'); else if (q.status === 'OPEN') qb = qb.where('status', '=', 'OPEN'); else if (q.status === 'ACTIVE') qb = qb.where('status', 'in', ['REQUESTED', ...ACTIVE] as never); else if (q.status === 'DONE') qb = qb.where('status', 'in', ['DONE', 'VERIFIED'] as never);
       if (q.mine) qb = qb.where('assigned_to', '=', userId);
       if (q.roomId) qb = qb.where('room_id', '=', q.roomId);
       if (q.kind) qb = qb.where('kind', '=', q.kind);
