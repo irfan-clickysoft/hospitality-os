@@ -3,7 +3,7 @@ import { api, ApiError, NetworkError } from '../api/client.js';
 import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
 import { useAction } from '../lib/action.js';
-import { ConfirmationMessage } from '../desk/ConfirmationMessage.js';
+import { GuestMessagePicker } from '../desk/GuestMessage.js';
 import { isNegative, isZero, money, shortDate, whatsappNumber } from '../lib/format.js';
 import { useStepUp } from '../lib/stepup.js';
 import { useAuth, useLive, useWork } from '../state.js';
@@ -252,7 +252,7 @@ export function Workspace({ id, flow }: { id: string; flow?: string }) {
                   <Notes r={r} onSaved={stay.refresh} />
                   <section className="block" aria-labelledby="h-msg"><h2 id="h-msg">{t('ws.messages')}</h2>
                     {r.guest.phone ? <p><a className="button" href={`tel:${r.guest.phone}`}><Icon name="user" size={16} /> {t('ws.call')}</a></p> : <Banner level="ACTION" title={t('ws.noPhone')}>{t('ws.noPhoneText')}</Banner>}
-                    <details className="block"><summary>{t('wa.title')}</summary><ConfirmationMessage reservationId={r.id} guestName={r.guest.fullName} phone={r.guest.phone} confirmationNo={r.confirmationNo} arrival={r.lines[0]?.arrival ?? ''} departure={r.lines[0]?.departure ?? ''} /></details>
+                    <details className="block"><summary>{t('wa.title')}</summary><GuestMessagePicker reservationId={r.id} /></details>
                     <p className="muted small">{t('ws.messagesNote')}</p></section>
                   <section className="block" aria-labelledby="h-tasks"><h2 id="h-tasks">{t('ws.tasks')}</h2>
                     {comp.data && <ComplianceNotes hits={comp.data.hits.map((h) => ({ name: h.rule, action: h.action, message: h.message, approved: h.approved }))} />}
@@ -269,7 +269,7 @@ export function Workspace({ id, flow }: { id: string; flow?: string }) {
         </div>)}
 
       {panel === 'move' && r && line && <MovePanel stay={stay} onClose={() => setQuery({ panel: null })} onDone={(kind) => { stay.settle(); setQuery({ panel: null, done: flow ? null : kind }); }} />}
-      {r && (dialog?.kind === 'pay' || dialog?.kind === 'deposit') && <PaymentSheet asPanel reservationId={r.id} balance={stay.folio.data?.folio?.balance ?? null} defaultKind={dialog.kind === 'deposit' ? 'DEPOSIT' : 'PAYMENT'} onDone={stay.refresh} onClose={() => setDialog(null)} />}
+      {r && (dialog?.kind === 'pay' || dialog?.kind === 'deposit') && <PaymentSheet asPanel offerReceipt reservationId={r.id} balance={stay.folio.data?.folio?.balance ?? null} defaultKind={dialog.kind === 'deposit' ? 'DEPOSIT' : 'PAYMENT'} onDone={stay.refresh} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'charge' && stay.folio.data?.folio && <ChargeSheet folioId={stay.folio.data.folio.id} onDone={stay.refresh} onClose={() => setDialog(null)} />}
       {r && (dialog?.kind === 'cancel' || dialog?.kind === 'noshow') && <CancelSheet r={r} line={line ?? undefined} noShow={dialog.kind === 'noshow'} onDone={stay.refresh} onClose={() => setDialog(null)} />}
       {dialog && (dialog.kind === 'void' || dialog.kind === 'refund') && dialog.paymentId && stay.folio.data && <PaymentFixSheet kind={dialog.kind} payment={stay.folio.data.payments.find((p) => p.id === dialog.paymentId)!} onDone={stay.refresh} onClose={() => setDialog(null)} />}
