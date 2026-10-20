@@ -129,3 +129,44 @@ describe('payment accounts', () => {
     void w;
   });
 });
+
+describe('bank account details and QR code', () => {
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(80, 7)]);
+  const upload = (id: string, data: Buffer, h: Record<string, string> = OM) => {
+    const b = '----qrboundary';
+    const payload = Buffer.concat([Buffer.from(`--${b}\r\nContent-Disposition: form-data; name="file"; filename="qr.png"\r\nContent-Type: application/octet-stream\r\n\r\n`), data, Buffer.from(`\r\n--${b}--\r\n`)]);
+    return app.inject({ method: 'POST', url: `/v1/payment-accounts/${id}/qr`, headers: { ...h, 'content-type': `multipart/form-data; boundary=${b}` }, payload });
+  };
+  const full = (o: Record<string, unknown> = {}) => ({ name: `Meezan Current ${++n}`, kind: 'BANK', bankName: 'Meezan Bank', accountTitle: 'Sunset Hospitality (Pvt) Ltd', branch: 'Clifton', branchCode: '0123', branchAddress: 'Block 5, Clifton, Karachi',
+    iban: 'PK36 SCBL 0000 0011 2345 6702', accountNumber: '0000-0011-2345-6702', swiftCode: 'scblpkka', note: 'Main collection account', ...o });
+
+  it('keeps bank name, title, branch, branch code, address, IBAN, account number, SWIFT and remarks, and tidies them', async () => {
+    const a = await ok(call('POST', '/v1/payment-accounts', OM, full()), 201);
+    expect(a).toMatchObject({ bankName: 'Meezan Bank', accountTitle: 'Sunset Hospitality (Pvt) Ltd', branch: 'Clifton', branchCode: '0123', branchAddress: 'Block 5, Clifton, Karachi',
+      iban: 'PK36SCBL0000001123456702', accountNumber: '0000-0011-2345-6702', swiftCode: 'SCBLPKKA', note: 'Main collection account', last4: '6702', hasQr: false });
+    const u = await ok(call('PATCH', `/v1/payment-accounts/${a.id}`, OM, { branch: 'DHA Phase 6', version: a.version }));
+    expect(u).toMatchObject({ branch: 'DHA Phase 6', iban: 'PK36SCBL0000001123456702' });
+  });
+  it('refuses an IBAN whose check digits are wrong, and a malformed SWIFT code', async () => {
+    const bad = await call('POST', '/v1/payment-accounts', OM, full({ iban: 'PK36SCBL0000001123456703' }));
+    expect(bad.statusCode).toBe(400); expect(bad.json().detail).toContain('IBAN is not valid');
+    const sw = await call('POST', '/v1/payment-accounts', OM, full({ swiftCode: 'ABC' }));
+    expect(sw.statusCode).toBe(400); expect(sw.json().detail).toContain('SWIFT');
+  });
+  it('stores a QR code picture privately; staff who may see accounts can fetch it; only a picture is accepted', async () => {
+    const a = await ok(call('POST', '/v1/payment-accounts', OM, full()), 201);
+    expect((await upload(a.id, Buffer.from('not a picture, just text padding padding'))).statusCode).toBe(400);
+    expect((await upload(a.id, PNG)).statusCode).toBe(201);
+    expect((await ok(call('GET', '/v1/payment-accounts', O))).items.find((x: any) => x.id === a.id).hasQr).toBe(true);
+    const img = await call('GET', `/v1/payment-accounts/${a.id}/qr`, O);
+    expect(img.statusCode).toBe(200); expect(img.headers['content-type']).toBe('image/png'); expect(img.rawPayload.equals(PNG)).toBe(true);
+    expect((await call('GET', `/v1/payment-accounts/${a.id}/qr`, {})).statusCode).toBe(401);
+    expect((await call('DELETE', `/v1/payment-accounts/${a.id}/qr`, OM)).statusCode).toBe(204);
+    expect((await call('GET', `/v1/payment-accounts/${a.id}/qr`, O)).statusCode).toBe(404);
+  });
+  it('only people who manage payment accounts can upload a QR code', async () => {
+    const a = await ok(call('POST', '/v1/payment-accounts', OM, full()), 201);
+    const u = await addUser(T.tenantId, `clerk${++n}@pacc.test`); await assignRole(T.tenantId, u, 'cashier', 'TENANT', null);
+    expect((await upload(a.id, PNG, as(T.tenantId, u, { mfa: true }))).statusCode).toBe(403);
+  });
+});
