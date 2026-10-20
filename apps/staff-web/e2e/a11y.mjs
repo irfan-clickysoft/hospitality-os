@@ -42,6 +42,7 @@ for (const scheme of ['light', 'dark']) {
   await go('/inbox'); await audit(page, `${scheme} · Inbox`);
   await go('/rooms'); await audit(page, `${scheme} · Rooms`);
   await go('/guests?q=ma'); await audit(page, `${scheme} · Guests`);
+  if (any) { await go(`/guests?q=${encodeURIComponent(any.guest.fullName)}`); await page.getByRole('button', { name: new RegExp(any.guest.fullName) }).first().click(); await page.getByRole('dialog').waitFor(); await page.waitForTimeout(600); await audit(page, `${scheme} · Guest profile`); await page.keyboard.press('Escape'); }
   await go('/calendar'); await page.waitForTimeout(800); await audit(page, `${scheme} · Calendar`);
   await go('/reservations?tab=bookings'); await audit(page, `${scheme} · Reservations`);
   if (inHouse) {

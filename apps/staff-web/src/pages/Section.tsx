@@ -9,6 +9,7 @@ import { Banner, ResStatus, RoomState, Skeleton, StatusBadge, Tabs } from '../ui
 import { Icon } from '../ui/icons.js';
 import { Chip, Empty, ErrorLine } from '../ui/kit.js';
 import { Link, useRoute, useSetQuery } from '../shell/router.js';
+import { GuestProfile } from './GuestProfile.js';
 import type { Section } from '../shell/sections.js';
 
 /** A section is a heading and, where it holds several screens, a row of tabs. The tab and its filters live in the address, so reload and Back come back to the same place. */
@@ -46,7 +47,7 @@ function GuestStays({ name }: { name: string }) {
 export function Guests() {
   const { t } = useT();
   const route = useRoute(); const setQuery = useSetQuery();
-  const q = route.query.get('q') ?? ''; const [open, setOpen] = useState<string | null>(null);
+  const q = route.query.get('q') ?? ''; const open = route.query.get('guest');
   const [d, setD] = useState(q);
   useEffect(() => { const id = setTimeout(() => setQuery({ q: d.trim() || null }), 300); return () => clearTimeout(id); }, [d, setQuery]);
   const hits = useLive<{ items: GuestHit[] }>(q.length >= 2 ? `/v1/guests/search?q=${encodeURIComponent(q)}` : null, 3_600_000);
@@ -57,12 +58,12 @@ export function Guests() {
       {q.length < 2 ? <Empty text={t('guests.hint')} /> : !hits.data ? <Skeleton rows={3} /> : hits.data.items.length === 0 ? <Empty text={t('d.nothing')} /> : (
         <ul className="plain queue" aria-label={t('nav.guests')}>{hits.data.items.map((g) => (
           <li key={g.id}>
-            <button className="qrow" aria-expanded={open === g.id} onClick={() => setOpen(open === g.id ? null : g.id)}>
+            <button className="qrow" aria-haspopup="dialog" onClick={() => setQuery({ guest: g.id })}>
               <span className="q-main"><strong>{g.fullName}{g.vip && <span className="vip"> ★</span>}</strong><span className="muted small" dir="ltr">{[g.phone, g.email, g.nationality].filter(Boolean).join(' · ')}</span></span>
-              <span className="q-next"><Icon name="chevronDown" size={18} /></span>
+              <span className="q-next"><Icon name="chevron" size={18} /></span>
             </button>
-            {open === g.id && <div className="qdetail"><GuestStays name={g.fullName} /></div>}
           </li>))}</ul>)}
+      {open && <GuestProfile id={open} stays={<GuestStays name={(hits.data?.items.find((x) => x.id === open)?.fullName) ?? ''} />} onClose={() => setQuery({ guest: null })} />}
     </section>
   );
 }
