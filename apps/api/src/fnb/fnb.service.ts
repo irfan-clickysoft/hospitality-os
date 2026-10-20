@@ -10,6 +10,7 @@ import { TenantDb } from '../db/tenant-db.js';
 import { FolioService } from '../folio/folio.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
+import { RecipesService } from '../recipes/recipes.service.js';
 import { nowAt, whyNot, type Why } from '../menu/menu.service.js';
 import type * as S from './schemas.js';
 
@@ -27,6 +28,7 @@ export class FnbService {
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(RecipesService) private readonly recipes: RecipesService,
     @Inject(CLOCK) private readonly clock: ClockLike,
   ) {}
 
@@ -209,6 +211,9 @@ export class FnbService {
         const postingId = await this.folios.post(trx, { folioId: o.folio_id, propertyId: pid, currency: o.currency, type: 'CHARGE', txnCode: o.pay_digital ? 'FNB_DIGITAL' : 'FNB', amount, quantity: l.quantity, unitPrice: BigInt(l.unit_price_minor), businessDate: bd, sourceType: 'FNB_ORDER', sourceRef: l.id,
           lineId: o.reservation_room_id, description: `${o.number} · ${l.name}`, idempotencyKey: `fnb:${o.id}:${l.id}`, userId });
         await trx.updateTable('fnb_order_line').set({ posting_id: postingId } as never).where('id', '=', l.id).execute();
+      }
+      for (const l of lines) {                                                    // the food leaves the store when it is handed over, free items included
+        await this.recipes.deduct(trx, pid, userId, { id: l.id, menuItemId: l.menu_item_id, quantity: l.quantity, removed: l.removed });
       }
       return { status: 'DELIVERED', delivered_at: new Date(this.clock.now()), delivered_by: userId, business_date: bd };
     }, 'order');
