@@ -27,6 +27,20 @@ if grep -q '^APP_ENCRYPTION_KEY=CHANGE_ME' .env; then
   echo "made a fresh encryption key (kept in .env: do not delete it, second-factor secrets depend on it)"
 fi
 set -a; . ./.env; set +a
+port_busy() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+# Many computers already run their own PostgreSQL on 5432. The project's database lives in Docker, so move it to a free port rather than failing (and write that into .env).
+if [ "${HOS_SKIP_DOCKER:-0}" != "1" ]; then
+  cur="${HOS_DB_PORT:-5432}"
+  if port_busy "$cur" && ! docker compose port db 5432 2>/dev/null | grep -q ":$cur\$"; then
+    new=""; for p in 5433 5434 5435 5436 5437 5438; do port_busy "$p" || { new="$p"; break; }; done
+    [ -n "$new" ] || die "Port $cur is used by another program and so are 5433-5438. Stop another PostgreSQL (or set HOS_DB_PORT in .env to a free port) and run this again."
+    echo "port $cur is used by another PostgreSQL on this computer: using port $new for the project's own database (saved in .env)"
+    if grep -q '^HOS_DB_PORT=' .env; then sed -i.bak "s#^HOS_DB_PORT=.*#HOS_DB_PORT=$new#" .env; else echo "HOS_DB_PORT=$new" >> .env; fi
+    sed -i.bak -E "s#^(DATABASE_URL_[A-Z]+=postgres://[^@]+@localhost:)[0-9]+/#\1$new/#" .env && rm -f .env.bak
+    set -a; . ./.env; set +a
+  fi
+fi
+[ "${HOS_STOP_AFTER_SETTINGS:-0}" = "1" ] && exit 0   # used by the test of this step
 for p in 3000 3001; do
   if (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then die "Port $p is already in use (is it already running? open http://localhost:3001). Stop whatever uses it and try again."; fi
 done
