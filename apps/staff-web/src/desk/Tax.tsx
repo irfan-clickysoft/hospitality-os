@@ -9,7 +9,7 @@ import { useAuth, useLive } from '../state.js';
 import { Badge, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 import type { Amount } from './types.js';
 
-const TXN = ['ROOM', 'ROOM_EXTRAS', 'FNB', 'LAUNDRY', 'TRANSPORT', 'MINIBAR', 'MISC', 'CANCEL_FEE', 'NOSHOW_FEE'] as const;
+const TXN = ['ROOM', 'ROOM_EXTRAS', 'FNB', 'FNB_DIGITAL', 'HALL', 'LAUNDRY', 'TRANSPORT_OWNED', 'TRANSPORT_THIRDPARTY', 'MINIBAR', 'MISC', 'CANCEL_FEE', 'NOSHOW_FEE'] as const;
 interface Version { id: string; versionNo: number; status: string; rateBp: number; ratePercent: number; appliesTo: string[]; residency: string | null; effectiveFrom: string; effectiveTo: string | null; legalBasis: string | null; advisorRef: string | null; createdBy: string; approvedBy: string | null; note: string | null }
 interface Code { id: string; code: string; name: string; jurisdiction: string; versions: Version[] }
 interface Codes { items: Code[]; properties: Array<{ id: string; code: string; name: string; taxJurisdiction: string | null }> }
@@ -127,7 +127,8 @@ function Jurisdictions({ d, onDone }: { d: Codes; onDone: () => void }) {
 
 function LiabilityCard({ propertyId }: { propertyId: string }) {
   const { t } = useT();
-  const today = new Date().toISOString().slice(0, 10);
+  const { property } = useAuth();
+  const today = property!.businessDate;                  // the property's business day, not the browser's (UTC) calendar date
   const [from, setFrom] = useState(`${today.slice(0, 8)}01`); const [to, setTo] = useState(today);
   const q = useLive<Liability>(/^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to) ? `/v1/properties/${propertyId}/tax/liability?from=${from}&to=${to}` : null, 120_000);
   return (

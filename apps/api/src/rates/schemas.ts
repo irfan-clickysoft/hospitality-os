@@ -48,5 +48,7 @@ export const CalendarQuery = z.object({ planId: uuid, from: businessDate, to: bu
 export const QuoteRequest = z.object({
   arrival: businessDate, departure: businessDate, adults: z.number().int().min(1).max(20), children: z.number().int().min(0).max(20).default(0), extraBeds: z.number().int().min(0).max(5).default(0),
   channel: channel.default('DIRECT'), residency: z.enum(['RESIDENT', 'NON_RESIDENT']).default('RESIDENT'), companyId: uuid.nullish(),
-  roomTypeId: uuid.nullish(), discountPct: z.number().min(0).max(100).default(0), includeUnavailable: z.boolean().default(false),
+  roomTypeId: uuid.nullish(), discountPct: z.number().min(0).max(100).default(0),
+  /** A different discount for particular nights (a last-minute first night at 40%, the next nights at 10%). Nights not listed use discountPct. */
+  nightDiscounts: z.array(z.object({ date: businessDate, pct: z.number().min(0).max(100) })).max(90).default([]), includeUnavailable: z.boolean().default(false),
 }).refine((v) => v.departure > v.arrival, 'departure must be after arrival');

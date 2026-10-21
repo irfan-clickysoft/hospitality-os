@@ -5,6 +5,8 @@ import { currentTenant } from '../tenancy/tenant-context.js';
 export interface QuoteClaims {
   tenantId: string; propertyId: string; planId: string; roomTypeId: string; arrival: string; departure: string; adults: number; children: number; extraBeds: number;
   channel: string; residency: string; companyId: string | null; currency: string; subtotalMinor: string; discountPct: number; discountApproved: boolean;
+  /** Percentage (basis points) for each night in stay order, when nights are discounted differently; absent means discountPct on every night. */
+  nightBp?: number[];
   depositDueMinor: string; nightsHash: string; exp: number;
 }
 

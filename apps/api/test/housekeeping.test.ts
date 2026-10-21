@@ -276,3 +276,25 @@ describe('access', () => {
     expect((await call('GET', hk(w, 'board'), as(T.tenantId, T.ownerUserId)))).toBeDefined();
   });
 });
+
+describe('front desk asks for a room to be cleaned first', () => {
+  it('raises the open task to most urgent, or creates one for a dirty room with none; a clean room is refused', async () => {
+    const w = await sunset(); const FD = (await staff(w, 'front_desk_agent')).h;
+    await adminDb.updateTable('room').set({ hk_status: 'DIRTY' }).where('id', '=', w.room['101']!).execute();
+    await adminDb.insertInto('housekeeping_task').values({ tenant_id: T.tenantId, property_id: w.pid, room_id: w.room['101']!, task_type: 'CHECKOUT_CLEAN', business_date: OPEN, priority: 3, status: 'PENDING', credit: 1 } as never).execute();
+    const a = await ok(call('POST', hk(w, `rooms/${w.room['101']}/prioritise`), FD));
+    expect(a).toMatchObject({ roomNumber: '101', raised: 1, created: false });
+    expect((await tasks(w, '101'))[0]!.priority).toBe(1);
+    await adminDb.updateTable('room').set({ hk_status: 'DIRTY' }).where('id', '=', w.room['102']!).execute();
+    const b = await ok(call('POST', hk(w, `rooms/${w.room['102']}/prioritise`), FD));
+    expect(b).toMatchObject({ raised: 0, created: true });
+    expect((await tasks(w, '102'))).toHaveLength(1);
+    await ok(call('POST', hk(w, `rooms/${w.room['102']}/prioritise`), FD));                         // asking twice does not create a second task
+    expect((await tasks(w, '102'))).toHaveLength(1);
+    await code(call('POST', hk(w, `rooms/${w.room['103']}/prioritise`), FD), 409, 'ROOM_ALREADY_CLEAN');
+  });
+  it('is not for housekeepers or people without front-desk permission', async () => {
+    const w = await sunset(); const h = (await staff(w, 'housekeeper')).h;
+    await code(call('POST', hk(w, `rooms/${w.room['101']}/prioritise`), h), 403, 'PERMISSION_DENIED');
+  });
+});

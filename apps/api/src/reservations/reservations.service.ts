@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, HttpExcepti
 import { sql, type Transaction } from 'kysely';
 import type { z } from 'zod';
 import type { DB, ResStatus } from '@hos/db';
+import { perNightDiscounts } from '../rates/night-discount.js';
 import { Money, addDays, hoursBeforeArrival, nightsOf } from '@hos/domain-types';
 import { cancellationFee, depositFor, noShowFee, type DepositRule } from '@hos/rates';
 import { AuditService } from '../audit/audit.service.js';
@@ -25,6 +26,24 @@ type Trx = Transaction<DB>;
 const fmt = (m: bigint | string | number, cur: string) => ({ amount: Money.ofMinor(BigInt(m), cur).toDecimalString(), currency: cur });
 const stale = () => new HttpException({ code: 'VERSION_CONFLICT', message: 'This reservation was changed by someone else. Reload and try again.' }, 412);
 const FRESH_MFA_MS = 15 * 60_000;
+
+/** Milliseconds the zone is ahead of UTC at an instant. */
+function zoneOffsetMs(tz: string, at: number) {
+  const x = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date(at)).map((q) => [q.type, q.value]));
+  return Date.UTC(+x.year!, +x.month! - 1, +x.day!, +x.hour!, +x.minute!, +x.second!) - Math.floor(at / 1000) * 1000;
+}
+/** The instant a date ends in the property's own clock (midnight at the start of the next day). */
+function endOfDateIn(tz: string, date: string) {
+  const guess = Date.parse(`${addDays(date, 1)}T00:00:00Z`);
+  return guess - zoneOffsetMs(tz, guess - zoneOffsetMs(tz, guess));
+}
+/** When a held room is let go: half-hour steps, whole days, or the end of a chosen date. A hold may not run past the arrival day — the room is needed then. */
+export function holdExpiry(h: { minutes?: number; days?: number; untilDate?: string }, now: number, tz: string, businessDate: string, firstArrival: string): Date {
+  const at = h.untilDate !== undefined ? endOfDateIn(tz, h.untilDate) : now + (h.days !== undefined ? h.days * 86_400_000 : h.minutes! * 60_000);
+  if (at <= now) throw new UnprocessableEntityException({ code: 'HOLD_INVALID', message: 'The hold must end in the future' });
+  if (at > endOfDateIn(tz, firstArrival > businessDate ? addDays(firstArrival, -1) : firstArrival) && firstArrival > businessDate) throw new UnprocessableEntityException({ code: 'HOLD_PAST_ARRIVAL', message: 'A room cannot be held past the day before arrival' });
+  return new Date(at);
+}
 
 @Injectable()
 export class ReservationsService {
@@ -104,7 +123,7 @@ export class ReservationsService {
     const now = this.clock.now();
 
     // 1. verify every signed quote and re-price it with today's rates — the client can never choose a price
-    const verified: Array<{ claims: ReturnType<QuoteSigner['verify']>; quote: Awaited<ReturnType<RatesService['priceOne']>>['quote']; discountMinor: bigint }> = [];
+    const verified: Array<{ claims: ReturnType<QuoteSigner['verify']>; quote: Awaited<ReturnType<RatesService['priceOne']>>['quote']; discountMinor: bigint; nightCuts: bigint[] | null }> = [];
     for (const l of i.lines) {
       const claims = this.signer.verify(l.quoteToken, now);
       if (claims.propertyId !== propertyId) throw new UnprocessableEntityException({ code: 'QUOTE_INVALID', message: 'This quote belongs to another property' });
@@ -112,11 +131,12 @@ export class ReservationsService {
       const { quote } = await this.rates.priceOne(trx, propertyId, claims.planId, { roomTypeId: claims.roomTypeId, arrival: claims.arrival, departure: claims.departure, adults: claims.adults,
         children: claims.children, extraBeds: claims.extraBeds, channel: claims.channel, residency: claims.residency as 'RESIDENT' | 'NON_RESIDENT', companyId: claims.companyId });
       if (!quote.sellable) throw new HttpException({ code: 'NOT_SELLABLE', message: 'This rate is no longer available for these dates', reasons: quote.reasons }, 409);
-      const discountMinor = (quote.subtotalMinor * BigInt(Math.round(claims.discountPct * 100))) / 10000n;
+      const nightCuts = claims.nightBp && claims.nightBp.length === quote.nights.length ? perNightDiscounts(quote.nights.map((n) => n.totalMinor), claims.nightBp) : null;
+      const discountMinor = nightCuts ? nightCuts.reduce((a, b) => a + b, 0n) : (quote.subtotalMinor * BigInt(Math.round(claims.discountPct * 100))) / 10000n;
       if (quote.subtotalMinor - discountMinor !== BigInt(claims.subtotalMinor)) {
         throw new HttpException({ code: 'PRICE_CHANGED', message: 'The price changed since this quote was made. Search again.', newTotal: fmt(quote.subtotalMinor - discountMinor, p.currency) }, 409);
       }
-      verified.push({ claims, quote, discountMinor });
+      verified.push({ claims, quote, discountMinor, nightCuts });
     }
     const first = verified[0]!.claims;
     if (verified.some((v) => v.claims.channel !== first.channel || v.claims.residency !== first.residency || (v.claims.companyId ?? null) !== (first.companyId ?? null))) {
@@ -145,7 +165,7 @@ export class ReservationsService {
     const deadlineHours = verified.map((v) => v.quote.policy.depositRule?.dueWithinHours).find((h) => h !== undefined);
     const needsGuarantee = !hold && depositTotal > 0n && first.channel !== 'WALKIN' && !first.companyId;
     const guaranteeType = first.companyId ? 'COMPANY' : 'NONE';
-    const optionExpiresAt = hold ? new Date(now + i.hold!.minutes * 60_000) : null;
+    const optionExpiresAt = hold ? holdExpiry(i.hold!, now, p.timezone, p.business_date, verified.map((v) => v.claims.arrival).sort()[0]!) : null;
 
     // 5. numbers, header, lines, price snapshot
     const seq = (await sql<{ v: string }>`INSERT INTO property_counter (tenant_id, property_id, name, value) VALUES (${currentTenant().tenantId}, ${propertyId}, 'confirmation', 1)
@@ -165,11 +185,11 @@ export class ReservationsService {
       const q = v.quote, c = v.claims;
       const lineId = (await trx.insertInto('reservation_room').values({
         tenant_id: currentTenant().tenantId, property_id: propertyId, reservation_id: res.id, line_no: ++lineNo, room_type_id: c.roomTypeId, rate_plan_id: c.planId, arrival: c.arrival, departure: c.departure,
-        adults: c.adults, children: c.children, extra_beds: c.extraBeds, status, subtotal_minor: q.subtotalMinor.toString(), discount_pct: String(c.discountPct), discount_minor: v.discountMinor.toString(),
+        adults: c.adults, children: c.children, extra_beds: c.extraBeds, status, subtotal_minor: q.subtotalMinor.toString(), discount_pct: String(v.nightCuts && q.subtotalMinor > 0n ? Number((v.discountMinor * 10000n) / q.subtotalMinor) / 100 : c.discountPct), discount_minor: v.discountMinor.toString(),
         total_minor: (q.subtotalMinor - v.discountMinor).toString(), deposit_due_minor: q.depositDueMinor.toString(),
         policy: JSON.stringify(q.policy),                                             // snapshot: later policy edits never change this booking
       } as never).returning('id').executeTakeFirstOrThrow()).id;
-      await this.insertNights(trx, propertyId, lineId, q.nights.map((n) => ({ date: n.date, source: n.source, room: n.roomMinor, extras: n.totalMinor - n.roomMinor })), v.discountMinor);
+      await this.insertNights(trx, propertyId, lineId, q.nights.map((n) => ({ date: n.date, source: n.source, room: n.roomMinor, extras: n.totalMinor - n.roomMinor })), v.discountMinor, v.nightCuts);
       await this.history(trx, propertyId, res.id, { lineId, action: 'CREATE', from: null, to: status, details: { roomTypeId: c.roomTypeId, arrival: c.arrival, departure: c.departure, total: fmt(q.subtotalMinor - v.discountMinor, p.currency).amount } });
     }
     await this.audit.record(trx, { action: 'reservation.create', resourceType: 'reservation', resourceId: res.id, propertyId, after: { confirmationNo, status, source: i.source, lines: verified.length, guestId: guest!.id } });
@@ -181,9 +201,9 @@ export class ReservationsService {
     return { ...(await this.detail(trx, propertyId, res.id)), compliance };
   }
 
-  private async insertNights(trx: Trx, propertyId: string, lineId: string, nights: Array<{ date: string; source: string; room: bigint; extras: bigint }>, discount: bigint) {
+  private async insertNights(trx: Trx, propertyId: string, lineId: string, nights: Array<{ date: string; source: string; room: bigint; extras: bigint }>, discount: bigint, cuts: bigint[] | null = null) {
     const gross = nights.map((n) => n.room + n.extras);
-    const shares = discount > 0n ? Money.ofMinor(discount, 'PKR').allocate(gross).map((m) => m.minor) : gross.map(() => 0n);        // exact split: shares always sum to the discount
+    const shares = cuts ?? (discount > 0n ? Money.ofMinor(discount, 'PKR').allocate(gross).map((m) => m.minor) : gross.map(() => 0n));        // exact split: shares always sum to the discount
     await trx.deleteFrom('stay_night').where('reservation_room_id', '=', lineId).execute();
     await trx.insertInto('stay_night').values(nights.map((n, k) => ({ tenant_id: currentTenant().tenantId, property_id: propertyId, reservation_room_id: lineId, business_date: n.date, source: n.source,
       room_minor: n.room.toString(), extras_minor: n.extras.toString(), discount_minor: shares[k]!.toString(), total_minor: (gross[k]! - shares[k]!).toString() }))).execute();

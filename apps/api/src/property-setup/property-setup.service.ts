@@ -32,10 +32,13 @@ export class PropertySetupService {
     return p;
   }
   private propDto(p: Awaited<ReturnType<PropertySetupService['prop']>>) {
-    return { id: p.id, code: p.code, name: p.name, legalEntityId: p.legal_entity_id, brandId: p.brand_id, timezone: p.timezone, currency: p.currency, businessDate: p.business_date, weekendDays: p.weekend_days, status: p.status, version: p.version };
+    return { id: p.id, code: p.code, name: p.name, legalEntityId: p.legal_entity_id, brandId: p.brand_id, timezone: p.timezone, currency: p.currency, businessDate: p.business_date, weekendDays: p.weekend_days, city: p.city, mapsUrl: p.maps_url, terms: p.terms_text, checkInTime: String(p.check_in_time).slice(0, 5), checkOutTime: String(p.check_out_time).slice(0, 5), status: p.status, version: p.version };
   }
 
   /** Properties the current user may view (property-scoped users see only theirs). */
+  /** The companies that can own a property (a new property needs one). */
+  async listLegalEntities() { return this.tdb.tx((trx) => trx.selectFrom('legal_entity').select(['id', 'name']).orderBy('name').execute()); }
+
   async listProperties(userId: string) {
     const grants = await this.authz.loadGrants(userId);
     const rows = await this.tdb.tx((trx) => trx.selectFrom('property').selectAll().orderBy('name').execute());
@@ -49,7 +52,7 @@ export class PropertySetupService {
     const rows = await this.tdb.tx((trx) => trx.selectFrom('property').selectAll().where('status', '<>', 'ARCHIVED' as never).orderBy('name').execute());
     const { decide } = await import('@hos/auth');
     return rows.filter((p) => grants.some((g) => decide([g], { permission: g.permission, scope: { propertyId: p.id, legalEntityId: p.legal_entity_id } }).effect === 'ALLOW'))
-      .map((p) => ({ id: p.id, code: p.code, name: p.name, businessDate: p.business_date, timezone: p.timezone, status: p.status }));
+      .map((p) => ({ id: p.id, code: p.code, name: p.name, businessDate: p.business_date, timezone: p.timezone, status: p.status, city: p.city, mapsUrl: p.maps_url, checkInTime: String(p.check_in_time).slice(0, 5), checkOutTime: String(p.check_out_time).slice(0, 5) }));
   }
 
   async createProperty(i: z.infer<typeof S.CreateProperty>) {
@@ -75,6 +78,11 @@ export class PropertySetupService {
       if (i.name !== undefined) set.name = i.name;
       if (i.timezone !== undefined) set.timezone = i.timezone;
       if (i.brandId !== undefined) set.brand_id = i.brandId;
+      if (i.terms !== undefined) set.terms_text = i.terms;
+      if (i.city !== undefined) set.city = i.city;
+      if (i.mapsUrl !== undefined) set.maps_url = i.mapsUrl;
+      if (i.checkInTime !== undefined) set.check_in_time = i.checkInTime;
+      if (i.checkOutTime !== undefined) set.check_out_time = i.checkOutTime;
       if (i.weekendDays !== undefined) set.weekend_days = [...new Set(i.weekendDays)].sort();
       const after = await trx.updateTable('property').set(set as never).where('id', '=', id).where('version', '=', i.version).returningAll().executeTakeFirst();
       if (!after) throw stale();
@@ -285,7 +293,7 @@ export class PropertySetupService {
       const before = await trx.selectFrom('room').selectAll().where('id', '=', id).where('property_id', '=', propertyId).executeTakeFirst();
       if (!before) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room not found' });
       const m: Record<string, unknown> = { version: sql`version + 1` };
-      const map: Record<string, string> = { roomTypeId: 'room_type_id', floorId: 'floor_id', capacityOverride: 'capacity_override', bedConfig: 'bed_config', smoking: 'smoking', accessible: 'accessible', notes: 'notes', status: 'status' };
+      const map: Record<string, string> = { number: 'number', roomTypeId: 'room_type_id', floorId: 'floor_id', capacityOverride: 'capacity_override', bedConfig: 'bed_config', smoking: 'smoking', accessible: 'accessible', notes: 'notes', status: 'status' };
       for (const [k, col] of Object.entries(map)) if ((i as Record<string, unknown>)[k] !== undefined) m[col] = (i as Record<string, unknown>)[k];
       if (i.status === 'INACTIVE' && before.status === 'ACTIVE') {
         const open = await trx.selectFrom('room_block').select('id').where('room_id', '=', id).where('cancelled_at', 'is', null).where('end_date', '>', p.business_date).executeTakeFirst();
@@ -293,7 +301,9 @@ export class PropertySetupService {
         const assigned = await trx.selectFrom('room_assignment').select('id').where('room_id', '=', id).where('status', 'in', ['ASSIGNED', 'IN_HOUSE']).executeTakeFirst();
         if (assigned) throw new ConflictException({ code: 'ROOM_IN_USE', message: 'This room has current or future guests assigned. Move them first.' });
       }
-      const after = await trx.updateTable('room').set(m as never).where('id', '=', id).where('version', '=', i.version).returningAll().executeTakeFirst();
+      let after;
+      try { after = await trx.updateTable('room').set(m as never).where('id', '=', id).where('version', '=', i.version).returningAll().executeTakeFirst(); }
+      catch (e) { if ((e as { code?: string }).code === '23505') throw new ConflictException({ code: 'DUPLICATE_ROOM', message: `Another room already has the number ${i.number}` }); throw e; }
       if (!after) throw stale();
       if (i.connectingRoomId !== undefined) {
         await this.linkConnecting(trx, propertyId, id, i.connectingRoomId, before.connecting_room_id);

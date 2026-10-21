@@ -9,7 +9,7 @@ import { Badge, Chip, Empty, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 import type { Amount } from './types.js';
 
 interface OrderLine { id: string; name: string; quantity: number; total: Amount; note: string | null }
-interface Order { id: string; number: string; status: string; room: string; guest: string; note: string | null; total: Amount; createdAt: string; cancelReason: string | null; lines: OrderLine[] }
+interface Order { id: string; number: string; payDigitally: boolean; status: string; room: string; guest: string; note: string | null; total: Amount; createdAt: string; cancelReason: string | null; lines: OrderLine[] }
 interface Item { id: string; category: string; name: string; nameUr: string | null; price: Amount; active: boolean; version: number }
 interface Stay { reservationRoomId: string; room: string; guest: string }
 const tone = (s: string) => (s === 'READY' ? 'clean' : s === 'PREPARING' ? 'cleaning' : s === 'DELIVERED' ? 'inspected' : s === 'CANCELLED' ? 'neutral' : 'warn') as 'clean' | 'cleaning' | 'inspected' | 'neutral' | 'warn';
@@ -35,7 +35,7 @@ export function Kitchen() {
         <ul className="plain">{queue.data.items.map((o) => (
           <li key={o.id} className="card stack small">
             <div className="row between"><strong>{t('d.room')} {o.room} · {o.guest}</strong><Badge tone={tone(o.status)}>{t(`kt.s.${o.status}` as Key)}</Badge></div>
-            <span className="muted">{o.number} · {t('kt.minutes', { n: age(o.createdAt) })} · {money(o.total)}</span>
+            <span className="muted">{o.number} · {t('kt.minutes', { n: age(o.createdAt) })} · {money(o.total)}{o.payDigitally ? ` · ${t('kt.digital')}` : ''}</span>
             <ul className="plain">{o.lines.map((l) => <li key={l.id}><strong>{l.quantity} ×</strong> {l.name}{l.note ? <span className="muted"> — {l.note}</span> : null}</li>)}</ul>
             {o.note && <span className="warnbox">{o.note}</span>}{o.cancelReason && <span className="muted">{o.cancelReason}</span>}
             {['NEW', 'PREPARING', 'READY'].includes(o.status) && (
@@ -55,13 +55,13 @@ function TakeOrder({ base, locale, onDone, onClose }: { base: string; locale: st
   const { t } = useT();
   const stays = useLive<{ items: Stay[] }>(`${base}/in-house`, 120_000);
   const menu = useLive<{ items: Item[] }>(`${base}/menu`, 120_000);
-  const [stay, setStay] = useState(''); const [qty, setQty] = useState<Record<string, number>>({}); const [note, setNote] = useState('');
+  const [stay, setStay] = useState(''); const [qty, setQty] = useState<Record<string, number>>({}); const [note, setNote] = useState(''); const [digital, setDigital] = useState(false);
   const { busy, problem, run } = useAction();
   const items = menu.data?.items ?? [];
   const chosen = items.filter((i) => (qty[i.id] ?? 0) > 0);
   const total = chosen.reduce((a, i) => a + Number(i.price.amount) * qty[i.id]!, 0);
   const bump = (id: string, d: number) => setQty((q) => ({ ...q, [id]: Math.max(0, Math.min(99, (q[id] ?? 0) + d)) }));
-  const go = async () => { if (await run(() => api('POST', `${base}/orders`, { reservationRoomId: stay, ...(note.trim() ? { note: note.trim() } : {}), lines: chosen.map((i) => ({ menuItemId: i.id, quantity: qty[i.id] })) }))) onDone(); };
+  const go = async () => { if (await run(() => api('POST', `${base}/orders`, { reservationRoomId: stay, payDigitally: digital, ...(note.trim() ? { note: note.trim() } : {}), lines: chosen.map((i) => ({ menuItemId: i.id, quantity: qty[i.id] })) }))) onDone(); };
   const cats = [...new Set(items.map((i) => i.category))];
   return (
     <Sheet title={t('kt.newOrder')} onClose={onClose}>
@@ -73,6 +73,7 @@ function TakeOrder({ base, locale, onDone, onClose }: { base: string; locale: st
             <div key={i.id} className="row between"><span>{locale === 'ur' && i.nameUr ? i.nameUr : i.name}<span className="muted small"> · {money(i.price)}</span></span>
               <span className="row"><button aria-label="−" onClick={() => bump(i.id, -1)}>−</button><strong style={{ minWidth: 24, textAlign: 'center' }}>{qty[i.id] ?? 0}</strong><button aria-label="+" onClick={() => bump(i.id, 1)}>+</button></span></div>))}</div>))}
         <label>{t('common.note')}<input value={note} onChange={(e) => setNote(e.target.value)} /></label>
+        <label className="row"><input type="checkbox" checked={digital} onChange={(e) => setDigital(e.target.checked)} /> {t('kt.payDigital')}</label>
         <div className="row between"><strong>{t('tax.total')}</strong><strong>{money({ amount: total.toFixed(2), currency: 'PKR' })}</strong></div>
         <ErrorLine code={problem?.code} detail={problem?.detail} />
         <div className="actions"><button className="primary" disabled={busy || !stay || chosen.length === 0} onClick={go}>{t('kt.send')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>

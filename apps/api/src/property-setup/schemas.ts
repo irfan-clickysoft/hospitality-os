@@ -9,7 +9,10 @@ export const CreateProperty = z.object({
   legalEntityId: uuid, brandId: uuid.nullish(), code: z.string().regex(/^[A-Za-z0-9_-]{2,20}$/), name: z.string().min(2).max(120),
   timezone: tz.default('Asia/Karachi'), currency: z.string().regex(/^[A-Z]{3}$/).default('PKR'), openingBusinessDate: businessDate.optional(),
 });
-export const UpdateProperty = z.object({ name: z.string().min(2).max(120).optional(), timezone: tz.optional(), brandId: uuid.nullish(), weekendDays: z.array(z.number().int().min(1).max(7)).max(7).optional(), version: z.number().int() });
+export const UpdateProperty = z.object({ name: z.string().min(2).max(120).optional(), timezone: tz.optional(), brandId: uuid.nullish(), weekendDays: z.array(z.number().int().min(1).max(7)).max(7).optional(),
+  city: z.string().trim().min(2).max(80).nullable().optional(), mapsUrl: z.string().trim().max(500).regex(/^https:\/\//, 'Use the full https:// link from Google Maps').nullable().optional(),
+  terms: z.string().trim().max(8000).nullable().optional(),
+  checkInTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(), checkOutTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(), version: z.number().int() });
 export const GoLive = z.object({ openingBusinessDate: businessDate.optional() });
 
 export const CreateBuilding = z.object({ name: z.string().min(1).max(80) });
@@ -35,7 +38,7 @@ export const BulkRooms = z.object({
   prefix: z.string().max(4).regex(/^[A-Za-z0-9-]*$/).default(''), smoking: z.boolean().default(false), accessible: z.boolean().default(false),
 }).refine((v) => v.to >= v.from && v.to - v.from < 200, { message: 'range must be ascending and at most 200 rooms' });
 export const UpdateRoom = z.object({
-  roomTypeId: uuid.optional(), floorId: uuid.nullish(), capacityOverride: z.number().int().min(1).max(30).nullish(), bedConfig: z.string().max(120).nullish(),
+  number: roomNumber.optional(), roomTypeId: uuid.optional(), floorId: uuid.nullish(), capacityOverride: z.number().int().min(1).max(30).nullish(), bedConfig: z.string().max(120).nullish(),
   smoking: z.boolean().optional(), accessible: z.boolean().optional(), connectingRoomId: uuid.nullish(), notes: z.string().max(1000).nullish(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(), version: z.number().int(),
 });

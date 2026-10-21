@@ -5,14 +5,19 @@ import { CreateGuest } from '../guests/schemas.js';
 export const SOURCES = ['WALK_IN', 'PHONE', 'WHATSAPP', 'WEBSITE', 'OTA_BOOKING_COM', 'OTA_OTHER', 'CORPORATE', 'TRAVEL_AGENT', 'CRS', 'OTHER'] as const;
 const text = (n: number) => z.string().max(n).nullish();
 
+export const MAX_HOLD_DAYS = 30;
 export const CreateReservation = z.object({
   guestId: uuid.optional(),
   guest: CreateGuest.optional(),
   lines: z.array(z.object({ quoteToken: z.string().min(40).max(4000) })).min(1).max(10),
   source: z.enum(SOURCES),
   marketSegment: z.string().max(40).nullish(), externalRef: z.string().max(80).nullish(), companyId: uuid.nullish(),
-  /** Hold the rooms as an OPTION that expires after this many minutes (no payment yet); omit to confirm now. */
-  hold: z.object({ minutes: z.number().int().min(15).max(4320) }).optional(),
+  /** Hold the rooms as an OPTION (no payment yet) for half-hour steps, whole days, or until the end of a date — never past the arrival day. Omit to confirm now. */
+  hold: z.object({
+    minutes: z.number().int().min(30).max(4320).refine((m) => m % 30 === 0, 'Holds run in half-hour steps').optional(),
+    days: z.number().int().min(1).max(MAX_HOLD_DAYS).optional(),
+    untilDate: businessDate.optional(),
+  }).strict().refine((h) => [h.minutes, h.days, h.untilDate].filter((x) => x !== undefined).length === 1, 'Give the hold as half-hours, days, or a date — one of them').optional(),
   /** A manager's approval (with a reason) for a booking that a compliance rule holds for approval. */
   complianceApproval: z.object({ reason: z.string().trim().min(3).max(300) }).optional(),
   notesInternal: text(2000), notesGuest: text(2000), specialRequests: text(2000),

@@ -299,4 +299,17 @@ describe('audit & events', () => {
     const actor = await adminDb.selectFrom('audit_log').select('actor_id').where('tenant_id', '=', T.tenantId).where('action', '=', 'room_block.create').where('property_id', '=', propertyId).executeTakeFirstOrThrow();
     expect(actor.actor_id).toBe(T.ownerUserId);
   });
+
+  it('keeps the city, the Google Maps link and the check-in and check-out times for the guest message', async () => {
+    const { propertyId } = await newProperty('MSG');
+    const cur = (await call('GET', `/v1/properties/${propertyId}`, O)).json();
+    expect(cur).toMatchObject({ city: null, mapsUrl: null, checkInTime: '14:00', checkOutTime: '12:00' });
+    const bad = await call('PATCH', `/v1/properties/${propertyId}`, O, { mapsUrl: 'javascript:alert(1)', version: cur.version });
+    expect(bad.statusCode).toBe(400);
+    const r = await call('PATCH', `/v1/properties/${propertyId}`, O, { city: 'Karachi', mapsUrl: 'https://maps.app.goo.gl/abc', checkInTime: '15:30', checkOutTime: '11:00', version: cur.version });
+    expect(r.statusCode, r.body).toBe(200);
+    expect(r.json()).toMatchObject({ city: 'Karachi', mapsUrl: 'https://maps.app.goo.gl/abc', checkInTime: '15:30', checkOutTime: '11:00' });
+    const mine = (await call('GET', '/v1/me/properties', O)).json().items.find((x: any) => x.id === propertyId);
+    expect(mine).toMatchObject({ city: 'Karachi', mapsUrl: 'https://maps.app.goo.gl/abc', checkInTime: '15:30' });
+  });
 });

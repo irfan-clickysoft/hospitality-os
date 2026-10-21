@@ -6,7 +6,7 @@ import { useAction } from '../lib/action.js';
 import { useAuth } from '../state.js';
 import { ErrorLine, Sheet } from '../ui/kit.js';
 
-const CODES = ['FNB', 'LAUNDRY', 'TRANSPORT', 'MINIBAR', 'MISC'] as const;
+const CODES = ['FNB', 'FNB_DIGITAL', 'LAUNDRY', 'TRANSPORT_OWNED', 'TRANSPORT_THIRDPARTY', 'MINIBAR', 'MISC'] as const;
 export function ChargeSheet({ folioId, onDone, onClose }: { folioId: string; onDone: () => void; onClose: () => void }) {
   const { t } = useT();
   const { property } = useAuth();

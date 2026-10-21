@@ -1,4 +1,5 @@
 import type { Key } from './en.js';
+import { uxUr } from './ux.js';
 
 /** اردو — same keys as English; the compiler rejects a missing or extra key. */
 export const ur: Record<Key, string> = {
@@ -205,7 +206,7 @@ export const ur: Record<Key, string> = {
   'chg.post': 'بل میں شامل کریں',
   'chg.FNB': 'کھانا اور مشروبات',
   'chg.LAUNDRY': 'لانڈری',
-  'chg.TRANSPORT': 'ٹرانسپورٹ',
+  'chg.FNB_DIGITAL': 'کھانا اور مشروبات (ڈیجیٹل ادائیگی)', 'chg.TRANSPORT_OWNED': 'ٹرانسپورٹ (اپنی گاڑی)', 'chg.TRANSPORT_THIRDPARTY': 'ٹرانسپورٹ (کرائے کی گاڑی)',
   'chg.MINIBAR': 'منی بار',
   'chg.MISC': 'دیگر',
   'fo.projection': 'آج رات شامل ہوں گے: {due}۔ قیام کے اختتام پر بقایا: {end}۔',
@@ -349,7 +350,7 @@ export const ur: Record<Key, string> = {
   'tax.noneConfigured': 'کوئی ٹیکس مقرر نہیں۔ شرح منظور ہونے تک بل اور انوائس میں ٹیکس نہیں آئے گا۔',
   'tax.s.DRAFT': 'مسودہ', 'tax.s.ACTIVE': 'نافذ', 'tax.s.REJECTED': 'مسترد', 'tax.s.RETIRED': 'ختم',
   'tax.openEnded': 'کوئی آخری تاریخ نہیں', 'tax.res.ANY': 'تمام مہمان', 'tax.res.RESIDENT': 'مقامی', 'tax.res.NON_RESIDENT': 'غیر ملکی مہمان',
-  'tax.txn.ROOM': 'کمرہ', 'tax.txn.ROOM_EXTRAS': 'اضافی بستر / فرد', 'tax.txn.FNB': 'کھانا پینا', 'tax.txn.LAUNDRY': 'لانڈری', 'tax.txn.TRANSPORT': 'ٹرانسپورٹ', 'tax.txn.MINIBAR': 'منی بار', 'tax.txn.MISC': 'دیگر', 'tax.txn.CANCEL_FEE': 'منسوخی فیس', 'tax.txn.NOSHOW_FEE': 'نو شو فیس',
+  'tax.txn.ROOM': 'کمرہ', 'tax.txn.ROOM_EXTRAS': 'اضافی بستر / فرد', 'tax.txn.HALL': 'کانفرنس روم', 'tax.txn.FNB_DIGITAL': 'کھانا پینا (ڈیجیٹل ادائیگی)', 'tax.txn.TRANSPORT_OWNED': 'ٹرانسپورٹ (اپنی گاڑی)', 'tax.txn.TRANSPORT_THIRDPARTY': 'ٹرانسپورٹ (کرائے کی گاڑی)', 'tax.txn.FNB': 'کھانا پینا', 'tax.txn.LAUNDRY': 'لانڈری', 'tax.txn.TRANSPORT': 'ٹرانسپورٹ', 'tax.txn.MINIBAR': 'منی بار', 'tax.txn.MISC': 'دیگر', 'tax.txn.CANCEL_FEE': 'منسوخی فیس', 'tax.txn.NOSHOW_FEE': 'نو شو فیس',
   'tax.advisorRef': 'ٹیکس مشیر کا حوالہ', 'tax.legalBasis': 'قانونی بنیاد', 'tax.approve': 'منظور کریں', 'tax.reject': 'مسترد کریں', 'tax.retire': 'استعمال بند کریں',
   'tax.otherMustApprove': 'کوئی دوسرا شخص منظور کرے۔', 'tax.newVersion': 'نئی شرح', 'tax.newCode': 'نیا ٹیکس', 'tax.code': 'کوڈ', 'tax.name': 'نام', 'tax.jurisdiction': 'دائرۂ اختیار کا کوڈ',
   'tax.ratePercent': 'شرح (%)', 'tax.from': 'شروع کی تاریخ', 'tax.to': 'آخری تاریخ (اختیاری)', 'tax.residency': 'کس پر لاگو',
@@ -474,6 +475,48 @@ export const ur: Record<Key, string> = {
   'err.MENU_ITEM_UNAVAILABLE': 'کوئی آئٹم دستیاب نہیں۔',
   'err.NOT_READY': 'کچن نے اس آرڈر کو ابھی تیار نہیں لکھا۔',
   'err.ALREADY_DELIVERED': 'یہ آرڈر مہمان کے بِل پر آ چکا ہے۔ بِل پر اندراج واپس کریں۔',
+  'kt.payDigital': 'مہمان ڈیجیٹل ادائیگی کرے گا (کارڈ، والٹ یا بینک) — ڈیجیٹل شرح سے ٹیکس', 'kt.digital': 'ڈیجیٹل',
+  'cr.title': 'جائزے کے منتظر چارجز', 'cr.none': 'کوئی چارج جائزے کا منتظر نہیں۔', 'cr.k.WHT_REVIEW': 'ود ہولڈنگ ٹیکس کا جائزہ', 'cr.k.VENDOR_VERIFICATION': 'وینڈر کی تصدیق', 'cr.done': 'جائزہ مکمل', 'cr.note': 'آپ نے کیا جانچا؟ (ریکارڈ میں رہے گا)',
+  'err.ALREADY_DONE': 'یہ جائزہ پہلے ہی بند ہو چکا ہے۔',
+  // rates screen
+  'nav.rates': 'ریٹس', 'rt.weekend': 'ہفتہ وار چھٹی کے دن کون سے ہیں؟', 'rt.weekendHelp': 'جن کمروں کی ویک اینڈ قیمت ہے وہ ان راتوں پر لاگو ہوگی۔', 'rt.price': 'فی رات قیمت', 'rt.weekendPrice': 'ویک اینڈ قیمت', 'rt.sameAsWeekday': 'عام دن کے برابر',
+  'rt.extraAdult': 'اضافی بالغ', 'rt.extraChild': 'اضافی بچہ', 'rt.maxAdults': 'زیادہ سے زیادہ بالغ', 'rt.maxPeople': 'زیادہ سے زیادہ افراد', 'rt.extraBed': 'اضافی بستر (فی رات، پورے پلان کے لیے)', 'rt.save': 'قیمتیں محفوظ کریں', 'rt.taxNote': 'قیمتیں ٹیکس سے پہلے ہیں۔ ٹیکس منظور شدہ سیٹ اپ سے لگتا ہے۔',
+  'rt.derived': 'یہ پلان “{parent}” سے بنتا ہے۔', 'rt.percent': 'دوسرے پلان سے فیصد زیادہ (یا منفی کے ساتھ کم)', 'rt.fixedDerive': 'یہ پلان دوسرے پلان میں مقررہ رقم جوڑتا ہے؛ اسے سیٹ اپ میں بدلیں۔',
+  // rooms screen
+  'nav.rooms': 'کمرے', 'rm.add': 'کمرہ شامل کریں', 'rm.edit': 'ترمیم', 'rm.save': 'محفوظ کریں', 'rm.noFloor': 'بغیر منزل', 'rm.retired': 'استعمال سے باہر', 'rm.number': 'کمرہ نمبر', 'rm.type': 'کمرے کی قسم', 'rm.floor': 'منزل', 'rm.accessible': 'معذور افراد کے لیے کمرہ', 'rm.smoking': 'سگریٹ نوشی کا کمرہ', 'rm.inUse': 'استعمال میں (کمرہ ریٹائر کرنے کے لیے نشان ہٹائیں)',
+  'rm.note': 'نمبر بدلنے سے پرانے بل یا انوائس نہیں بدلتے۔ جس کمرے میں مہمان مقرر ہوں اسے ریٹائر نہیں کیا جا سکتا۔',
+  'err.DUPLICATE_ROOM': 'کسی اور کمرے کا یہی نمبر ہے۔', 'err.ROOM_IN_USE': 'اس کمرے میں موجودہ یا آنے والے مہمان مقرر ہیں۔ پہلے انہیں منتقل کریں۔', 'err.ROOM_HAS_BLOCKS': 'ریٹائر کرنے سے پہلے اس کمرے کی بلاکس منسوخ کریں۔',
+  // cash safe
+  'safe.title': 'تجوری (ہیڈ آفس کے لیے رکھی نقدی)', 'safe.help': 'ہر بند رجسٹر اپنے دن کا لفافہ جمع کرتا ہے: گنی گئی رقم، دراز میں چھوڑی گئی فلوٹ منہا، اور تجوری میں ڈالی گئی رقم شامل۔ حوالگی سے نقدی نکلتی ہے۔ یہ نقدی بینک میں جمع نہیں ہوتی۔', 'safe.handover': 'ہیڈ آفس کو حوالے کریں',
+  'safe.envelopes': 'لفافے (دن اور رجسٹر کے مطابق)', 'safe.variance': 'فرق', 'safe.handovers': 'اب تک حوالے کیا گیا', 'safe.inSafe': 'تجوری میں ہونا چاہیے', 'safe.amount': 'حوالے کی گئی رقم', 'safe.receivedBy': 'وصول کنندہ', 'safe.title2': 'عہدہ',
+  'safe.why': 'پوری تجوری سے کم کیوں؟', 'safe.count': 'وصول کرنے والے کے ساتھ نقدی اور لفافے گنیں۔ یہ ہمیشہ کے لیے درج ہوتا ہے۔', 'safe.confirm': 'حوالگی درج کریں',
+  'err.SAFE_CHANGED': 'آپ کے دیکھنے کے بعد تجوری کا بیلنس بدل گیا ہے۔ نیا بیلنس دیکھ کر دوبارہ کوشش کریں۔', 'err.HANDOVER_EXCEEDS_SAFE': 'یہ لفافوں کے مطابق تجوری میں موجود نقدی سے زیادہ ہے۔',
+  'safe.print': 'رسید پرنٹ کریں',
+  // gate
+  'nav.gate': 'گیٹ', 'd.regCard': 'رجسٹریشن کارڈ', 'gt.log': 'اندراج کریں', 'gt.in': 'اندر درج کریں', 'gt.out': 'باہر چلا گیا', 'gt.expected': 'آج متوقع', 'gt.inHouse': '{n} ہوٹل میں مقیم', 'gt.noArrivals': 'آج کوئی آمد متوقع نہیں۔', 'gt.people': 'افراد', 'gt.arrived': 'پہنچ گئے', 'gt.coming': 'متوقع',
+  'gt.here': 'اس وقت اندر', 'gt.nobody': 'کوئی اندر درج نہیں۔', 'gt.today': 'آج باہر گئے', 'gt.visiting': 'ملاقات کے لیے', 'gt.name': 'نام', 'gt.plate': 'گاڑی نمبر', 'gt.phone': 'فون', 'gt.purpose': 'مقصد', 'gt.id4': 'دکھائے گئے شناختی کارڈ کے آخری 4 ہندسے (اگر ہو)',
+  'gt.privacy': 'شناختی کارڈ کے صرف آخری چار ہندسے رکھے جاتے ہیں، پورا نمبر کبھی نہیں۔', 'gt.k.VISITOR': 'ملاقاتی', 'gt.k.VEHICLE': 'گاڑی', 'gt.k.DELIVERY': 'ڈیلیوری', 'gt.k.CONTRACTOR': 'ٹھیکیدار',
+  // conference room
+  'nav.spaces': 'کانفرنس روم', 'sp.v.calendar': 'کیلنڈر', 'sp.v.spaces': 'جگہیں اور قیمتیں', 'sp.newHire': 'نئی بکنگ', 'sp.nothing': 'اگلے دو ہفتوں میں کوئی بکنگ نہیں۔', 'sp.noSpaces': 'ابھی کوئی جگہ درج نہیں۔ مینیجر سے کہیں کہ "جگہیں اور قیمتیں" میں کانفرنس روم شامل کرے۔',
+  'sp.creditNote': 'کریڈٹ نوٹ',
+  'sp.s.BOOKED': 'بک', 'sp.s.COMPLETED': 'مکمل', 'sp.s.CANCELLED': 'منسوخ', 'sp.people': '{n} افراد', 'sp.beforeTax': 'ٹیکس سے پہلے', 'sp.p.HOURLY': 'فی گھنٹہ', 'sp.p.HALF_DAY': 'آدھا دن (4 گھنٹے تک)', 'sp.p.FULL_DAY': 'پورا دن (12 گھنٹے تک)',
+  'sp.onStay': '{guest} ({no}) کے قیام پر چارج', 'sp.ownBill': 'اپنا بل {no}', 'sp.complete': 'بکنگ مکمل — بل پر ڈالیں', 'sp.takePayment': 'ادائیگی لیں', 'sp.cancelWhy': 'منسوخی کی وجہ کیا ہے؟',
+  'sp.space': 'جگہ', 'sp.event': 'تقریب کیا ہے؟', 'sp.host': 'بک کرانے والا', 'sp.phone': 'فون', 'sp.date': 'تاریخ', 'sp.people2': 'افراد', 'sp.from': 'سے', 'sp.to': 'تک',
+  'sp.bill.SEPARATE': 'ہمارے ہاں مقیم نہیں — الگ بل', 'sp.bill.STAY': 'مقیم مہمان — ان کے بل میں شامل کریں', 'sp.stay': 'کون سا قیام؟', 'sp.ownBillNote': 'اس بکنگ کا اپنا الگ بل بنے گا۔ یہیں سے ایڈوانس یا ادائیگی لیں۔',
+  'sp.taxNote': 'قیمتیں ٹیکس سے پہلے ہیں؛ بکنگ مکمل ہونے پر ٹیکس سیٹ اپ کے مطابق لگے گا۔ ہر بکنگ کے بعد {n} منٹ خالی رکھے جاتے ہیں۔', 'sp.book': 'بک کریں', 'sp.addSpace': 'جگہ شامل کریں', 'sp.buffer': 'بکنگ کے بعد خالی رکھنے کے منٹ', 'sp.newPrice': 'نئی قیمت (اس طرح نہ بکتی ہو تو خالی چھوڑیں)',
+  'err.SPACE_TAKEN': 'اس وقت کمرہ پہلے سے بک ہے (تبدیلی کے وقت سمیت)۔', 'err.NOT_STARTED': 'یہ بکنگ ابھی شروع نہیں ہوئی۔', 'err.PRICING_NOT_OFFERED': 'یہ جگہ اس طرح نہیں بکتی۔ کوئی اور قیمت چنیں۔',
+  'err.TOO_LONG_FOR_HALF_DAY': 'آدھا دن 4 گھنٹے تک ہے۔ پورے دن کی قیمت لگائیں۔', 'err.TOO_LONG_FOR_FULL_DAY': 'پورا دن 12 گھنٹے تک ہے۔', 'err.TIME_RANGE_INVALID': 'بکنگ اسی دن شروع کے بعد ختم ہونی چاہیے۔',
+  'err.TOO_SHORT': 'کم از کم بکنگ 30 منٹ کی ہے۔', 'err.DATE_IN_PAST': 'وہ تاریخ گزر چکی ہے۔', 'err.SPACE_INACTIVE': 'یہ جگہ کرائے پر نہیں دی جا رہی۔', 'err.STAY_NOT_ACTIVE': 'وہ قیام موجود نہیں یا آنے والا نہیں۔ الگ بل استعمال کریں۔',
+  'err.BILL_HAS_PAYMENTS': 'اس بکنگ کے بل پر رقم لی جا چکی ہے۔ پہلے واپس کریں، پھر منسوخ کریں۔', 'err.ALREADY_COMPLETED': 'یہ بکنگ بل پر آ چکی ہے۔ بل پر چارج الٹائیں۔',
+  'err.NOT_A_SEPARATE_BILL': 'یہ بکنگ مہمان کے قیام پر ہے۔ قیام کا بل استعمال کریں۔', 'err.HIRE_NOT_DONE': 'پہلے بکنگ کو مکمل کریں تاکہ بل پر کچھ ہو۔',
+  'grp.label': 'شعبہ بدلیں', 'grp.front': 'فرنٹ ڈیسک', 'grp.house': 'ہاؤس کیپنگ', 'grp.money': 'رقم', 'grp.manage': 'انتظام',
+  'sp.change': 'تبدیل کریں', 'sp.save': 'محفوظ کریں', 'sp.changeNote': 'نئے وقت کے مطابق قیمت دوبارہ بنے گی اور کمرے کے ٹکراؤ کی جانچ ہوگی۔',
+  // readiness
+  'nav.readiness': 'سیٹ اپ جانچ', 'rd.summary': '{a} کرنے ہیں · {n} دیکھنے ہیں · {o} ٹھیک', 'rd.business': 'پورا کاروبار', 'rd.s.OK': 'ٹھیک', 'rd.s.ACTION': 'کرنا ہے', 'rd.s.NOTE': 'دیکھیں',
+  'rd.ENTITY_NTN': 'کمپنی کا این ٹی این درج (ہر ٹیکس انوائس پر آتا ہے)', 'rd.ENTITY_STRN': 'کمپنی کا ایس ٹی آر این درج (ہر ٹیکس انوائس پر آتا ہے)', 'rd.STAFF_MFA': 'دوسرے فیکٹر کے بغیر عملہ: {n}',
+  'rd.TAX_JURISDICTION': 'اس پراپرٹی کا ٹیکس علاقہ منتخب (ورنہ چارجز پر ٹیکس نہیں لگتا)', 'rd.TAX_RATES': 'اس پراپرٹی کے ٹیکس علاقے کی منظور شدہ شرح نافذ (ورنہ چارجز پر ٹیکس نہیں لگتا)',
+  'rd.RATES': 'ہر کمرے کی قسم کی رات کی قیمت (بغیر قیمت کی اقسام: {n})', 'rd.ROOMTYPE_EMPTY': 'ایسی اقسام جن میں ابھی کمرے نہیں: {n}', 'rd.EXTRAS': 'اضافی فرد کی قیمتیں (جن اقسام میں اضافی فرد مفت ہے: {n})',
+ 'rd.PAYMENT_ACCOUNTS': 'رقم وصول کرنے کے لیے ادائیگی کا اکاؤنٹ', 'rd.MENU': 'کچن مینو میں آئٹم', 'rd.SPACES': 'کانفرنس روم قیمتوں کے ساتھ درج',
   // staff, account, audit
   'nav.staff': 'عملہ', 'nav.audit2': 'آڈٹ ریکارڈ', 'acct.title': 'میرا اکاؤنٹ',
   'inv2.title': 'اپنا پاس ورڈ چنیں', 'inv2.help': 'کم از کم 12 حروف رکھیں۔ چند عام الفاظ ملا کر مضبوط پاس ورڈ بن جاتا ہے۔', 'inv2.new': 'نیا پاس ورڈ', 'inv2.again': 'نیا پاس ورڈ دوبارہ', 'inv2.set': 'پاس ورڈ محفوظ کریں', 'inv2.done': 'آپ کا پاس ورڈ محفوظ ہو گیا۔ اب سائن اِن کریں۔',
@@ -507,4 +550,5 @@ export const ur: Record<Key, string> = {
   'rp.r.payment-accounts': 'ادائیگی کھاتے', 'rp.d.payment-accounts': 'ہر کھاتے میں آنے جانے والی رقم، اور جو کھاتے کمپنی کے نہیں ان پر نشان۔',
   'err.RANGE_TOO_LONG': 'کم مدت چنیں (زیادہ سے زیادہ 400 دن)۔',
   'rp.badPeriod': 'تاریخیں دیکھیں: آخری تاریخ شروع سے پہلے نہیں ہو سکتی۔',
+  ...uxUr,
 };

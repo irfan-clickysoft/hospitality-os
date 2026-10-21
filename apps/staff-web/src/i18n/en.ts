@@ -1,3 +1,4 @@
+import { uxEn } from './ux.js';
 /** English strings. Urdu (ur.ts) must define exactly the same keys — the compiler and a test enforce it. */
 export const en = {
   'app.name': 'Sunset Staff',
@@ -203,7 +204,7 @@ export const en = {
   'chg.post': 'Add to bill',
   'chg.FNB': 'Food & beverage',
   'chg.LAUNDRY': 'Laundry',
-  'chg.TRANSPORT': 'Transport',
+  'chg.FNB_DIGITAL': 'Food & beverage (paid digitally)', 'chg.TRANSPORT_OWNED': 'Transport (our own vehicle)', 'chg.TRANSPORT_THIRDPARTY': 'Transport (hired from a third party)',
   'chg.MINIBAR': 'Minibar',
   'chg.MISC': 'Other',
   'fo.projection': 'To be added tonight: {due}. Balance at the end of the stay: {end}.',
@@ -347,7 +348,7 @@ export const en = {
   'tax.noneConfigured': 'No tax is set up. Bills and invoices show no tax until a rate is approved.',
   'tax.s.DRAFT': 'Draft', 'tax.s.ACTIVE': 'In use', 'tax.s.REJECTED': 'Rejected', 'tax.s.RETIRED': 'Retired',
   'tax.openEnded': 'no end date', 'tax.res.ANY': 'All guests', 'tax.res.RESIDENT': 'Residents', 'tax.res.NON_RESIDENT': 'Foreign guests',
-  'tax.txn.ROOM': 'Room', 'tax.txn.ROOM_EXTRAS': 'Extra bed / person', 'tax.txn.FNB': 'Food & drink', 'tax.txn.LAUNDRY': 'Laundry', 'tax.txn.TRANSPORT': 'Transport', 'tax.txn.MINIBAR': 'Minibar', 'tax.txn.MISC': 'Other', 'tax.txn.CANCEL_FEE': 'Cancellation fee', 'tax.txn.NOSHOW_FEE': 'No-show fee',
+  'tax.txn.ROOM': 'Room', 'tax.txn.ROOM_EXTRAS': 'Extra bed / person', 'tax.txn.HALL': 'Conference room', 'tax.txn.FNB_DIGITAL': 'Food & drink (paid digitally)', 'tax.txn.TRANSPORT_OWNED': 'Transport (own vehicle)', 'tax.txn.TRANSPORT_THIRDPARTY': 'Transport (third party)', 'tax.txn.FNB': 'Food & drink', 'tax.txn.LAUNDRY': 'Laundry', 'tax.txn.TRANSPORT': 'Transport', 'tax.txn.MINIBAR': 'Minibar', 'tax.txn.MISC': 'Other', 'tax.txn.CANCEL_FEE': 'Cancellation fee', 'tax.txn.NOSHOW_FEE': 'No-show fee',
   'tax.advisorRef': 'Tax advisor reference', 'tax.legalBasis': 'Legal basis', 'tax.approve': 'Approve', 'tax.reject': 'Reject', 'tax.retire': 'Stop using',
   'tax.otherMustApprove': 'Another person must approve this.', 'tax.newVersion': 'New rate', 'tax.newCode': 'New tax', 'tax.code': 'Code', 'tax.name': 'Name', 'tax.jurisdiction': 'Jurisdiction code',
   'tax.ratePercent': 'Rate (%)', 'tax.from': 'Starts on', 'tax.to': 'Ends on (optional)', 'tax.residency': 'Applies to',
@@ -472,6 +473,48 @@ export const en = {
   'err.MENU_ITEM_UNAVAILABLE': 'An item is not available.',
   'err.NOT_READY': 'The kitchen has not marked this order ready.',
   'err.ALREADY_DELIVERED': 'This order is already on the guest’s bill. Reverse the charges on the bill instead.',
+  'kt.payDigital': 'The guest will pay digitally (card, wallet or bank) — taxed at the digital rate', 'kt.digital': 'digital',
+  'cr.title': 'Charges to review', 'cr.none': 'No charges are waiting for review.', 'cr.k.WHT_REVIEW': 'Withholding-tax review', 'cr.k.VENDOR_VERIFICATION': 'Vendor verification', 'cr.done': 'Mark reviewed', 'cr.note': 'What did you check? (kept on record)',
+  'err.ALREADY_DONE': 'This review is already closed.',
+  // rates screen
+  'nav.rates': 'Rates', 'rt.weekend': 'Which days are the weekend?', 'rt.weekendHelp': 'Rooms with a weekend price use it on these nights.', 'rt.price': 'Price per night', 'rt.weekendPrice': 'Weekend price', 'rt.sameAsWeekday': 'same as weekday',
+  'rt.extraAdult': 'Extra adult', 'rt.extraChild': 'Extra child', 'rt.maxAdults': 'Most adults', 'rt.maxPeople': 'Most people', 'rt.extraBed': 'Extra bed (per night, whole plan)', 'rt.save': 'Save prices', 'rt.taxNote': 'Prices are before tax. Tax is added from the approved tax setup.',
+  'rt.derived': 'This plan is worked out from “{parent}”.', 'rt.percent': 'Percent above (or below, with a minus) the other plan', 'rt.fixedDerive': 'This plan adds a fixed amount to the other plan; change that under setup.',
+  // rooms screen
+  'nav.rooms': 'Rooms', 'rm.add': 'Add a room', 'rm.edit': 'Edit', 'rm.save': 'Save', 'rm.noFloor': 'No floor', 'rm.retired': 'Out of use', 'rm.number': 'Room number', 'rm.type': 'Room type', 'rm.floor': 'Floor', 'rm.accessible': 'Accessible room', 'rm.smoking': 'Smoking room', 'rm.inUse': 'In use (untick to retire the room)',
+  'rm.note': 'Changing a number does not change past bills or invoices. A room with guests assigned cannot be retired.',
+  'err.DUPLICATE_ROOM': 'Another room already has that number.', 'err.ROOM_IN_USE': 'This room has current or future guests assigned. Move them first.', 'err.ROOM_HAS_BLOCKS': 'Cancel this room’s blocks before retiring it.',
+  // cash safe
+  'safe.title': 'Safe (cash waiting for head office)', 'safe.help': 'Each closed register adds its day’s envelope: what was counted, less the float left in the drawer, plus anything dropped into the safe. Handovers take cash out. The cash is not banked.', 'safe.handover': 'Hand over to head office',
+  'safe.envelopes': 'Envelopes (by day and register)', 'safe.variance': 'difference', 'safe.handovers': 'Handed over so far', 'safe.inSafe': 'The safe should hold', 'safe.amount': 'Amount handed over', 'safe.receivedBy': 'Received by', 'safe.title2': 'Role',
+  'safe.why': 'Why is it less than the whole safe?', 'safe.count': 'Count the cash and the envelopes with the person receiving it. This is recorded for good.', 'safe.confirm': 'Record handover',
+  'err.SAFE_CHANGED': 'The safe balance has changed since you looked. Check the new balance and try again.', 'err.HANDOVER_EXCEEDS_SAFE': 'That is more cash than the envelopes say the safe holds.',
+  'safe.print': 'Print receipt',
+  // gate
+  'nav.gate': 'Gate', 'd.regCard': 'Registration card', 'gt.log': 'Log someone in', 'gt.in': 'Log in', 'gt.out': 'Gone out', 'gt.expected': 'Expected today', 'gt.inHouse': '{n} in the house', 'gt.noArrivals': 'No arrivals expected today.', 'gt.people': 'people', 'gt.arrived': 'Arrived', 'gt.coming': 'Expected',
+  'gt.here': 'At the property now', 'gt.nobody': 'Nobody logged in.', 'gt.today': 'Gone out today', 'gt.visiting': 'Visiting', 'gt.name': 'Name', 'gt.plate': 'Vehicle number', 'gt.phone': 'Phone', 'gt.purpose': 'Purpose', 'gt.id4': 'Last 4 of the ID shown (if any)',
+  'gt.privacy': 'Only the last four characters of an ID are kept, never the whole number.', 'gt.k.VISITOR': 'Visitor', 'gt.k.VEHICLE': 'Vehicle', 'gt.k.DELIVERY': 'Delivery', 'gt.k.CONTRACTOR': 'Contractor',
+  // conference room
+  'nav.spaces': 'Conference room', 'sp.v.calendar': 'Calendar', 'sp.v.spaces': 'Spaces and prices', 'sp.newHire': 'New hire', 'sp.nothing': 'No hires in the next two weeks.', 'sp.noSpaces': 'No space is set up yet. Ask a manager to add the conference room under Spaces and prices.',
+  'sp.creditNote': 'Credit note',
+  'sp.s.BOOKED': 'Booked', 'sp.s.COMPLETED': 'Done', 'sp.s.CANCELLED': 'Cancelled', 'sp.people': '{n} people', 'sp.beforeTax': 'before tax', 'sp.p.HOURLY': 'Per hour', 'sp.p.HALF_DAY': 'Half day (up to 4 h)', 'sp.p.FULL_DAY': 'Full day (up to 12 h)',
+  'sp.onStay': 'Charged to the stay of {guest} ({no})', 'sp.ownBill': 'Own bill {no}', 'sp.complete': 'Hire done — put on the bill', 'sp.takePayment': 'Take payment', 'sp.cancelWhy': 'Why is it cancelled?',
+  'sp.space': 'Space', 'sp.event': 'What is the event?', 'sp.host': 'Booked by', 'sp.phone': 'Phone', 'sp.date': 'Date', 'sp.people2': 'People', 'sp.from': 'From', 'sp.to': 'Until',
+  'sp.bill.SEPARATE': 'Not staying with us — own bill', 'sp.bill.STAY': 'Staying guest — add to their bill', 'sp.stay': 'Which stay?', 'sp.ownBillNote': 'The hire gets a bill of its own. Take a deposit or payment on it from here.',
+  'sp.taxNote': 'Prices are before tax; tax is added from the tax setup when the hire is done. {n} minutes are kept free after each hire.', 'sp.book': 'Book', 'sp.addSpace': 'Add space', 'sp.buffer': 'Minutes kept free after a hire', 'sp.newPrice': 'New price (leave empty if not sold this way)',
+  'err.SPACE_TAKEN': 'The room is already booked at that time (including the changeover time).', 'err.NOT_STARTED': 'This hire has not started yet.', 'err.PRICING_NOT_OFFERED': 'This space is not sold that way. Choose another price.',
+  'err.TOO_LONG_FOR_HALF_DAY': 'A half day is up to 4 hours. Use the full-day price.', 'err.TOO_LONG_FOR_FULL_DAY': 'A full day is up to 12 hours.', 'err.TIME_RANGE_INVALID': 'The hire must end after it starts, on the same day.',
+  'err.TOO_SHORT': 'The shortest hire is 30 minutes.', 'err.DATE_IN_PAST': 'That date has already passed.', 'err.SPACE_INACTIVE': 'This space is not being hired out.', 'err.STAY_NOT_ACTIVE': 'That stay is not in the house or coming. Use an own bill instead.',
+  'err.BILL_HAS_PAYMENTS': 'Money has been taken on this hire’s bill. Refund it first, then cancel.', 'err.ALREADY_COMPLETED': 'This hire is already on the bill. Reverse the charge on the bill instead.',
+  'err.NOT_A_SEPARATE_BILL': 'This hire is on a guest’s stay. Use the stay’s bill instead.', 'err.HIRE_NOT_DONE': 'Mark the hire done first, so there is something on its bill.',
+  'grp.label': 'Switch area', 'grp.front': 'Front desk', 'grp.house': 'Housekeeping', 'grp.money': 'Money', 'grp.manage': 'Management',
+  'sp.change': 'Change', 'sp.save': 'Save', 'sp.changeNote': 'The price is worked out again for the new time, and the room is checked for clashes.',
+  // readiness
+  'nav.readiness': 'Setup check', 'rd.summary': '{a} to do · {n} to look at · {o} fine', 'rd.business': 'Whole business', 'rd.s.OK': 'Fine', 'rd.s.ACTION': 'To do', 'rd.s.NOTE': 'Look at',
+  'rd.ENTITY_NTN': 'Company NTN entered (goes on every tax invoice)', 'rd.ENTITY_STRN': 'Company STRN entered (goes on every tax invoice)', 'rd.STAFF_MFA': 'Staff without a second factor: {n}',
+  'rd.TAX_JURISDICTION': 'Tax area chosen for this property (until then charges are not taxed)', 'rd.TAX_RATES': 'Approved tax rate in force for this property’s tax area (until then charges are not taxed)',
+  'rd.RATES': 'Nightly price for every room type (room types without one: {n})', 'rd.ROOMTYPE_EMPTY': 'Room types that have no rooms yet: {n}', 'rd.EXTRAS': 'Extra-person prices (room types where an extra person is free: {n})',
+ 'rd.PAYMENT_ACCOUNTS': 'A payment account to receive money into', 'rd.MENU': 'Kitchen menu has items', 'rd.SPACES': 'Conference room set up with prices',
   // staff, account, audit
   'nav.staff': 'Staff', 'nav.audit2': 'Audit trail', 'acct.title': 'My account',
   'inv2.title': 'Choose your password', 'inv2.help': 'Use at least 12 characters. A few ordinary words together make a strong password.', 'inv2.new': 'New password', 'inv2.again': 'New password again', 'inv2.set': 'Save password', 'inv2.done': 'Your password is saved. You can sign in now.',
@@ -505,5 +548,6 @@ export const en = {
   'rp.r.payment-accounts': 'Payment accounts', 'rp.d.payment-accounts': 'Money in and out of each account, with accounts that are not the company’s marked.',
   'err.RANGE_TOO_LONG': 'Choose a shorter period (at most 400 days).',
   'rp.badPeriod': 'Check the dates: the end cannot be before the start.',
+  ...uxEn,
 } as const;
 export type Key = keyof typeof en;

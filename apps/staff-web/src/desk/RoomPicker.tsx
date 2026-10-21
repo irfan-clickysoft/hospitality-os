@@ -15,12 +15,12 @@ export function RoomPicker({ roomTypeId, arrival, departure, value, onChange }: 
   if (!free.data || !rack.data) return <Spinner />;
   const ids = new Set(free.data.items.map((i) => i.id));
   return (
-    <ul className="plain room-picker" role="listbox" aria-label={t('d.chooseRoom')}>
+    <ul className="plain room-picker" aria-label={t('d.chooseRoom')}>
       {rooms.map((r) => {
         const isFree = ids.has(r.id); const busyNow = r.occupancy !== 'VACANT';
         return (
           <li key={r.id}>
-            <button type="button" role="option" aria-selected={value === r.id} className={`wide pick${value === r.id ? ' on' : ''}`} disabled={!isFree} onClick={() => onChange(r.id, r.hkStatus)}>
+            <button type="button" aria-pressed={value === r.id} className={`wide pick${value === r.id ? ' on' : ''}`} disabled={!isFree} onClick={() => onChange(r.id, r.hkStatus)}>
               <strong>{r.number}</strong> <HkBadge status={r.hkStatus} /> {busyNow && isFree && <span className="muted small">{t(`occ.${r.occupancy}` as Key)}</span>} {!isFree && <span className="muted small">{t('d.notFree')}</span>}
             </button>
           </li>

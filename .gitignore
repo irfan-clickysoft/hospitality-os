@@ -5,3 +5,6 @@ dist
 .env.*
 !.env.example
 coverage
+backups/
+.local/
+apps/staff-web/*.png

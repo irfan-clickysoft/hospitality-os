@@ -1,6 +1,6 @@
 :root {
   --bg: #f6f4ef; --card: #ffffff; --ink: #1d2a30; --muted: #5d6b72; --line: #dcd7cb; --brand: #0f4c5c; --brand-ink: #ffffff; --accent: #f4a259;
-  --dirty: #c8553d; --dirty-bg: #fbe3dd; --cleaning: #b7791f; --cleaning-bg: #fdf0d2; --clean: #2f7d4f; --clean-bg: #dff2e5; --inspected: #1d5fa8; --inspected-bg: #dbe9f9;
+  --dirty: #a4262c; --dirty-bg: #fde8e8; --cleaning: #8a4b00; --cleaning-bg: #fdf0d9; --clean: #1e6b3a; --clean-bg: #e6f4ea; --inspected: #0b5cad; --inspected-bg: #e4effa;
   --urgent: #a4161a; --warn-bg: #fff3cd; --radius: 14px; --tap: 48px;
 }
 @media (prefers-color-scheme: dark) {
@@ -31,6 +31,10 @@ label { display: block; font-size: .9rem; color: var(--muted); } label > input, 
 .banner { padding: 8px 14px; background: var(--inspected-bg); color: var(--ink); font-size: .9rem; } .banner.warn { background: var(--warn-bg); }
 .content { flex: 1; padding: 14px 14px 96px; width: 100%; max-width: 760px; margin: 0 auto; }
 .tabs { position: fixed; inset-inline: 0; bottom: 0; display: flex; background: var(--card); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); z-index: 6; }
+.tabs .grp { display: none; }
+.groupsel { color: var(--brand-ink); background: transparent; border: 1px solid rgba(255,255,255,.4); border-radius: 8px; min-height: 36px; padding: 0 6px; }
+.groupsel option { color: #000; }
+.tabs button:not(.ingroup) { display: none; }
 .tabs button { flex: 1; border: 0; border-radius: 0; min-height: 60px; background: transparent; font-size: .9rem; } .tabs button.on { color: var(--brand); font-weight: 700; box-shadow: inset 0 3px 0 var(--brand); }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; } .card.inner { margin-block: 8px; background: var(--bg); }
 .cards { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 12px; }
@@ -94,9 +98,11 @@ a.button { display: inline-flex; align-items: center; min-height: var(--tap); pa
   .shell { display: grid; grid-template-columns: 220px 1fr; grid-template-rows: auto auto auto 1fr; }
   .top, .banner { grid-column: 1 / -1; }
   .tabs { position: sticky; top: 56px; grid-row: 4; grid-column: 1; flex-direction: column; align-self: start; height: calc(100dvh - 56px); border-top: 0; border-inline-end: 1px solid var(--line); padding: 8px; gap: 4px; overflow-y: auto; }
+  .groupsel { display: none; } .tabs button:not(.ingroup) { display: block; } .top .who { flex-direction: row; align-items: center; gap: 12px; }
+  .tabs .grp { display: block; padding: 14px 14px 4px; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted, #666); }
   .tabs button { flex: none; min-height: 48px; text-align: start; border-radius: 10px; padding-inline: 14px; font-size: 1rem; } .tabs button.on { box-shadow: none; background: var(--inspected-bg); }
   .content { grid-column: 2; max-width: 1200px; padding-bottom: 32px; }
   .sheet { max-width: 720px; border-radius: 20px; align-self: center; max-height: 92dvh; } .sheet-wrap { align-items: center; }
   .tiles { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
 }
-@media (max-width: 899px) { .tabs { overflow-x: auto; } .tabs button { flex: 1 0 auto; min-width: 84px; padding: 0 10px; } }
+@media (max-width: 899px) { .top { flex-wrap: wrap; } .top .who { flex: 1 1 100%; } .top .row { flex-wrap: wrap; gap: 4px 12px; } .tabs { overflow-x: auto; } .tabs button { flex: 1 0 auto; min-width: 84px; padding: 0 10px; } }

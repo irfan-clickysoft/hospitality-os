@@ -91,7 +91,7 @@ export class FnbService {
   }
   private async view(trx: Trx, o: Order) {
     const lines = await trx.selectFrom('fnb_order_line').selectAll().where('order_id', '=', o.id).orderBy('name').execute();
-    return { id: o.id, number: o.number, status: o.status, room: o.room_number, guest: o.guest_name, reservationId: o.reservation_id, note: o.note, total: fmt(o.total_minor, o.currency), createdAt: o.created_at, readyAt: o.ready_at, deliveredAt: o.delivered_at,
+    return { id: o.id, number: o.number, payDigitally: o.pay_digital, status: o.status, room: o.room_number, guest: o.guest_name, reservationId: o.reservation_id, note: o.note, total: fmt(o.total_minor, o.currency), createdAt: o.created_at, readyAt: o.ready_at, deliveredAt: o.delivered_at,
       businessDate: o.business_date, cancelReason: o.cancel_reason, version: o.version, lines: lines.map((l) => ({ id: l.id, name: l.name, quantity: l.quantity, unitPrice: fmt(l.unit_price_minor, o.currency), total: fmt(l.line_minor, o.currency), note: l.note, posted: !!l.posting_id })) };
   }
   async create(propertyId: string, userId: string, i: z.infer<typeof S.CreateOrder>) {
@@ -118,7 +118,7 @@ export class FnbService {
       const seq = (await sql<{ v: string }>`INSERT INTO property_counter (tenant_id, property_id, name, value) VALUES (${currentTenant().tenantId}, ${propertyId}, 'fnb', 1)
         ON CONFLICT (tenant_id, property_id, name) DO UPDATE SET value = property_counter.value + 1 RETURNING value::text AS v`.execute(trx)).rows[0]!.v;
       const o = await trx.insertInto('fnb_order').values({ tenant_id: currentTenant().tenantId, property_id: propertyId, number: `${p.code}-FB${seq.padStart(5, '0')}`, reservation_id: stay.reservation_id, reservation_room_id: stay.id, folio_id: folio.id,
-        room_number: stay.room, guest_name: stay.guest, note: i.note ?? null, total_minor: total.toString(), currency: p.currency, created_by: userId } as never).returningAll().executeTakeFirstOrThrow();
+        room_number: stay.room, guest_name: stay.guest, note: i.note ?? null, pay_digital: i.payDigitally, total_minor: total.toString(), currency: p.currency, created_by: userId } as never).returningAll().executeTakeFirstOrThrow();
       await trx.insertInto('fnb_order_line').values(lines.map((l) => ({ tenant_id: currentTenant().tenantId, order_id: o.id, menu_item_id: l.menuItemId, name: l.name, quantity: l.quantity, unit_price_minor: l.unit.toString(), line_minor: l.lineMinor.toString(), note: l.note })) as never).execute();
       await this.audit.record(trx, { action: 'fnb.order_create', resourceType: 'fnb_order', resourceId: o.id, propertyId, after: { number: o.number, room: stay.room, total: total.toString() } });
       await this.outbox.publish(trx, { aggregateType: 'fnb_order', aggregateId: o.id, eventType: 'FnbOrderPlaced', propertyId, businessDate: p.business_date, payload: { orderId: o.id, number: o.number, room: stay.room } });
@@ -160,7 +160,7 @@ export class FnbService {
       for (const l of lines) {
         const amount = BigInt(l.line_minor);
         if (amount === 0n) continue;                                              // a complimentary item has nothing to charge
-        const postingId = await this.folios.post(trx, { folioId: o.folio_id, propertyId: pid, currency: o.currency, type: 'CHARGE', txnCode: 'FNB', amount, quantity: l.quantity, unitPrice: BigInt(l.unit_price_minor), businessDate: bd, sourceType: 'FNB_ORDER', sourceRef: l.id,
+        const postingId = await this.folios.post(trx, { folioId: o.folio_id, propertyId: pid, currency: o.currency, type: 'CHARGE', txnCode: o.pay_digital ? 'FNB_DIGITAL' : 'FNB', amount, quantity: l.quantity, unitPrice: BigInt(l.unit_price_minor), businessDate: bd, sourceType: 'FNB_ORDER', sourceRef: l.id,
           lineId: o.reservation_room_id, description: `${o.number} · ${l.name}`, idempotencyKey: `fnb:${o.id}:${l.id}`, userId });
         await trx.updateTable('fnb_order_line').set({ posting_id: postingId } as never).where('id', '=', l.id).execute();
       }

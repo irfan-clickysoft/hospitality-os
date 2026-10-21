@@ -7,12 +7,14 @@ import { money, newKey } from '../lib/format.js';
 import { useAuth } from '../state.js';
 import { AccountPicker } from './AccountPicker.js';
 import { ErrorLine, Sheet } from '../ui/kit.js';
+import { SidePanel } from '../ui/ds.js';
 import type { Amount } from './types.js';
 
 const METHODS = ['CASH', 'CARD_SLIP', 'WALLET', 'BANK_TRANSFER'] as const;
 
-/** Takes a payment or deposit. The key is made once per opening of the sheet, so a double tap or a retry can never take the money twice. */
-export function PaymentSheet({ reservationId, balance, defaultKind = 'PAYMENT', onDone, onClose }: { reservationId: string; balance: Amount | null; defaultKind?: 'PAYMENT' | 'DEPOSIT'; onDone: () => void; onClose: () => void }) {
+/** Takes a payment or deposit (as a side panel inside the workspace, as a bottom sheet elsewhere). The key is made once per opening of the sheet, so a double tap or a retry can never take the money twice. */
+export function PaymentSheet({ reservationId, folioId, balance, defaultKind = 'PAYMENT', asPanel = false, onDone, onClose }: { reservationId?: string; folioId?: string; balance: Amount | null; defaultKind?: 'PAYMENT' | 'DEPOSIT'; asPanel?: boolean; onDone: () => void; onClose: () => void }) {
+  const Wrap = asPanel ? SidePanel : Sheet;
   const { t } = useT();
   const { property } = useAuth();
   const key = useMemo(newKey, []);
@@ -29,11 +31,11 @@ export function PaymentSheet({ reservationId, balance, defaultKind = 'PAYMENT', 
     if (method === 'BANK_TRANSFER' && counterparty.trim()) body.counterparty = counterparty.trim();
     if (note.trim()) body.note = note.trim();
     if (account && method !== 'CASH') body.paymentAccountId = account;
-    const r = await run(() => api<{ payment: { status: string } }>('POST', `/v1/properties/${property!.id}/reservations/${reservationId}/payments`, body, { 'idempotency-key': key }));
+    const r = await run(() => api<{ payment: { status: string } }>('POST', folioId ? `/v1/properties/${property!.id}/folios/${folioId}/payments` : `/v1/properties/${property!.id}/reservations/${reservationId}/payments`, body, { 'idempotency-key': key }));
     if (r) { if (r.payment.status === 'PENDING_VERIFICATION') setPending(true); else { onDone(); onClose(); } }
   };
   return (
-    <Sheet title={t('pay.title')} onClose={onClose}>
+    <Wrap title={t('pay.title')} onClose={onClose}>
       {balance && <p className="muted">{t('pay.balance')}: <strong>{money(balance)}</strong></p>}
       {pending ? (<><p className="ok" role="status">{t('pay.pendingNote')}</p><div className="actions"><button className="primary" onClick={() => { onDone(); onClose(); }}>{t('common.close')}</button></div></>) : (<>
         <div className="chips" role="group">{METHODS.map((m) => <button key={m} type="button" className={`chip${m === method ? ' on' : ''}`} aria-pressed={m === method} onClick={() => setMethod(m)}>{t(`pay.m.${m}` as Key)}</button>)}</div>
@@ -47,6 +49,6 @@ export function PaymentSheet({ reservationId, balance, defaultKind = 'PAYMENT', 
         <ErrorLine code={problem?.code} detail={problem?.detail} />
         <div className="actions"><button className="primary" disabled={busy || !amount.trim()} onClick={submit}>{t('pay.take')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>
       </>)}
-    </Sheet>
+    </Wrap>
   );
 }

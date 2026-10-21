@@ -265,6 +265,52 @@ describe('cancellation (72-hour rule), waiver, no-show, reinstatement', () => {
     expect((await avail(w, 'STD', '2026-11-05')).reserved).toBe(0);
   });
 
+  it('a hold runs in half-hour steps, whole days, or until a date — and never past the day before arrival', async () => {
+    const w = await sunset();
+    const body = (hold: Record<string, unknown>) => ({ body: { hold } });
+    expect((await book(w, body({ minutes: 45 }))).statusCode).toBe(400);                                  // not a half-hour step
+    expect((await book(w, body({ minutes: 15 }))).statusCode).toBe(400);
+    expect((await book(w, body({ days: 31 }))).statusCode).toBe(400);
+    expect((await book(w, body({ days: 2, minutes: 30 }))).statusCode).toBe(400);                         // one way of saying it
+    const d = await ok(book(w, body({ days: 3 })), 201);
+    expect(new Date(d.optionExpiresAt).getTime() - testClock.now()).toBeGreaterThan(2.9 * 86_400_000);
+    expect(new Date(d.optionExpiresAt).getTime() - testClock.now()).toBeLessThan(3.1 * 86_400_000);
+    const u = await ok(book(w, body({ untilDate: '2026-11-03' })), 201);                                  // arrival is 2026-11-05
+    expect(new Date(u.optionExpiresAt).toISOString()).toBe('2026-11-03T19:00:00.000Z');                   // midnight Karachi, end of the 3rd
+    const late = await book(w, body({ untilDate: '2026-11-05' }));
+    expect(late.statusCode).toBe(422);
+    expect(late.json().code).toBe('HOLD_PAST_ARRIVAL');
+    const past = await book(w, body({ untilDate: '2026-10-01' }));
+    expect(past.json().code).toBe('HOLD_INVALID');
+  });
+
+  it('a discount can differ night by night: deep on the empty first night, lighter after', async () => {
+    const w = await sunset();
+    const opt = await quoteOpt(w, 'STD', 'BAR', { arrival: '2026-11-05', departure: '2026-11-08', discountPct: 10, nightDiscounts: [{ date: '2026-11-05', pct: 40 }] });
+    expect(opt.nights.map((x: any) => x.discountPct)).toEqual([40, 10, 10]);
+    const gross = opt.nights.map((x: any) => Number(x.total.replace(/,/g, '')));
+    const paid = opt.nights.map((x: any) => Number(x.payable.replace(/,/g, '')));
+    expect(paid[0]).toBeCloseTo(gross[0] * 0.6, 2);
+    expect(paid[1]).toBeCloseTo(gross[1] * 0.9, 2);
+    expect(Number(opt.totalExTax.amount)).toBeCloseTo(paid.reduce((a: number, b: number) => a + b, 0), 2);
+    const bad = await call('POST', `/v1/properties/${w.pid}/quotes`, O, { arrival: '2026-11-05', departure: '2026-11-07', adults: 2, nightDiscounts: [{ date: '2026-11-09', pct: 20 }] });
+    expect(bad.statusCode).toBe(422);
+    const r = await ok(book(w, { quote: { arrival: '2026-11-05', departure: '2026-11-08', discountPct: 10, nightDiscounts: [{ date: '2026-11-05', pct: 40 }] } }), 201);
+    const billed = r.lines[0].nightPrices.map((x: any) => Number(x.total.replace(/,/g, '')));
+    expect(billed[0]).toBeCloseTo(paid[0], 2);
+    expect(Number(r.lines[0].total.amount.replace(/,/g, ''))).toBeCloseTo(paid.reduce((a: number, b: number) => a + b, 0), 2);
+  });
+
+  it('the deepest night decides whether a person may give the discount', async () => {
+    const w = await sunset();
+    const u = await addUser(T.tenantId, `nlim${++n}@resv.test`); await assignRole(T.tenantId, u, 'front_desk_agent', 'PROPERTY', w.pid, { limits: { maxDiscountPct: 10 } });
+    const lim = as(T.tenantId, u);
+    const q = (await call('POST', `/v1/properties/${w.pid}/quotes`, lim, { arrival: '2026-11-05', departure: '2026-11-07', adults: 2, discountPct: 5, nightDiscounts: [{ date: '2026-11-05', pct: 40 }] })).json();
+    const std = q.options.find((o: any) => o.roomType.code === 'STD');
+    expect(std.quoteToken).toBeNull();
+    expect(std.bookable).toBe(false);
+  });
+
   it('cancelling an unconfirmed option never carries a fee', async () => {
     const w = await sunset();
     const r = await ok(book(w, { body: { hold: { minutes: 120 } } }), 201);
