@@ -22,7 +22,7 @@ export class MaintenanceController {
   @Post('work-orders') @RequirePermission('maintenance.request', P)
   create(@Param('propertyId', uuid()) pid: string, @Body() body: unknown) { return this.svc.create(pid, me(), parse(S.CreateOrder, body)); }
   @Get('work-orders/:id') @RequirePermission('maintenance.view', P)
-  get(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string) { return this.svc.get(pid, id); }
+  get(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string) { return this.svc.get(pid, id, me()); }
   @Post('work-orders/:id/assign') @RequirePermission('maintenance.manage', P) @HttpCode(200)
   assign(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Body() body: unknown) { return this.svc.assign(pid, id, me(), parse(S.Assign, body)); }
   @Post('work-orders/:id/approve') @RequirePermission('maintenance.approve', P) @HttpCode(200)
