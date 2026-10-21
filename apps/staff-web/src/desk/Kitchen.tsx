@@ -9,6 +9,7 @@ import { Badge, Chip, Empty, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 import type { Amount } from './types.js';
 import { ItemCard, type Card, type Tree } from './Menus.js';
 import { RecipeCard } from './Recipes.js';
+import { DocButtons } from './Documents.js';
 
 interface OrderLine { id: string; menuItemId: string; name: string; variant: string | null; modifiers: Array<{ name: string }>; removed: string[]; quantity: number; total: Amount; note: string | null }
 interface Order { id: string; number: string; payDigitally: boolean; status: string; room: string; guest: string; note: string | null; total: Amount; createdAt: string; cancelReason: string | null; lines: OrderLine[] }
@@ -39,6 +40,7 @@ export function Kitchen() {
             <div className="row between"><strong>{t('d.room')} {o.room} · {o.guest}</strong><Badge tone={tone(o.status)}>{t(`kt.s.${o.status}` as Key)}</Badge></div>
             <span className="muted">{o.number} · {t('kt.minutes', { n: age(o.createdAt) })} · {money(o.total)}{o.payDigitally ? ` · ${t('kt.digital')}` : ''}</span>
             <ul className="plain">{o.lines.map((l) => <li key={l.id}><strong>{l.quantity} ×</strong> {l.name}{l.variant ? ` (${l.variant})` : ''}{l.modifiers.length ? ` + ${l.modifiers.map((m) => m.name).join(', ')}` : ''}{l.removed.length ? ` — ${t('kt.no')} ${l.removed.join(', ')}` : ''}{l.note ? <span className="muted"> — {l.note}</span> : null} <button className="link" onClick={() => setCard({ itemId: l.menuItemId, name: l.name })}>{t('rc.howTo')}</button></li>)}</ul>
+            <DocButtons kind="order" refId={o.id} labels={{ open: 'doc.printSlip' }} />
             {o.note && <span className="warnbox">{o.note}</span>}{o.cancelReason && <span className="muted">{o.cancelReason}</span>}
             {['NEW', 'PREPARING', 'READY'].includes(o.status) && (
               <div className="row">

@@ -15,6 +15,7 @@ interface Status { property: Prop & { version: number; weekendDays: number[] }; 
 interface Floor { id: string; name: string }
 interface RoomType { id: string; code: string; name: string; description: string | null; maxAdults: number; maxChildren: number; maxOccupancy: number; baseOccupancy: number; bedConfig: string | null; sizeSqm: number | null; status: string; version: number; amenityIds: string[] }
 interface Amenity { id: string; code: string; nameEn: string; nameUr: string | null; category: string }
+import { Branding } from './Branding.js';
 const ZONES = ['Asia/Karachi', 'Asia/Dubai', 'Asia/Riyadh', 'Europe/London', 'America/New_York', 'UTC'];
 const DAYS: Array<[number, Key]> = [[1, 'ps.d1'], [2, 'ps.d2'], [3, 'ps.d3'], [4, 'ps.d4'], [5, 'ps.d5'], [6, 'ps.d6'], [7, 'ps.d7']];
 const codeFrom = (name: string) => name.replace(/[^A-Za-z0-9]+/g, '').toUpperCase().slice(0, 6);
@@ -154,6 +155,7 @@ function Details({ prop, onSaved }: { prop: Status['property']; onSaved: () => v
         <label className="check"><input type="checkbox" checked={f.strict} onChange={(e) => edit({ strict: e.target.checked })} /> {t('ps.strict')}</label><p className="hint">{t('ps.strictHint')}</p>
         <label className="check"><input type="checkbox" checked={f.nicop} onChange={(e) => edit({ nicop: e.target.checked })} /> {t('ps.nicop')}</label><p className="hint">{t('ps.nicopHint')}</p>
       </fieldset>
+      <Branding prop={prop as never} onSaved={onSaved} />
       <datalist id="zones2">{ZONES.map((z) => <option key={z} value={z} />)}</datalist>
       <fieldset className="guestcard"><legend>{t('ps.weekend')}</legend><div className="chips">{DAYS.map(([d, k]) => <label key={d} className="check"><input type="checkbox" checked={f.weekend.includes(d)} onChange={() => toggle(d)} /> {t(k)}</label>)}</div><p className="hint">{t('ps.weekendHint')}</p></fieldset>
       <ErrorLine code={problem?.code} detail={problem?.detail} />

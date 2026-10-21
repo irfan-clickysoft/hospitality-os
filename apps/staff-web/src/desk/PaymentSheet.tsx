@@ -7,6 +7,7 @@ import { money, newKey } from '../lib/format.js';
 import { useAuth } from '../state.js';
 import { AccountPicker } from './AccountPicker.js';
 import { GuestMessage } from './GuestMessage.js';
+import { AttachSlip, DocButtons } from './Documents.js';
 import { ErrorLine, Sheet } from '../ui/kit.js';
 import { SidePanel } from '../ui/ds.js';
 import type { Amount } from './types.js';
@@ -23,7 +24,7 @@ export function PaymentSheet({ reservationId, folioId, balance, defaultKind = 'P
   const [method, setMethod] = useState<(typeof METHODS)[number]>('CASH'); const [kind, setKind] = useState(defaultKind); const [amount, setAmount] = useState(defaultKind === 'PAYMENT' ? owes : '');
   const [reference, setReference] = useState(''); const [approval, setApproval] = useState(''); const [last4, setLast4] = useState(''); const [counterparty, setCounterparty] = useState(''); const [note, setNote] = useState('');
   const { busy, problem, run } = useAction();
-  const [pending, setPending] = useState(false); const [paid, setPaid] = useState<{ id: string; receiptNo: string | null } | null>(null); const [account, setAccount] = useState('');
+  const [pending, setPending] = useState<string | null>(null); const [paid, setPaid] = useState<{ id: string; receiptNo: string | null } | null>(null); const [account, setAccount] = useState('');
 
   const submit = async () => {
     const body: Record<string, unknown> = { kind, method, amount: amount.trim() };
@@ -33,7 +34,7 @@ export function PaymentSheet({ reservationId, folioId, balance, defaultKind = 'P
     if (note.trim()) body.note = note.trim();
     if (account && method !== 'CASH') body.paymentAccountId = account;
     const r = await run(() => api<{ payment: { id: string; status: string; receiptNo: string | null } }>('POST', folioId ? `/v1/properties/${property!.id}/folios/${folioId}/payments` : `/v1/properties/${property!.id}/reservations/${reservationId}/payments`, body, { 'idempotency-key': key }));
-    if (r) { if (r.payment.status === 'PENDING_VERIFICATION') setPending(true); else if (reservationId && offerReceipt) { setPaid(r.payment); onDone(); } else { onDone(); onClose(); } }
+    if (r) { if (r.payment.status === 'PENDING_VERIFICATION') setPending(r.payment.id); else if (reservationId && offerReceipt) { setPaid(r.payment); onDone(); } else { onDone(); onClose(); } }
   };
   return (
     <Wrap title={t('pay.title')} onClose={onClose}>
@@ -42,8 +43,9 @@ export function PaymentSheet({ reservationId, folioId, balance, defaultKind = 'P
         <p className="ok big" role="status">✓ {t('pay.recorded')}{paid.receiptNo ? ` · ${paid.receiptNo}` : ''}</p>
         <h3>{t('pay.sendReceipt')}</h3>
         <GuestMessage reservationId={reservationId!} event="PAYMENT_RECEIVED" paymentId={paid.id} />
+        <DocButtons kind="payment" refId={paid.id} />
         <div className="actions"><button className="primary" onClick={onClose}>{t('common.close')}</button></div>
-      </>) : pending ? (<><p className="ok" role="status">{t('pay.pendingNote')}</p><div className="actions"><button className="primary" onClick={() => { onDone(); onClose(); }}>{t('common.close')}</button></div></>) : (<>
+      </>) : pending ? (<><p className="ok" role="status">{t('pay.pendingNote')}</p><AttachSlip paymentId={pending} /><DocButtons kind="payment" refId={pending} /><div className="actions"><button className="primary" onClick={() => { onDone(); onClose(); }}>{t('common.close')}</button></div></>) : (<>
         <div className="chips" role="group">{METHODS.map((m) => <button key={m} type="button" className={`chip${m === method ? ' on' : ''}`} aria-pressed={m === method} onClick={() => setMethod(m)}>{t(`pay.m.${m}` as Key)}</button>)}</div>
         <div className="chips" role="group">{(['PAYMENT', 'DEPOSIT'] as const).map((k) => <button key={k} type="button" className={`chip${k === kind ? ' on' : ''}`} aria-pressed={k === kind} onClick={() => setKind(k)}>{t(`pay.k.${k}` as Key)}</button>)}</div>
         <label>{t('pay.amount')}<input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} dir="ltr" autoFocus /></label>
