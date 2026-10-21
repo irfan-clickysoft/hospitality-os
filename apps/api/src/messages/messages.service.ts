@@ -3,6 +3,7 @@ import { Money } from '@hos/domain-types';
 import { AuditService } from '../audit/audit.service.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { GuestPortalService } from '../guest-portal/guest-portal.service.js';
+import { DocumentsService } from '../documents/documents.service.js';
 import { TaxService } from '../tax/tax.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { CHANNELS, defaultTemplate, EVENTS, render, TITLES, unknownVariables, VARIABLES, type Channel, type MessageEvent } from './templates.js';
@@ -18,7 +19,7 @@ const METHOD: Record<string, string> = { CASH: 'Cash', CARD_SLIP: 'Card', WALLET
 
 @Injectable()
 export class MessagesService {
-  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(GuestPortalService) private readonly portal: GuestPortalService, @Inject(TaxService) private readonly tax: TaxService) {}
+  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(GuestPortalService) private readonly portal: GuestPortalService, @Inject(TaxService) private readonly tax: TaxService, @Inject(DocumentsService) private readonly docs: DocumentsService) {}
 
   /** Every message the system sends, with the wording in use (the owner's, or the built-in one). */
   async list() {
@@ -94,12 +95,14 @@ export class MessagesService {
       guest_name: `${i.salutation ? `${i.salutation} ` : ''}${g.full_name}`, property_name: place, property_address: p.city ?? null, property_contact: null, manager_name: actor?.full_name ?? null,
       booking_reference: r.confirmation_no, secure_link: `${(i.origin ?? process.env.PUBLIC_BASE_URL ?? '').replace(/\/$/, '')}/#/b/${token}`,
       check_in_date_time: arrival ? `${date(arrival)} at ${clock(String(p.check_in_time))}` : null, check_out_date_time: departure ? `${date(departure)} at ${clock(String(p.check_out_time))}` : null, maps_link: p.maps_url,
-      currency: cur, balance: bal > 0n ? amt(bal, cur) : null, amount: null, payment_method: null, payment_date: null, receipt_number: null,
+      currency: cur, balance: bal > 0n ? amt(bal, cur) : null, document_link: null, amount: null, payment_method: null, payment_date: null, receipt_number: null,
       ...i.extra,
     };
     if (pay) {
       vars.amount = amt(pay.amount_minor, pay.currency); vars.payment_method = METHOD[pay.method] ?? pay.method; vars.payment_date = date(pay.business_date); vars.receipt_number = pay.receipt_no;
     }
+    if ((i.event === 'PAYMENT_RECEIVED' || i.event === 'REFUND') && pay) vars.document_link = (await this.docs.linkFor(propertyId, { kind: 'PAYMENT', refId: pay.id }, actorId ?? null, i.origin)).url;
+    else if (i.event === 'CHECK_OUT') vars.document_link = (await this.docs.linkFor(propertyId, { kind: 'STATEMENT', refId: i.reservationId }, actorId ?? null, i.origin).catch(() => null))?.url ?? null;
     const d = defaultTemplate(i.event, i.channel);
     const body = stored?.body ?? d.body, subject = stored ? stored.subject : d.subject;
     return { text: render(body, vars), subject: subject ? render(subject, vars) : null, phone: g.phone, missing: [] as string[] };

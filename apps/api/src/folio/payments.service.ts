@@ -160,7 +160,8 @@ export class PaymentsService {
       const rows = await trx.selectFrom('payment as p').innerJoin('folio as f', 'f.id', 'p.folio_id').leftJoin('reservation as r', 'r.id', 'f.reservation_id')
         .leftJoin('payment_account as pa', 'pa.id', 'p.payment_account_id').select(['p.id', 'p.kind', 'p.method', 'p.amount_minor', 'p.currency', 'p.reference', 'p.counterparty', 'p.created_by', 'p.created_at', 'f.folio_no', 'r.confirmation_no', 'pa.name as account_name', 'pa.owner_type as account_owner'])
         .where('p.property_id', '=', propertyId).where('p.status', '=', 'PENDING_VERIFICATION').orderBy('p.created_at').execute();
-      return { items: rows.map((x) => ({ id: x.id, kind: x.kind, method: x.method, amount: fmt(x.amount_minor, x.currency), reference: x.reference, counterparty: x.counterparty, account: x.account_name ? { name: x.account_name, flagged: x.account_owner !== 'COMPANY' } : null, createdBy: x.created_by, createdAt: x.created_at, folioNo: x.folio_no, confirmationNo: x.confirmation_no })) };
+      const slips = rows.length ? await trx.selectFrom('payment_slip').select(['payment_id']).where('payment_id', 'in', rows.map((x) => x.id)).execute() : [];
+      return { items: rows.map((x) => ({ slipCount: slips.filter((y) => y.payment_id === x.id).length, id: x.id, kind: x.kind, method: x.method, amount: fmt(x.amount_minor, x.currency), reference: x.reference, counterparty: x.counterparty, account: x.account_name ? { name: x.account_name, flagged: x.account_owner !== 'COMPANY' } : null, createdBy: x.created_by, createdAt: x.created_at, folioNo: x.folio_no, confirmationNo: x.confirmation_no })) };
     });
   }
 
