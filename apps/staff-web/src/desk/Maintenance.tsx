@@ -7,6 +7,7 @@ import { addDays, money, whatsappNumber } from '../lib/format.js';
 import { useAuth, useLive } from '../state.js';
 import { Badge, Chip, Empty, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 import type { Amount } from './types.js';
+import { BillsOverview, Bills, Gallery, SchedulesSheet, type BillsBlock, type MediaItem } from './MaintenanceExtras.js';
 
 interface Sla { responseHours: number | null; fixHours: number | null; respondedAfter: number | null; fixedAfter: number | null; responseBreached: boolean; fixBreached: boolean }
 interface Order {
@@ -14,8 +15,8 @@ interface Order {
   assignedTo: string | null; assignee: string | null; vendorId: string | null; contractor: string | null; reporter: string | null; dueDate: string | null; overdue: boolean; cost: Amount; estimatedCost: Amount | null;
   vendor: string | null; doneNote: string | null; doneBy: string | null; blockId: string | null; approvedBy: string | null; rejectedReason: string | null; sla: Sla | null;
 }
-interface Detail extends Order { events: Array<{ action: string; from: string | null; to: string | null; note: string | null; amount: Amount | null; at: string; by: string | null }> }
-interface Vendor { id: string; name: string; trade: string; contactName: string | null; phone: string | null; email: string | null; contractRef: string | null; contractStart: string | null; contractEnd: string | null; slaResponseHours: number | null; slaFixHours: number | null; notes: string | null; status: string; contractExpired: boolean }
+interface Detail extends Order { media: MediaItem[]; bills: BillsBlock | null; scheduleId: string | null; events: Array<{ action: string; from: string | null; to: string | null; note: string | null; amount: Amount | null; at: string; by: string | null }> }
+export interface Vendor { id: string; name: string; trade: string; contactName: string | null; phone: string | null; email: string | null; contractRef: string | null; contractStart: string | null; contractEnd: string | null; slaResponseHours: number | null; slaFixHours: number | null; notes: string | null; status: string; contractExpired: boolean }
 interface Group { key: string | null; label: string | null; requested: number; open: number; active: number; done: number; overdue: number; estimated: Amount; actual: Amount }
 const CATS = ['PLUMBING', 'ELECTRICAL', 'AC', 'FURNITURE', 'APPLIANCE', 'CLEANLINESS', 'SAFETY', 'FUMIGATION', 'OTHER'];
 const tone = (s: string) => (s === 'VERIFIED' ? 'clean' : s === 'DONE' ? 'inspected' : s === 'IN_PROGRESS' ? 'cleaning' : s === 'WAITING' || s === 'REQUESTED' ? 'warn' : s === 'CANCELLED' || s === 'REJECTED' ? 'neutral' : 'dirty') as 'clean' | 'inspected' | 'cleaning' | 'warn' | 'neutral' | 'dirty';
@@ -30,7 +31,8 @@ export function Maintenance() {
   const approver = can('maintenance.approve'); const manager = can('maintenance.manage');
   const [filter, setFilter] = useState<Filter>(manager || approver ? 'ACTIVE' : 'MINE');
   const [by, setBy] = useState<By>('none'); const [pick, setPick] = useState<{ by: By; key: string } | null>(null);
-  const [open, setOpen] = useState<string | null>(null); const [creating, setCreating] = useState(false); const [vendors, setVendors] = useState(false);
+  const [open, setOpen] = useState<string | null>(null); const [creating, setCreating] = useState(false); const [vendors, setVendors] = useState(false); const [billsOpen, setBillsOpen] = useState(false); const [sched, setSched] = useState(false);
+  const seeBills = manager || approver || can('maintenance.pay');
   const params = new URLSearchParams(); params.set('status', filter === 'REQUESTED' ? 'REQUESTED' : filter === 'DONE' ? 'DONE' : 'ACTIVE'); if (filter === 'MINE') params.set('mine', 'true');
   if (pick) params.set(pick.by === 'kind' ? 'kind' : pick.by === 'vendor' ? 'vendorId' : pick.by === 'technician' ? 'assignedTo' : 'category', pick.key);
   const list = useLive<{ items: Order[]; counts: Record<string, number> }>(`${base}?${params}`, 30_000);
@@ -48,6 +50,8 @@ export function Maintenance() {
       <div className="actions">
         {(can('maintenance.request') || manager) && <button className="primary" onClick={() => setCreating(true)}>{can('maintenance.approve') ? t('mt.new') : t('mw.request')}</button>}
         {(can('maintenance.vendor') || can('maintenance.view')) && <button onClick={() => setVendors(true)}>{t('mw.contractors')}</button>}
+        {seeBills && <button onClick={() => setBillsOpen(true)}>{t('mx.bills')}</button>}
+        {(manager || approver || can('maintenance.view')) && <button onClick={() => setSched(true)}>{t('mx.recurring')}</button>}
       </div>
       {by !== 'none' && groups.data && (
         <table className="nighttable small"><thead><tr><th scope="col">{t(`mw.by.${by}` as Key)}</th><th scope="col">{t('mw.g.waiting')}</th><th scope="col">{t('mw.g.active')}</th><th scope="col">{t('mw.g.done')}</th><th scope="col">{t('ar.overdue')}</th><th scope="col">{t('mw.estimated')}</th><th scope="col">{t('mt.cost')}</th></tr></thead>
@@ -64,17 +68,19 @@ export function Maintenance() {
       {creating && <CreateSheet base={base} onDone={() => { setCreating(false); list.reload(); }} onClose={() => setCreating(false)} />}
       {open && <OrderSheet base={base} id={open} onChanged={list.reload} onClose={() => setOpen(null)} />}
       {vendors && <VendorsSheet onClose={() => setVendors(false)} />}
+      {billsOpen && <BillsOverview propertyId={property!.id} onOpenOrder={(id) => { setBillsOpen(false); setOpen(id); }} onClose={() => setBillsOpen(false)} />}
+      {sched && <SchedulesSheet propertyId={property!.id} onClose={() => { setSched(false); list.reload(); }} />}
     </section>
   );
 }
 
-function useAssignees(base: string, enabled: boolean) {
+export function useAssignees(base: string, enabled: boolean) {
   const techs = useLive<{ items: Array<{ id: string; name: string }> }>(enabled ? `${base}/technicians` : null, 300_000);
   const vendors = useLive<{ items: Vendor[] }>(enabled ? '/v1/maintenance/vendors' : null, 300_000);
   return { techs: techs.data?.items ?? [], vendors: vendors.data?.items ?? [] };
 }
 /** One choice for who does the job: "technician:<id>" or "contractor:<id>". */
-function AssigneeSelect({ value, onChange, techs, vendors }: { value: string; onChange: (v: string) => void; techs: Array<{ id: string; name: string }>; vendors: Vendor[] }) {
+export function AssigneeSelect({ value, onChange, techs, vendors }: { value: string; onChange: (v: string) => void; techs: Array<{ id: string; name: string }>; vendors: Vendor[] }) {
   const { t } = useT();
   return (
     <label>{t('mw.whoDoes')}<select value={value} onChange={(e) => onChange(e.target.value)}><option value="">—</option>
@@ -83,7 +89,7 @@ function AssigneeSelect({ value, onChange, techs, vendors }: { value: string; on
     </select></label>
   );
 }
-const assignBody = (v: string) => (v.startsWith('technician:') ? { assignedTo: v.slice(11) } : v.startsWith('contractor:') ? { vendorId: v.slice(11) } : {});
+export const assignBody = (v: string) => (v.startsWith('technician:') ? { assignedTo: v.slice(11) } : v.startsWith('contractor:') ? { vendorId: v.slice(11) } : {});
 
 function CreateSheet({ base, onDone, onClose }: { base: string; onDone: () => void; onClose: () => void }) {
   const { t } = useT();
@@ -151,6 +157,7 @@ function OrderSheet({ base, id, onChanged, onClose }: { base: string; id: string
           {o.sla && <span className={o.sla.responseBreached || o.sla.fixBreached ? 'warnbox' : 'muted'}>{t('mw.sla')}: {o.sla.responseHours ? `${t('mw.respond')} ${o.sla.respondedAfter ?? '…'}/${o.sla.responseHours} h` : ''}{o.sla.fixHours ? ` · ${t('mw.fix')} ${o.sla.fixedAfter ?? '…'}/${o.sla.fixHours} h` : ''}</span>}
         </div>
 
+        <Gallery base={base} id={id} media={o.media} closed={['VERIFIED', 'CANCELLED', 'REJECTED'].includes(o.status)} canAdd={mgr || approver || mine || (o.reporter != null && me?.user.fullName === o.reporter)} meId={me?.user.id ?? ''} onChange={() => { d.reload(); onChanged(); }} />
         {o.status === 'REQUESTED' && approver && (
           <div className="card inner stack"><strong>{t('mw.decide')}</strong>
             <AssigneeSelect value={f.who} onChange={(v) => setF({ ...f, who: v })} techs={techs} vendors={vendors} />
@@ -177,6 +184,7 @@ function OrderSheet({ base, id, onChanged, onClose }: { base: string; id: string
         {(mgr || (o.status === 'REQUESTED' && o.reporter && me?.user.fullName === o.reporter)) && !['VERIFIED', 'CANCELLED', 'REJECTED'].includes(o.status) && (
           <div className="row"><input value={f.text} placeholder={t('common.reason')} onChange={(e) => setF({ ...f, text: e.target.value })} /><button disabled={busy || !need} onClick={() => act('cancel', { reason: f.text.trim() })}>{t('mt.cancel')}</button></div>)}
         <ErrorLine code={problem?.code} detail={problem?.detail} />
+        {o.bills && <Bills base={base} id={id} bills={o.bills} vendorId={o.vendorId} status={o.status} onChange={() => { d.reload(); onChanged(); }} />}
         <h3>{t('rs.tab.history')}</h3>
         <ul className="plain small">{o.events.map((e, i) => <li key={i} className="row between"><span>{t(`mt.e.${e.action}` as Key) === `mt.e.${e.action}` ? e.action : t(`mt.e.${e.action}` as Key)}{e.note ? ` · ${e.note}` : ''}{e.amount ? ` · ${money(e.amount)}` : ''}</span><span className="muted">{e.by}</span></li>)}</ul>
       </>)}
