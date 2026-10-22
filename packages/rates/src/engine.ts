@@ -80,8 +80,9 @@ export function priceStay(args: {
   if (!plan.channels.includes(req.channel)) bad('CHANNEL_NOT_ALLOWED', `Not sold through ${req.channel}`);
   if (plan.residency !== 'ANY' && plan.residency !== req.residency) bad('RESIDENCY_MISMATCH', plan.residency === 'RESIDENT' ? 'Rate is for resident (local) guests' : 'Rate is for non-resident (foreign) guests');
   if (plan.audience !== 'PUBLIC' && !(req.companyId && plan.companyIds.includes(req.companyId))) bad('COMPANY_REQUIRED', 'This rate is available only to the contracted company or agent');
-  if (req.adults < 1 || req.adults > limits.maxAdults || req.children > limits.maxChildren || req.adults + req.children > limits.maxOccupancy) {
-    bad('OCCUPANCY_EXCEEDED', `Room type allows up to ${limits.maxAdults} adults, ${limits.maxChildren} children and ${limits.maxOccupancy} guests in total`);
+  // An extra bed is how a room takes one more person than its usual limit, so each one raises the room's capacity (for children as well as the total) by one.
+  if (req.adults < 1 || req.adults > limits.maxAdults || req.children > limits.maxChildren + req.extraBeds || req.adults + req.children > limits.maxOccupancy + req.extraBeds) {
+    bad('OCCUPANCY_EXCEEDED', `Room type allows up to ${limits.maxAdults} adults, ${limits.maxChildren} children and ${limits.maxOccupancy} guests in total, and one more person for each extra bed`);
   }
 
   const rc = combineRestrictions(restrictions, plan, req.roomTypeId, nightDates, req.arrival, req.departure);

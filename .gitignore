@@ -8,3 +8,4 @@ coverage
 backups/
 .local/
 apps/staff-web/*.png
+apps/api/data/

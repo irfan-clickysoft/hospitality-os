@@ -481,8 +481,8 @@ describe('changing a booking', () => {
     const w = await sunset();
     const r = await ok(book(w, { quote: { departure: '2026-11-06' } }), 201); const line = r.lines[0];
     const m = await ok(call('PATCH', `/v1/properties/${w.pid}/reservations/${r.id}/rooms/${line.id}`, O, { adults: 3, extraBeds: 1, reason: 'Third guest joins', version: line.version }));
-    expect(m.change.newTotal.amount).toBe('15000.00');                                                       // 12,000 + 3,000 extra adult (BAR has no bed fee)
-    const bad = await call('PATCH', `/v1/properties/${w.pid}/reservations/${r.id}/rooms/${line.id}`, O, { adults: 3, children: 2, reason: 'Too many', version: m.reservation.lines[0].version });
+    expect(m.change.newTotal.amount).toBe('15000.00');                                                       // (an extra bed also lifts the room's limit by one person) 12,000 + 3,000 extra adult (BAR has no bed fee)
+    const bad = await call('PATCH', `/v1/properties/${w.pid}/reservations/${r.id}/rooms/${line.id}`, O, { adults: 3, children: 3, reason: 'Too many', version: m.reservation.lines[0].version });
     expect(bad.statusCode).toBe(409); expect(bad.json().code).toBe('NOT_SELLABLE');
   });
 

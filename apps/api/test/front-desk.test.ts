@@ -239,6 +239,57 @@ describe('room move', () => {
   });
 });
 
+describe('walk-in without every ID', () => {
+  const walkKey = () => ({ 'idempotency-key': `walk-${++n}-${Date.now()}` });
+  const post = (w: W, b: unknown) => call('POST', `/v1/properties/${w.pid}/front-desk/walk-ins`, O, b, walkKey());
+  const base = (w: W, o: Record<string, unknown> = {}) => ({ guest: { fullName: `Family ${++n}`, phone: `0312${String(4000000 + n).slice(-7)}`, nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 1, adults: 2, children: 2, extraBeds: 1, ...o });
+
+  it('a family of four can check in on the main guest’s ID alone: children and family members need none', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const main = occ({ isPrimary: true, fullName: 'Imran Khan' });
+    const r = await post(w, base(w, { occupants: [main, { fullName: 'Nadia Khan', ageGroup: 'ADULT' }, { fullName: 'Ali Khan', ageGroup: 'CHILD' }, { fullName: 'Sara Khan', ageGroup: 'CHILD' }] }));
+    expect(r.statusCode, r.body).toBe(201);
+    const line = r.json().lines[0];
+    const card = (await call('GET', `/v1/properties/${w.pid}/reservations/${r.json().id}/rooms/${line.id}/guests`, O)).json().items;
+    expect(card).toHaveLength(4);
+    expect(card.filter((c: any) => c.idType === null).map((c: any) => c.fullName).sort()).toEqual(['Ali Khan', 'Nadia Khan', 'Sara Khan']);
+    expect(card.find((c: any) => c.fullName === 'Imran Khan').idNumber).toMatch(/^\*+/);                    // still masked
+  });
+
+  it('the main guest’s ID is still required, and a bad number says whose and what', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const none = await post(w, base(w, { occupants: [{ fullName: 'No Id', isPrimary: true }] }));
+    expect(none.statusCode).toBe(422); expect(none.json().code).toBe('ID_REQUIRED');
+    const bad = await post(w, base(w, { occupants: [occ({ isPrimary: true }), occ({ fullName: 'Nadia Khan', idNumber: '123' })] }));
+    expect(bad.statusCode).toBe(422); expect(bad.json().code).toBe('ID_INVALID'); expect(bad.json().detail).toContain('Nadia Khan'); expect(bad.json().detail).toContain('13 digits');
+    const half = await post(w, base(w, { occupants: [occ({ isPrimary: true }), { fullName: 'Half', idType: 'CNIC' }] }));
+    expect(half.statusCode).toBe(400);
+  });
+});
+
+describe('finding a returning guest', () => {
+  const search = async (q: string) => (await ok(call('GET', `/v1/guests/search?q=${encodeURIComponent(q)}`, O))).items as Array<{ fullName: string; stays: number; matchedById: boolean }>;
+  it('finds them by name in any order, by phone in any format, and by CNIC or passport — and counts their stays', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const id = `35201${String(7000000 + (++n % 1000)).slice(-7)}9`;
+    const r = await call('POST', `/v1/properties/${w.pid}/front-desk/walk-ins`, O, { guest: { fullName: 'Zubair Ahmed Qureshi', phone: '0333 7654321', nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 1, adults: 1,
+      occupants: [{ fullName: 'Zubair Ahmed Qureshi', isPrimary: true, idType: 'CNIC', idNumber: id, nationality: 'PK' }] }, { 'idempotency-key': `walk-${++n}-${Date.now()}` });
+    expect(r.statusCode, r.body).toBe(201);
+    expect((await search('Qureshi Zubair')).map((g) => g.fullName)).toContain('Zubair Ahmed Qureshi');
+    expect((await search('zubair q')).map((g) => g.fullName)).toContain('Zubair Ahmed Qureshi');
+    expect((await search('+92 333 7654321')).map((g) => g.fullName)).toContain('Zubair Ahmed Qureshi');
+    const byId = await search(`${id.slice(0, 5)}-${id.slice(5, 12)}-${id.slice(12)}`);
+    expect(byId.find((g) => g.fullName === 'Zubair Ahmed Qureshi')).toMatchObject({ matchedById: true });
+    expect((await search(id)).map((g) => g.fullName)).toContain('Zubair Ahmed Qureshi');                // dashes are optional
+    expect((await search('3520199999999')).map((g) => g.fullName)).not.toContain('Zubair Ahmed Qureshi');
+    expect(byId.find((g) => g.fullName === 'Zubair Ahmed Qureshi')!.stays).toBe(1);
+  });
+  it('the stored ID cannot be read from the search index', async () => {
+    const rows = await adminDb.selectFrom('stay_guest').select(['id_hash', 'id_number_sealed']).where('id_hash', 'is not', null).limit(5).execute();
+    for (const r of rows) { expect(r.id_hash).toMatch(/^[0-9a-f]{64}$/); expect(r.id_number_sealed).not.toMatch(/\d{5}-?\d{7}/); }
+  });
+});
+
 describe('walk-in', () => {
   const body = (w: W, o: Record<string, unknown> = {}) => ({ guest: { fullName: `Walker ${++n}`, phone: `0311${String(3000000 + n).slice(-7)}`, nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 2, adults: 2,
     occupants: [occ({ isPrimary: true })], ...o });
@@ -328,5 +379,72 @@ describe('housekeeping status', () => {
     expect((await call('PUT', `/v1/properties/${w.pid}/housekeeping/rooms/${other.room['101']}/status`, H, { status: 'CLEAN' })).statusCode).toBe(404);
     expect((await call('PUT', `/v1/properties/${w.pid}/housekeeping/rooms/${w.room['101']}/status`, H, { status: 'SPARKLING' })).statusCode).toBe(400);
     expect(await adminDb.selectFrom('audit_log').select('id').where('tenant_id', '=', T.tenantId).where('action', '=', 'housekeeping.status').where('resource_id', '=', w.room['101']).execute()).toHaveLength(2);
+  });
+});
+
+describe('short stays', () => {
+  const rule = { tiers: [{ upToHours: 3, percent: 30 }, { upToHours: 6, percent: 50 }, { upToHours: 12, percent: 75 }] };
+  const setRule = async (w: W, r: unknown) => { const v = (await call('GET', `/v1/properties/${w.pid}`, O)).json().version; return call('PATCH', `/v1/properties/${w.pid}`, O, { shortStayRule: r, version: v }); };
+  const at = (time: string, date = '2026-11-05') => testClock.set(zonedToUtcMs(date, time, 'Asia/Karachi'));
+  const inAt = async (w: W, time: string) => { await setBd(w, '2026-11-05'); const b = await book(w); at(time); await ok(checkIn(w, b, '101')); return b; };
+  const out = (w: W, b: { id: string; line: string }, body: Record<string, unknown> = {}, h = OM) => call('POST', url(w, b.id, b.line, 'check-out'), h, { reason: 'Leaving for a flight', balanceReason: 'test: settled elsewhere', ...body });
+  const folioBal = async (w: W, b: { id: string }) => (await ok(call('GET', `/v1/properties/${w.pid}/reservations/${b.id}/folio`, O))).folio.balance.amount as string;
+
+  it('a guest who leaves a few hours after checking in is charged the share of the night the property sets for that length of stay, and the other nights are released', async () => {
+    const w = await sunset(); expect((await setRule(w, rule)).statusCode).toBe(200);
+    const b = await inAt(w, '12:00'); at('14:00');
+    const pre = await ok(call('GET', url(w, b.id, b.line, 'check-out-preview'), O));
+    expect(pre).toMatchObject({ eligible: true, hoursStayed: 2, default: 'RULE', night: { amount: '12000.00' } });
+    expect(pre.options).toMatchObject([{ mode: 'RULE', percent: 30, charge: { amount: '3600.00' } }, { mode: 'FULL_NIGHT', percent: 100, charge: { amount: '12000.00' } }]);
+    const r = await ok(out(w, b));
+    expect(r.checkOut).toMatchObject({ earlyDeparture: true, shortStay: { mode: 'RULE', percent: 30, hoursStayed: 2, charged: { amount: '3600.00' }, waived: { amount: '8400.00' } } });
+    expect(await folioBal(w, b)).toBe('3600.00');
+    const posts = (await ok(call('GET', `/v1/properties/${w.pid}/reservations/${b.id}/folio`, O))).postings.map((p: any) => p.description);
+    expect(posts.some((d: string) => d.startsWith('Short stay'))).toBe(true);
+    expect((await avail(w, 'STD', '2026-11-06')).available).toBeGreaterThan(0);                           // the night after is sellable again
+    const ev = await adminDb.selectFrom('outbox_event').select('event_type').where('aggregate_id', '=', b.id).where('event_type', '=', 'ShortStayCharged').execute(); expect(ev).toHaveLength(1);
+  });
+
+  it('a longer stay moves up the tiers; past the last tier, or with no rule, it is the whole night', async () => {
+    const w = await sunset(); await setRule(w, rule);
+    const b1 = await inAt(w, '12:00'); at('17:00');                                                       // 5 hours → 50 %
+    expect((await ok(out(w, b1))).checkOut.shortStay).toMatchObject({ percent: 50, charged: { amount: '6000.00' } });
+    const b2 = await book(w); at('12:00'); await ok(checkIn(w, b2, '102')); at('14:00', '2026-11-05'); at('23:30');   // 11.5 hours → 75 %
+    expect((await ok(out(w, b2))).checkOut.shortStay).toMatchObject({ percent: 75, charged: { amount: '9000.00' } });
+    const w2 = await sunset(); const b3 = await inAt(w2, '12:00'); at('13:00');                           // no rule: the whole night, as before
+    expect((await ok(call('GET', url(w2, b3.id, b3.line, 'check-out-preview'), O))).default).toBe('FULL_NIGHT');
+    expect((await ok(out(w2, b3))).checkOut.shortStay).toMatchObject({ mode: 'FULL_NIGHT', percent: 100, charged: { amount: '12000.00' } });
+  });
+
+  it('the desk can charge the whole night anyway; a different amount or waiving it needs the override permission and a reason', async () => {
+    const w = await sunset(); await setRule(w, rule);
+    const b1 = await inAt(w, '12:00'); at('13:00');
+    expect((await ok(out(w, b1, { shortStay: { mode: 'FULL_NIGHT' } }))).checkOut.shortStay).toMatchObject({ percent: 100, charged: { amount: '12000.00' } });
+    const fd = await addUser(T.tenantId, `fd${++n}@sh.test`); await assignRole(T.tenantId, fd, 'front_desk_agent', 'PROPERTY', w.pid);
+    const b2 = await book(w); at('12:00'); await ok(checkIn(w, b2, '102')); at('13:30');
+    await code(out(w, b2, { shortStay: { mode: 'CUSTOM', amount: '0', reason: 'Guest was unwell, goodwill' }, balanceReason: undefined }, as(T.tenantId, fd)), 403, 'PERMISSION_DENIED');
+    await code(out(w, b2, { shortStay: { mode: 'CUSTOM', amount: '5000' } }), 400, 'VALIDATION_FAILED');
+    await code(out(w, b2, { shortStay: { mode: 'CUSTOM', amount: '99999', reason: 'Too much' } }), 422, 'VALIDATION_FAILED');
+    const r = await ok(out(w, b2, { shortStay: { mode: 'CUSTOM', amount: '0', reason: 'Guest was unwell, goodwill' } }));
+    expect(r.checkOut.shortStay).toMatchObject({ mode: 'CUSTOM', charged: { amount: '0.00' }, waived: { amount: '12000.00' } });
+    expect(await folioBal(w, b2)).toBe('0.00');
+  });
+
+  it('only same-day departures are short stays; a guest who stayed the night is charged the nights stayed as before', async () => {
+    const w = await sunset(); await setRule(w, rule);
+    const b = await inAt(w, '12:00');
+    await setBd(w, '2026-11-06'); at('09:00', '2026-11-06');
+    expect((await ok(call('GET', url(w, b.id, b.line, 'check-out-preview'), O))).eligible).toBe(false);
+    await code(out(w, b, { shortStay: { mode: 'RULE' } }), 422, 'SHORT_STAY_NOT_ELIGIBLE');
+    const r = await ok(out(w, b)); expect(r.checkOut.shortStay).toBeNull(); expect(await folioBal(w, b)).toBe('12000.00');
+  });
+
+  it('the rule is saved with steps that go up, and refused when they do not', async () => {
+    const w = await sunset();
+    expect((await setRule(w, { tiers: [{ upToHours: 6, percent: 50 }, { upToHours: 3, percent: 30 }] })).statusCode).toBe(400);
+    expect((await setRule(w, { tiers: [{ upToHours: 3, percent: 60 }, { upToHours: 6, percent: 50 }] })).statusCode).toBe(400);
+    expect((await setRule(w, { tiers: [] })).statusCode).toBe(400);
+    expect((await setRule(w, rule)).json().shortStayRule).toEqual(rule);
+    expect((await setRule(w, null)).json().shortStayRule).toBeNull();
   });
 });

@@ -6,7 +6,8 @@ import { useAction } from '../lib/action.js';
 import { StepUpSlot, useStepUp } from '../lib/stepup.js';
 import { useAuth, useWork } from '../state.js';
 import { ApprovalBox } from '../desk/ComplianceBits.js';
-import { blankOccupant, occupantBody, type Occupant } from '../desk/CheckInSheet.js';
+import { blankOccupant, occupantBody } from '../desk/CheckInSheet.js';
+import { checkOccupant, formatId, type OccErrors, type Occupant } from '../lib/occupants.js';
 import { RoomPicker } from '../desk/RoomPicker.js';
 import type { ReservationDetail } from '../desk/types.js';
 import { Banner, Field, RoomState, SaveState, StatusBadge, type SaveStatus } from '../ui/ds.js';
@@ -16,20 +17,7 @@ import { Link, navigate, useSetQuery } from '../shell/router.js';
 import type { Stay } from './useStay.js';
 
 const ID_TYPES = ['CNIC', 'NICOP', 'PASSPORT', 'DRIVING_LICENSE', 'OTHER'] as const;
-const CNIC = /^\d{5}-?\d{7}-?\d$/;
-type Errors = Partial<Record<'fullName' | 'idType' | 'idNumber' | 'nationality' | 'idExpiry', Key>>;
-
-/** What is wrong with one guest's card, in words tied to the field. Nothing here is a server rule we invented: it mirrors the server's own checks so the person learns before pressing the button. */
-export function checkOccupant(o: Occupant, i: number, foreign: boolean, businessDate: string): Errors {
-  const e: Errors = {};
-  if (!o.fullName.trim()) e.fullName = 'ci.e.name';
-  if (i === 0 && foreign && o.idType !== 'PASSPORT') e.idType = 'ci.e.passportOnly';
-  if (!o.idNumber.trim()) e.idNumber = 'ci.e.idNumber';
-  else if ((o.idType === 'CNIC' || o.idType === 'NICOP') && !CNIC.test(o.idNumber.trim())) e.idNumber = 'ci.e.cnic';
-  if (!o.nationality.trim() || o.nationality.trim().length !== 2) e.nationality = 'ci.e.nationality';
-  if (o.idType === 'PASSPORT' && o.idExpiry && o.idExpiry < businessDate) e.idExpiry = 'ci.e.expired';
-  return e;
-}
+type Errors = OccErrors;
 const LABEL: Record<keyof Errors, Key> = { fullName: 'ci.name', idType: 'ci.idType', idNumber: 'ci.idNumber', nationality: 'ci.nationality', idExpiry: 'ci.expiry' };
 
 const draftKey = (lineId: string) => `hos.draft.checkin.v1.${lineId}`;
@@ -130,10 +118,10 @@ export function CheckIn({ stay }: { stay: Stay }) {
               <Field label={t('ci.name')} required error={show('fullName')}>{(p) => <input {...p} value={o.fullName} onChange={(x) => set(i, { fullName: x.target.value })} onBlur={() => blur('fullName')} autoComplete="off" />}</Field>
               <div className="grid2">
                 <Field label={t('ci.idType')} required error={show('idType')}>{(p) => <select {...p} value={o.idType} onChange={(x) => set(i, { idType: x.target.value })} onBlur={() => blur('idType')}>{ID_TYPES.map((k) => <option key={k} value={k}>{t(`ci.id.${k}` as Key)}</option>)}</select>}</Field>
-                <Field label={t('ci.idNumber')} required hint={o.idType === 'CNIC' ? t('ci.cnicHint') : undefined} error={show('idNumber')}>{(p) => <input {...p} value={o.idNumber} dir="ltr" inputMode={o.idType === 'CNIC' || o.idType === 'NICOP' ? 'numeric' : 'text'} placeholder={o.idType === 'CNIC' ? '35202-1234567-1' : ''} autoComplete="off" onChange={(x) => set(i, { idNumber: x.target.value })} onBlur={() => blur('idNumber')} />}</Field>
+                <Field label={t('ci.idNumber')} required={i === 0} hint={i === 0 ? (o.idType === 'CNIC' ? t('ci.cnicHint') : undefined) : o.ageGroup === 'CHILD' ? t('ci.h.childNoId') : t('ci.h.sharedId')} error={show('idNumber')}>{(p) => <input {...p} value={o.idNumber} dir="ltr" inputMode={o.idType === 'CNIC' || o.idType === 'NICOP' ? 'numeric' : 'text'} placeholder={o.idType === 'CNIC' ? '35202-1234567-1' : ''} autoComplete="off" onChange={(x) => set(i, { idNumber: x.target.value })} onBlur={() => { set(i, { idNumber: formatId(o.idType, o.idNumber) }); blur('idNumber'); }} />}</Field>
               </div>
               <div className="grid2">
-                <Field label={t('ci.nationality')} required hint={t('ci.nationalityHint')} error={show('nationality')}>{(p) => <input {...p} value={o.nationality} maxLength={2} dir="ltr" placeholder="PK" onChange={(x) => set(i, { nationality: x.target.value.toUpperCase() })} onBlur={() => blur('nationality')} />}</Field>
+                <Field label={t('ci.nationality')} required={i === 0} hint={t('ci.nationalityHint')} error={show('nationality')}>{(p) => <input {...p} value={o.nationality} maxLength={2} dir="ltr" placeholder="PK" onChange={(x) => set(i, { nationality: x.target.value.toUpperCase() })} onBlur={() => blur('nationality')} />}</Field>
                 {o.idType === 'PASSPORT' && <Field label={t('ci.expiry')} error={show('idExpiry')}>{(p) => <input {...p} type="date" value={o.idExpiry} dir="ltr" onChange={(x) => set(i, { idExpiry: x.target.value })} onBlur={() => blur('idExpiry')} />}</Field>}
               </div>
               {i > 0 && <div className="row between"><label className="check"><input type="checkbox" checked={o.ageGroup === 'CHILD'} onChange={(x) => set(i, { ageGroup: x.target.checked ? 'CHILD' : 'ADULT' })} /> {t('ci.child')}</label><button className="link" onClick={() => { edited.current = true; setOcc((x) => x.filter((_, k) => k !== i)); }}>{t('ci.remove')}</button></div>}
