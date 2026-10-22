@@ -521,6 +521,17 @@ export const uxEn = {
   'gr.decline': 'Not possible',
   'ps.terms': 'Terms and conditions',
   'ps.termsHint': 'Shown to guests on their booking page, under the cancellation rules.',
+  'st.giveRoles': 'Give roles',
+  'st.presets': 'Common combinations for a small hotel',
+  'st.presetsHelp': 'Tap one to tick its roles, then change the ticks if you like. Nothing is given until you press the button.',
+  'st.chooseRoles': 'Roles',
+  'st.has': 'already has this here',
+  'st.allows': 'What it allows ({n})',
+  'st.together': 'Together these roles allow {n} things',
+  'st.secondPerson': 'Holding many roles never skips a check: some steps still need a second person, such as approving tax rates, verifying a bank transfer or paying a bill.',
+  'st.giveN': 'Give {n} role(s)',
+  'st.gaveN': '{n} role(s) given. They apply from the person’s next sign-in.',
+  'st.removeN': 'Remove {n} selected role(s)',
 } as const;
 
 /** اردو */
@@ -1046,4 +1057,15 @@ export const uxUr: Record<keyof typeof uxEn, string> = {
   'gr.decline': 'ممکن نہیں',
   'ps.terms': 'شرائط و ضوابط',
   'ps.termsHint': 'مہمان کو ان کے بکنگ صفحے پر منسوخی کے قواعد کے نیچے دکھائی جاتی ہیں۔',
+  'st.giveRoles': 'کردار دیں',
+  'st.presets': 'چھوٹے ہوٹل کے عام امتزاج',
+  'st.presetsHelp': 'کسی ایک پر ٹیپ کریں تو اس کے کردار چن لیے جاتے ہیں، پھر چاہیں تو نشان بدل لیں۔ بٹن دبانے تک کچھ نہیں دیا جاتا۔',
+  'st.chooseRoles': 'کردار',
+  'st.has': 'یہاں پہلے سے ہے',
+  'st.allows': 'کیا اجازت ہے ({n})',
+  'st.together': 'یہ کردار مل کر {n} کام کی اجازت دیتے ہیں',
+  'st.secondPerson': 'کئی کردار ہونے سے کوئی جانچ ختم نہیں ہوتی: کچھ مراحل میں پھر بھی دوسرا شخص چاہیے، جیسے ٹیکس کی شرحیں منظور کرنا، بینک ٹرانسفر کی تصدیق یا بل کی ادائیگی۔',
+  'st.giveN': '{n} کردار دیں',
+  'st.gaveN': '{n} کردار دے دیے گئے۔ یہ شخص کے اگلے سائن اِن سے لاگو ہوں گے۔',
+  'st.removeN': 'چنے ہوئے {n} کردار ہٹائیں',
 };
