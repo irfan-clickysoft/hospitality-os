@@ -2,7 +2,7 @@ import { ConflictException, ForbiddenException, HttpException, Inject, Injectabl
 import { sql, type Transaction } from 'kysely';
 import type { z } from 'zod';
 import type { DB } from '@hos/db';
-import { addDays, hoursBeforeArrival, nightsOf } from '@hos/domain-types';
+import { Money, addDays, hoursBeforeArrival, nightsOf } from '@hos/domain-types';
 import { ComplianceService } from '../compliance/compliance.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { CLOCK, type ClockLike } from '../common/clock.js';
@@ -19,6 +19,7 @@ import { ReservationsService } from '../reservations/reservations.service.js';
 import { nextStatus } from '../reservations/state-machine.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { last4, maskId, normaliseIdNumber, type IdType } from './id-documents.js';
+import { parseRule, percentFor, share } from './short-stay.js';
 import type * as S from './schemas.js';
 
 type Trx = Transaction<DB>;
@@ -163,6 +164,31 @@ export class FrontDeskService {
     });
   }
 
+  // ───────────── short stay ─────────────
+  /** A guest who checks in and leaves on the same business day, before the booked departure, has had a short stay rather than a night: what that costs under the property's rule. */
+  private async shortStay(trx: Trx, propertyId: string, line: { id: string; arrival: string; departure: string; status: string; checked_in_at: Date | string | null; checked_in_business_date: string | null }, bd: string) {
+    const p = await trx.selectFrom('property').select(['short_stay_rule', 'currency']).where('id', '=', propertyId).executeTakeFirstOrThrow();
+    const rule = parseRule(p.short_stay_rule);
+    const eligible = line.status === 'CHECKED_IN' && !!line.checked_in_at && line.checked_in_business_date === bd && bd === line.arrival && bd < line.departure;
+    if (!eligible) return { eligible: false as const, rule, currency: p.currency };
+    const night = await trx.selectFrom('stay_night').select(['room_minor', 'extras_minor', 'discount_minor', 'total_minor']).where('reservation_room_id', '=', line.id).where('business_date', '=', line.arrival).executeTakeFirst();
+    if (!night) return { eligible: false as const, rule, currency: p.currency };
+    const hours = Math.max(0, (this.clock.now() - new Date(line.checked_in_at!).getTime()) / 3_600_000);
+    return { eligible: true as const, rule, currency: p.currency, hours, night, total: BigInt(night.total_minor), percent: percentFor(rule, hours) };
+  }
+  async checkOutPreview(propertyId: string, id: string, lineId: string) {
+    return this.tdb.tx(async (trx) => {
+      const p = await this.res.prop(trx, propertyId);
+      const { lines } = await this.res.load(trx, propertyId, id);
+      const line = lines.find((l) => l.id === lineId);
+      if (!line) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room line not found on this reservation' });
+      const s = await this.shortStay(trx, propertyId, line as never, p.business_date);
+      if (!s.eligible) return { eligible: false, rule: s.rule };
+      return { eligible: true, rule: s.rule, hoursStayed: Math.round(s.hours * 10) / 10, night: fmt(s.total, s.currency), default: s.rule ? 'RULE' : 'FULL_NIGHT',
+        options: [...(s.rule ? [{ mode: 'RULE', percent: s.percent, charge: fmt(share(s.total, s.percent), s.currency) }] : []), { mode: 'FULL_NIGHT', percent: 100, charge: fmt(s.total, s.currency) }] };
+    });
+  }
+
   // ───────────── check-out ─────────────
   async checkOut(propertyId: string, id: string, lineId: string, userId: string, i: z.infer<typeof S.CheckOut>) {
     return this.tdb.tx(async (trx) => {
@@ -172,6 +198,7 @@ export class FrontDeskService {
       const line = lines.find((l) => l.id === lineId);
       if (!line) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room line not found on this reservation' });
       nextStatus(line.status, 'CHECK_OUT');
+      if (i.shortStay && !(await this.shortStay(trx, propertyId, line as never, bd)).eligible) throw fail(422, 'SHORT_STAY_NOT_ELIGIBLE', 'A short stay is a guest who checked in today and leaves today, before the booked departure');
       let newDeparture = line.departure, overstayNights = 0;
       if (bd < line.departure) {
         if (!i.reason) throw fail(422, 'REASON_REQUIRED', `This guest is booked until ${line.departure}. Give a reason for the early departure.`);
@@ -181,8 +208,22 @@ export class FrontDeskService {
 
       await this.res.transition(trx, propertyId, id, 'CHECK_OUT', { reason: i.reason ?? 'Checked out', lineIds: [lineId], userId });   // releases the whole booked range, so unused nights become sellable again
       const early = newDeparture < line.departure;
+      let shortInfo: { mode: string; percent: number; hours: number; charged: string; waived: string } | null = null;
       if (early) {
         await trx.deleteFrom('stay_night').where('reservation_room_id', '=', lineId).where('business_date', '>=', newDeparture).execute();
+        const ss = await this.shortStay(trx, propertyId, line as never, bd);
+        if (ss.eligible) {
+          const mode = i.shortStay?.mode ?? (ss.rule ? 'RULE' : 'FULL_NIGHT');
+          let target = mode === 'RULE' ? share(ss.total, ss.percent) : ss.total;
+          if (mode === 'CUSTOM') {
+            await this.res.requirePermission(userId, 'reservation.override_rate', propertyId);
+            target = Money.parse(i.shortStay!.amount!, ss.currency).minor;
+            if (target < 0n || target > ss.total) throw fail(422, 'VALIDATION_FAILED', 'The charge cannot be more than the night', { field: 'amount' });
+          }
+          const cut = ss.total - target;
+          if (cut > 0n) await trx.updateTable('stay_night').set({ discount_minor: (BigInt(ss.night.discount_minor) + cut).toString(), total_minor: target.toString(), source: 'SHORT_STAY' }).where('reservation_room_id', '=', lineId).where('business_date', '=', line.arrival).execute();
+          shortInfo = { mode, percent: mode === 'RULE' ? ss.percent : mode === 'FULL_NIGHT' ? 100 : Number((target * 10000n / (ss.total || 1n))) / 100, hours: Math.round(ss.hours * 10) / 10, charged: target.toString(), waived: cut.toString() };
+        }
         const sums = await sql<{ gross: string; disc: string; total: string }>`SELECT coalesce(sum(room_minor + extras_minor),0)::text AS gross, coalesce(sum(discount_minor),0)::text AS disc, coalesce(sum(total_minor),0)::text AS total FROM stay_night WHERE reservation_room_id = ${lineId}`.execute(trx);
         const s = sums.rows[0]!;
         await trx.updateTable('reservation_room').set({ departure: newDeparture, original_departure: line.departure, subtotal_minor: s.gross, discount_minor: s.disc, total_minor: s.total }).where('id', '=', lineId).execute();
@@ -211,9 +252,10 @@ export class FrontDeskService {
         await trx.updateTable('room_assignment').set({ end_reason: 'CHECK_OUT' }).where('id', '=', assignment.assignmentId).execute();
         await this.hk.onRoomVacated(trx, propertyId, assignment.room_id, lineId, 'CHECK_OUT', userId);
       }
-      await this.res.history(trx, propertyId, id, { lineId, action: 'CHECK_OUT_DETAILS', reason: i.reason, details: { room: assignment?.number ?? null, earlyDeparture: early, originalDeparture: early ? line.departure : null, overstayNights } });
-      await this.audit.record(trx, { action: 'frontdesk.check_out', resourceType: 'reservation', resourceId: id, propertyId, after: { room: assignment?.number ?? null, earlyDeparture: early, overstayNights }, note: i.reason });
-      return { ...(await this.res.detail(trx, propertyId, id)), checkOut: { earlyDeparture: early, originalDeparture: early ? line.departure : null, overstayNights, roomMarkedDirty: !!assignment, folio: { id: folio.id, balance: fmt(balance, folio.currency), closed: folioClosed, checkedOutWithBalance: settledWithBalance } } };
+      await this.res.history(trx, propertyId, id, { lineId, action: 'CHECK_OUT_DETAILS', reason: i.reason, details: { room: assignment?.number ?? null, earlyDeparture: early, originalDeparture: early ? line.departure : null, overstayNights, shortStay: shortInfo } });
+      await this.audit.record(trx, { action: 'frontdesk.check_out', resourceType: 'reservation', resourceId: id, propertyId, after: { room: assignment?.number ?? null, earlyDeparture: early, overstayNights, shortStay: shortInfo }, note: i.shortStay?.reason ?? i.reason });
+      if (shortInfo) await this.outbox.publish(trx, { aggregateType: 'reservation', aggregateId: id, eventType: 'ShortStayCharged', propertyId, businessDate: bd, payload: { reservationId: id, lineId, ...shortInfo } });
+      return { ...(await this.res.detail(trx, propertyId, id)), checkOut: { earlyDeparture: early, originalDeparture: early ? line.departure : null, overstayNights, shortStay: shortInfo ? { mode: shortInfo.mode, percent: shortInfo.percent, hoursStayed: shortInfo.hours, charged: fmt(shortInfo.charged, folio.currency), waived: fmt(shortInfo.waived, folio.currency) } : null, roomMarkedDirty: !!assignment, folio: { id: folio.id, balance: fmt(balance, folio.currency), closed: folioClosed, checkedOutWithBalance: settledWithBalance } } };
     });
   }
 
