@@ -5,6 +5,7 @@ import type { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
+import { idSearchHashes } from '../front-desk/id-documents.js';
 import { normalizePhone } from './phone.js';
 import { residencyOf, type CreateGuest, type UpdateGuest } from './schemas.js';
 
@@ -37,16 +38,31 @@ export class GuestsService {
     return dto(g);
   }
 
-  /** Name (fuzzy), phone (any format) or email. */
+  /**
+   * Find a returning guest from whatever the desk has: any part of the name in any order, a phone number in any format, an email, or an ID number (CNIC or passport).
+   * An ID is matched through its keyed hash: the number itself is never readable here. Each result says how many stays the guest has had and when the last was.
+   */
   async search(q: string, limit = 20) {
     const text = q.trim();
     if (text.length < 2) return [];
     const norm = normalizePhone(text);
-    const rows = await this.tdb.tx((trx) => trx.selectFrom('guest').selectAll().where((eb) => eb.or([
-      sql<boolean>`full_name % ${text}`, sql<boolean>`full_name ILIKE ${'%' + text.replace(/[%_]/g, '') + '%'}`,
-      ...(norm ? [eb('phone_norm', 'like', `%${norm.slice(-9)}`)] : []), eb('email', '=', text),
-    ])).orderBy(sql`similarity(full_name, ${text})`, 'desc').limit(Math.min(limit, 50)).execute());
-    return rows.map(dto);
+    const tokens = text.split(/\s+/).map((t) => t.replace(/[%_]/g, '')).filter((t) => t.length >= 2).slice(0, 5);
+    const hashes = idSearchHashes(text);
+    const out = await this.tdb.tx(async (trx) => {
+      const rows = await trx.selectFrom('guest').selectAll().where((eb) => eb.or([
+        sql<boolean>`full_name % ${text}`,
+        ...(tokens.length ? [eb.and(tokens.map((t) => sql<boolean>`full_name ILIKE ${'%' + t + '%'}`))] : []),
+        ...(norm ? [eb('phone_norm', 'like', `%${norm.slice(-9)}`)] : []), eb('email', '=', text),
+        ...(hashes.length ? [eb('id', 'in', eb.selectFrom('stay_guest as sg').innerJoin('reservation_room as rr', 'rr.id', 'sg.reservation_room_id').innerJoin('reservation as r', 'r.id', 'rr.reservation_id').select('r.guest_id').where('sg.id_hash', 'in', hashes))] : []),
+      ])).orderBy(sql`similarity(full_name, ${text})`, 'desc').limit(Math.min(limit, 50)).execute();
+      if (!rows.length) return [];
+      const ids = rows.map((g) => g.id);
+      const stays = await trx.selectFrom('reservation as r').innerJoin('reservation_room as rr', 'rr.reservation_id', 'r.id').select(['r.guest_id', sql<number>`count(distinct r.id)::int`.as('n'), sql<string>`max(rr.arrival)`.as('last')])
+        .where('r.guest_id', 'in', ids).where('rr.status', 'in', ['CHECKED_IN', 'CHECKED_OUT']).groupBy('r.guest_id').execute();
+      const byId = hashes.length ? new Set((await trx.selectFrom('stay_guest as sg').innerJoin('reservation_room as rr', 'rr.id', 'sg.reservation_room_id').innerJoin('reservation as r', 'r.id', 'rr.reservation_id').select('r.guest_id').where('sg.id_hash', 'in', hashes).where('r.guest_id', 'in', ids).execute()).map((x) => x.guest_id)) : new Set<string>();
+      return rows.map((g) => { const st = stays.find((x) => x.guest_id === g.id); return { ...dto(g), stays: st?.n ?? 0, lastStay: st?.last ?? null, matchedById: byId.has(g.id) }; });
+    });
+    return out;
   }
 
   async update(id: string, i: z.infer<typeof UpdateGuest>) {

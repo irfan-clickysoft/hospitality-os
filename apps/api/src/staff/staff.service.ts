@@ -9,6 +9,7 @@ import { TenantDb } from '../db/tenant-db.js';
 import { newToken } from '../identity/tokens.js';
 import { SessionService } from '../identity/session.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
+import { ROLE_PRESETS } from './presets.js';
 import type * as S from './schemas.js';
 
 const fail = (status: number, code: string, message: string, extra: object = {}) => new HttpException({ code, message, ...extra }, status);
@@ -30,7 +31,9 @@ export class StaffService {
     return this.tdb.tx(async (trx) => {
       const roles = await trx.selectFrom('role').select(['id', 'key', 'name', 'is_system']).orderBy('name').execute();
       const perms = await trx.selectFrom('role_permission').select(['role_id', 'permission_key']).execute();
-      return { items: roles.map((r) => ({ key: r.key, name: r.name, system: r.is_system, permissions: perms.filter((p) => p.role_id === r.id).map((p) => p.permission_key).sort() })) };
+      const labels = await trx.selectFrom('permission').select(['key', 'description']).execute();
+      const have = new Set(roles.map((r) => r.key));
+      return { permissionLabels: Object.fromEntries(labels.map((p) => [p.key, p.description])), presets: ROLE_PRESETS.map((p) => ({ ...p, roles: p.roles.filter((k) => have.has(k)) })).filter((p) => p.roles.length >= 2), items: roles.map((r) => ({ key: r.key, name: r.name, system: r.is_system, permissions: perms.filter((p) => p.role_id === r.id).map((p) => p.permission_key).sort() })) };
     });
   }
   async list() {
@@ -141,6 +144,31 @@ export class StaffService {
     return this.tdb.tx(async (trx) => {
       await this.user(trx, id, true);
       if (actorId === id) throw fail(403, 'SELF_ACTION', 'You cannot change your own roles. Ask another administrator.');
+      const r = await this.assignIn(trx, actorId, id, i);
+      await this.sessions.revokeAllForUser(trx, id);                    // sign in again to pick up the new access
+      return r;
+    });
+  }
+  /** Several roles at once, at one place: all of them or none. Roles the person already has there are left alone and reported. A role the actor may not hand out refuses the whole set, naming it. */
+  async assignMany(actorId: string, id: string, i: z.infer<typeof S.AssignRoles>) {
+    return this.tdb.tx(async (trx) => {
+      await this.user(trx, id, true);
+      if (actorId === id) throw fail(403, 'SELF_ACTION', 'You cannot change your own roles. Ask another administrator.');
+      const given: Array<{ roleKey: string; role: string }> = []; const already: string[] = [];
+      for (const roleKey of [...new Set(i.roleKeys)]) {
+        try { const r = await this.assignIn(trx, actorId, id, { roleKey, scopeType: i.scopeType, scopeId: i.scopeId, validTo: i.validTo, limits: i.limits }); given.push({ roleKey, role: r.role }); }
+        catch (e) {
+          const c = (e as { response?: { code?: string } }).response?.code;
+          if (c === 'ALREADY_ASSIGNED') { already.push(roleKey); continue; }
+          if (c === 'INSUFFICIENT_AUTHORITY') throw fail(403, 'INSUFFICIENT_AUTHORITY', `You cannot give the role "${roleKey}": it holds permissions you do not hold yourself. Nothing was changed.`, { roleKey });
+          throw e;
+        }
+      }
+      if (given.length) await this.sessions.revokeAllForUser(trx, id);
+      return { given, already };
+    });
+  }
+  private async assignIn(trx: Trx, actorId: string, id: string, i: z.infer<typeof S.AssignRole>) {
       const role = await trx.selectFrom('role').select(['id', 'key', 'name']).where('key', '=', i.roleKey).executeTakeFirst();
       if (!role) throw fail(404, 'NOT_FOUND', 'Role not found');
       if (i.scopeType === 'PROPERTY' && !(await trx.selectFrom('property').select('id').where('id', '=', i.scopeId!).executeTakeFirst())) throw fail(404, 'NOT_FOUND', 'Property not found');
@@ -150,15 +178,29 @@ export class StaffService {
         .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', new Date(this.clock.now()))])).executeTakeFirst();
       if (dup) throw fail(409, 'ALREADY_ASSIGNED', 'This person already has that role there');
       const a = await trx.insertInto('role_assignment').values({ tenant_id: currentTenant().tenantId, user_id: id, role_id: role.id, scope_type: i.scopeType, scope_id: i.scopeId ?? null, limits: JSON.stringify(i.limits), valid_to: i.validTo ? new Date(i.validTo) : null } as never).returning('id').executeTakeFirstOrThrow();
-      await this.sessions.revokeAllForUser(trx, id);                    // sign in again to pick up the new access
       await this.audit.record(trx, { action: 'staff.role_assign', resourceType: 'staff_user', resourceId: id, after: { role: role.key, scopeType: i.scopeType, scopeId: i.scopeId ?? null, validTo: i.validTo ?? null, limits: i.limits } });
       return { id: a.id, roleKey: role.key, role: role.name, scopeType: i.scopeType, scopeId: i.scopeId ?? null };
-    });
   }
   async revoke(actorId: string, id: string, assignmentId: string, reason: string) {
     return this.tdb.tx(async (trx) => {
       await this.user(trx, id, true);
       if (actorId === id) throw fail(403, 'SELF_ACTION', 'You cannot change your own roles. Ask another administrator.');
+      const r = await this.revokeIn(trx, actorId, id, assignmentId, reason);
+      await this.sessions.revokeAllForUser(trx, id);
+      return r;
+    });
+  }
+  /** Ends several of a person's roles at once, all or none. */
+  async revokeMany(actorId: string, id: string, i: z.infer<typeof S.RevokeRoles>) {
+    return this.tdb.tx(async (trx) => {
+      await this.user(trx, id, true);
+      if (actorId === id) throw fail(403, 'SELF_ACTION', 'You cannot change your own roles. Ask another administrator.');
+      for (const a of [...new Set(i.assignmentIds)]) await this.revokeIn(trx, actorId, id, a, i.reason);
+      await this.sessions.revokeAllForUser(trx, id);
+      return { ended: i.assignmentIds.length };
+    });
+  }
+  private async revokeIn(trx: Trx, actorId: string, id: string, assignmentId: string, reason: string) {
       const a = await sql<{ scope_type: 'TENANT' | 'PROPERTY' | 'LEGAL_ENTITY' | 'DEPARTMENT'; scope_id: string | null; limits: object; key: string; perms: string[] }>`
         SELECT ra.scope_type, ra.scope_id, ra.limits, r.key, array_agg(rp.permission_key) AS perms FROM role_assignment ra JOIN role r ON r.tenant_id = ra.tenant_id AND r.id = ra.role_id JOIN role_permission rp ON rp.tenant_id = ra.tenant_id AND rp.role_id = ra.role_id
         WHERE ra.tenant_id = ${currentTenant().tenantId} AND ra.id = ${assignmentId} AND ra.user_id = ${id} AND (ra.valid_to IS NULL OR ra.valid_to > now()) GROUP BY ra.id, ra.scope_type, ra.scope_id, ra.limits, r.key`.execute(trx);
@@ -167,10 +209,8 @@ export class StaffService {
       if (!(await this.mayAssign(actorId, row.perms, row.scope_type, row.scope_id, row.limits))) throw fail(403, 'INSUFFICIENT_AUTHORITY', 'This role carries more authority than you hold');
       if (row.perms.includes('tenant.manage') && row.scope_type === 'TENANT') await this.assertNotLastOwner(trx, id, assignmentId);
       await trx.updateTable('role_assignment').set({ valid_to: new Date(this.clock.now()) } as never).where('id', '=', assignmentId).execute();
-      await this.sessions.revokeAllForUser(trx, id);
       await this.audit.record(trx, { action: 'staff.role_revoke', resourceType: 'staff_user', resourceId: id, before: { role: row.key, scopeType: row.scope_type, scopeId: row.scope_id }, note: reason });
       return { id: assignmentId, ended: true };
-    });
   }
 
   // ───────────── the audit trail, readable ─────────────
