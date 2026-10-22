@@ -10,6 +10,13 @@ x-api-env: &api-env
   DATABASE_URL_OWNER: postgres://hos_owner:${HOS_OWNER_PASSWORD}@db:5432/${HOS_DB}
   APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY}
   ALLOWED_ORIGINS: ${PUBLIC_WEB_ORIGIN}
+  PUBLIC_BASE_URL: ${PUBLIC_WEB_ORIGIN}
+  # email through Amazon SES (blank = the Write an email button stays hidden)
+  MAIL_FROM: ${MAIL_FROM:-}
+  MAIL_REPLY_TO: ${MAIL_REPLY_TO:-}
+  SES_REGION: ${SES_REGION:-}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
 
 services:
   db:
