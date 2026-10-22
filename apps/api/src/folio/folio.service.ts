@@ -109,7 +109,7 @@ export class FolioService {
       const room = BigInt(n.room_minor), extras = BigInt(n.extras_minor), disc = BigInt(n.discount_minor);
       if (room > 0n) await this.post(trx, { ...base, type: 'CHARGE', txnCode: 'ROOM', amount: room, description: `Room ${n.business_date}` });
       if (extras > 0n) await this.post(trx, { ...base, type: 'CHARGE', txnCode: 'ROOM_EXTRAS', amount: extras, description: `Room extras ${n.business_date}` });
-      if (disc > 0n) await this.post(trx, { ...base, type: 'DISCOUNT', txnCode: 'ROOM_DISCOUNT', amount: -disc, description: `Room discount ${n.business_date}` });
+      if (disc > 0n) await this.post(trx, { ...base, type: 'DISCOUNT', txnCode: 'ROOM_DISCOUNT', amount: -disc, description: n.source === 'SHORT_STAY' ? `Short stay: part of the night ${n.business_date}` : `Room discount ${n.business_date}` });
       posted++; total += room + extras - disc;
     }
     return { posted, total };

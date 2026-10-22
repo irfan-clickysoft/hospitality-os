@@ -330,3 +330,70 @@ describe('housekeeping status', () => {
     expect(await adminDb.selectFrom('audit_log').select('id').where('tenant_id', '=', T.tenantId).where('action', '=', 'housekeeping.status').where('resource_id', '=', w.room['101']).execute()).toHaveLength(2);
   });
 });
+
+describe('short stays', () => {
+  const rule = { tiers: [{ upToHours: 3, percent: 30 }, { upToHours: 6, percent: 50 }, { upToHours: 12, percent: 75 }] };
+  const setRule = async (w: W, r: unknown) => { const v = (await call('GET', `/v1/properties/${w.pid}`, O)).json().version; return call('PATCH', `/v1/properties/${w.pid}`, O, { shortStayRule: r, version: v }); };
+  const at = (time: string, date = '2026-11-05') => testClock.set(zonedToUtcMs(date, time, 'Asia/Karachi'));
+  const inAt = async (w: W, time: string) => { await setBd(w, '2026-11-05'); const b = await book(w); at(time); await ok(checkIn(w, b, '101')); return b; };
+  const out = (w: W, b: { id: string; line: string }, body: Record<string, unknown> = {}, h = OM) => call('POST', url(w, b.id, b.line, 'check-out'), h, { reason: 'Leaving for a flight', balanceReason: 'test: settled elsewhere', ...body });
+  const folioBal = async (w: W, b: { id: string }) => (await ok(call('GET', `/v1/properties/${w.pid}/reservations/${b.id}/folio`, O))).folio.balance.amount as string;
+
+  it('a guest who leaves a few hours after checking in is charged the share of the night the property sets for that length of stay, and the other nights are released', async () => {
+    const w = await sunset(); expect((await setRule(w, rule)).statusCode).toBe(200);
+    const b = await inAt(w, '12:00'); at('14:00');
+    const pre = await ok(call('GET', url(w, b.id, b.line, 'check-out-preview'), O));
+    expect(pre).toMatchObject({ eligible: true, hoursStayed: 2, default: 'RULE', night: { amount: '12000.00' } });
+    expect(pre.options).toMatchObject([{ mode: 'RULE', percent: 30, charge: { amount: '3600.00' } }, { mode: 'FULL_NIGHT', percent: 100, charge: { amount: '12000.00' } }]);
+    const r = await ok(out(w, b));
+    expect(r.checkOut).toMatchObject({ earlyDeparture: true, shortStay: { mode: 'RULE', percent: 30, hoursStayed: 2, charged: { amount: '3600.00' }, waived: { amount: '8400.00' } } });
+    expect(await folioBal(w, b)).toBe('3600.00');
+    const posts = (await ok(call('GET', `/v1/properties/${w.pid}/reservations/${b.id}/folio`, O))).postings.map((p: any) => p.description);
+    expect(posts.some((d: string) => d.startsWith('Short stay'))).toBe(true);
+    expect((await avail(w, 'STD', '2026-11-06')).available).toBeGreaterThan(0);                           // the night after is sellable again
+    const ev = await adminDb.selectFrom('outbox_event').select('event_type').where('aggregate_id', '=', b.id).where('event_type', '=', 'ShortStayCharged').execute(); expect(ev).toHaveLength(1);
+  });
+
+  it('a longer stay moves up the tiers; past the last tier, or with no rule, it is the whole night', async () => {
+    const w = await sunset(); await setRule(w, rule);
+    const b1 = await inAt(w, '12:00'); at('17:00');                                                       // 5 hours → 50 %
+    expect((await ok(out(w, b1))).checkOut.shortStay).toMatchObject({ percent: 50, charged: { amount: '6000.00' } });
+    const b2 = await book(w); at('12:00'); await ok(checkIn(w, b2, '102')); at('14:00', '2026-11-05'); at('23:30');   // 11.5 hours → 75 %
+    expect((await ok(out(w, b2))).checkOut.shortStay).toMatchObject({ percent: 75, charged: { amount: '9000.00' } });
+    const w2 = await sunset(); const b3 = await inAt(w2, '12:00'); at('13:00');                           // no rule: the whole night, as before
+    expect((await ok(call('GET', url(w2, b3.id, b3.line, 'check-out-preview'), O))).default).toBe('FULL_NIGHT');
+    expect((await ok(out(w2, b3))).checkOut.shortStay).toMatchObject({ mode: 'FULL_NIGHT', percent: 100, charged: { amount: '12000.00' } });
+  });
+
+  it('the desk can charge the whole night anyway; a different amount or waiving it needs the override permission and a reason', async () => {
+    const w = await sunset(); await setRule(w, rule);
+    const b1 = await inAt(w, '12:00'); at('13:00');
+    expect((await ok(out(w, b1, { shortStay: { mode: 'FULL_NIGHT' } }))).checkOut.shortStay).toMatchObject({ percent: 100, charged: { amount: '12000.00' } });
+    const fd = await addUser(T.tenantId, `fd${++n}@sh.test`); await assignRole(T.tenantId, fd, 'front_desk_agent', 'PROPERTY', w.pid);
+    const b2 = await book(w); at('12:00'); await ok(checkIn(w, b2, '102')); at('13:30');
+    await code(out(w, b2, { shortStay: { mode: 'CUSTOM', amount: '0', reason: 'Guest was unwell, goodwill' }, balanceReason: undefined }, as(T.tenantId, fd)), 403, 'PERMISSION_DENIED');
+    await code(out(w, b2, { shortStay: { mode: 'CUSTOM', amount: '5000' } }), 400, 'VALIDATION_FAILED');
+    await code(out(w, b2, { shortStay: { mode: 'CUSTOM', amount: '99999', reason: 'Too much' } }), 422, 'VALIDATION_FAILED');
+    const r = await ok(out(w, b2, { shortStay: { mode: 'CUSTOM', amount: '0', reason: 'Guest was unwell, goodwill' } }));
+    expect(r.checkOut.shortStay).toMatchObject({ mode: 'CUSTOM', charged: { amount: '0.00' }, waived: { amount: '12000.00' } });
+    expect(await folioBal(w, b2)).toBe('0.00');
+  });
+
+  it('only same-day departures are short stays; a guest who stayed the night is charged the nights stayed as before', async () => {
+    const w = await sunset(); await setRule(w, rule);
+    const b = await inAt(w, '12:00');
+    await setBd(w, '2026-11-06'); at('09:00', '2026-11-06');
+    expect((await ok(call('GET', url(w, b.id, b.line, 'check-out-preview'), O))).eligible).toBe(false);
+    await code(out(w, b, { shortStay: { mode: 'RULE' } }), 422, 'SHORT_STAY_NOT_ELIGIBLE');
+    const r = await ok(out(w, b)); expect(r.checkOut.shortStay).toBeNull(); expect(await folioBal(w, b)).toBe('12000.00');
+  });
+
+  it('the rule is saved with steps that go up, and refused when they do not', async () => {
+    const w = await sunset();
+    expect((await setRule(w, { tiers: [{ upToHours: 6, percent: 50 }, { upToHours: 3, percent: 30 }] })).statusCode).toBe(400);
+    expect((await setRule(w, { tiers: [{ upToHours: 3, percent: 60 }, { upToHours: 6, percent: 50 }] })).statusCode).toBe(400);
+    expect((await setRule(w, { tiers: [] })).statusCode).toBe(400);
+    expect((await setRule(w, rule)).json().shortStayRule).toEqual(rule);
+    expect((await setRule(w, null)).json().shortStayRule).toBeNull();
+  });
+});
