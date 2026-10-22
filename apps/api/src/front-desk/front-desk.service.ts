@@ -19,6 +19,7 @@ import { ReservationsService } from '../reservations/reservations.service.js';
 import { nextStatus } from '../reservations/state-machine.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { evaluateCard, suggestGuestType, type CardPerson, type DocumentKey, type GuestType } from '../registration/rules.js';
+import { toCsv } from '../reports/csv.js';
 import { idHash, last4, maskId, normaliseIdNumber, type IdType } from './id-documents.js';
 import { parseRule, percentFor, share } from './short-stay.js';
 import type * as S from './schemas.js';
@@ -367,6 +368,26 @@ export class FrontDeskService {
       if (reveal) await this.audit.record(trx, { action: 'frontdesk.view_id', resourceType: 'reservation', resourceId: id, propertyId, note: `${rows.length} document(s) revealed` });
       return { items: rows.map((r) => ({ id: r.id, fullName: r.full_name, isPrimary: r.is_primary, ageGroup: r.age_group, idType: r.id_type, idNumber: !r.id_type || !r.id_number_sealed ? null : reveal ? this.box.open(r.id_number_sealed, this.aad(lineId)) : maskId(r.id_type as IdType, r.id_last4!),
         nationality: r.nationality, idExpiry: r.id_expiry, guestType: r.guest_type, documents: r.documents ?? {}, foreign: r.foreign_details ?? null, guardianId: r.guardian_id })), registration: await this.registrationOf(trx, propertyId, id, rows) };
+    });
+  }
+
+  /** The foreign-guest register for a period, as a spreadsheet to hand to the FRO / Hotel Eye. Shows the full passport numbers, so it needs the view-ID permission and a fresh second factor, and is recorded. */
+  async foreignRegister(propertyId: string, userId: string, from: string, to: string) {
+    await this.res.requirePermission(userId, 'frontdesk.view_id', propertyId); await this.res.requireFreshMfa();
+    return this.tdb.tx(async (trx) => {
+      const p = await this.res.prop(trx, propertyId);
+      const rows = await sql<{ line: string; conf: string; arrival: string; departure: string; room: string | null; name: string; type: string | null; nat: string | null; id_type: string | null; sealed: string | null; expiry: string | null; foreign: Record<string, unknown> | null }>`
+        SELECT l.id AS line, r.confirmation_no AS conf, l.arrival::text AS arrival, l.departure::text AS departure, rm.number AS room, s.full_name AS name, s.guest_type AS type, s.nationality AS nat, s.id_type, s.id_number_sealed AS sealed, s.id_expiry::text AS expiry, s.foreign_details AS foreign
+        FROM stay_guest s JOIN reservation_room l ON l.tenant_id = s.tenant_id AND l.id = s.reservation_room_id JOIN reservation r ON r.tenant_id = l.tenant_id AND r.id = l.reservation_id
+        LEFT JOIN room_assignment a ON a.assignment_ref = l.id AND a.status IN ('IN_HOUSE','DEPARTED') LEFT JOIN room rm ON rm.id = a.room_id
+        WHERE s.tenant_id = ${currentTenant().tenantId} AND l.property_id = ${propertyId} AND s.voided_at IS NULL AND l.status IN ('CHECKED_IN','CHECKED_OUT')
+          AND (s.guest_type IN ('FOREIGN_ADULT','FOREIGN_MINOR','POC_HOLDER') OR s.foreign_details IS NOT NULL) AND l.arrival <= ${to}::date AND l.departure >= ${from}::date
+        ORDER BY l.arrival, r.confirmation_no, s.created_at`.execute(trx);
+      await this.audit.record(trx, { action: 'frontdesk.view_id', resourceType: 'property', resourceId: propertyId, propertyId, note: `foreign-guest register ${from}..${to}: ${rows.rows.length} record(s) revealed` });
+      const f = (r: { foreign: Record<string, unknown> | null }, k: string) => { const v = r.foreign?.[k]; return v === undefined || v === null ? '' : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v); };
+      const keys = ['passportIssuePlace', 'visaType', 'stayExpiry', 'entryDate', 'entryPort', 'localAddress', 'nextDestination', 'froInstruction', 'formCRef', 'residentialPermitRef', 'remarks'];
+      return { filename: `${p.code}-foreign-guest-register-${from}_${to}.csv`, count: rows.rows.length, csv: toCsv(['Booking', 'Room', 'Arrival', 'Departure', 'Name', 'Guest type', 'Nationality', 'ID type', 'ID number', 'ID expiry', 'Passport issued at', 'Visa type', 'Permitted stay until', 'Entry date', 'Entry port', 'Local address', 'Next destination', 'FRO instruction', 'Form C ref', 'Residential permit ref', 'Remarks'],
+        rows.rows.map((r) => [r.conf, r.room, r.arrival, r.departure, r.name, r.type, r.nat, r.id_type, r.sealed ? this.box.open(r.sealed, this.aad(r.line)) : '', r.expiry, ...keys.map((k) => f(r, k))])) };
     });
   }
 

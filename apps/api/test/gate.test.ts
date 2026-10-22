@@ -93,4 +93,19 @@ describe('the gate', () => {
     const hk = await staff(w, 'housekeeper'); await code(call('GET', url(), hk.h), 403, 'PERMISSION_DENIED');
     const audit = await adminDb.selectFrom('audit_log').select('action').where('action', '=', 'frontdesk.view_id').execute(); expect(audit.length).toBeGreaterThanOrEqual(1);   // revealing is recorded
   });
+
+  it('a visitor staying the night is registered as a guest by someone who may manage guests, once, and the guest can then be found', async () => {
+    const w = await sunset(); at('2026-11-05', '20:00');
+    const gate = await staff(w, 'gate_security'); const desk = await staff(w, 'front_desk_agent');
+    const v = await ok(call('POST', G(w, 'visits'), gate.h, { kind: 'VISITOR', name: 'Nadia Overnight', phone: '0300 5551234', visiting: 'Room 101' }), 201);
+    await code(call('POST', G(w, `visits/${v.id}/register`), gate.h, {}), 403, 'PERMISSION_DENIED');                     // the gate cannot create guests
+    const car = await ok(call('POST', G(w, 'visits'), gate.h, { kind: 'VEHICLE', plate: 'ABC-123' }), 201);
+    await code(call('POST', G(w, `visits/${car.id}/register`), desk.h, {}), 422, 'NOT_A_VISITOR');
+    const r = await ok(call('POST', G(w, `visits/${v.id}/register`), desk.h, { nationality: 'pk' }), 201);
+    expect(r.guest).toMatchObject({ fullName: 'Nadia Overnight' }); expect(r.visit.guestId).toBe(r.guest.id);
+    await code(call('POST', G(w, `visits/${v.id}/register`), desk.h, {}), 409, 'ALREADY_REGISTERED');
+    const found = await ok(call('GET', '/v1/guests/search?q=Nadia%20Overnight', desk.h));
+    expect(found.items.map((g: any) => g.id)).toContain(r.guest.id);
+    expect((await ok(call('GET', G(w, 'visits'), gate.h))).open.find((x: any) => x.id === v.id).guestId).toBe(r.guest.id);
+  });
 });

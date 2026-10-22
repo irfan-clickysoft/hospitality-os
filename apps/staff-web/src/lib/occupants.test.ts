@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkOccupant, formatId, gapsFor, idNumberError, suggestType, type Matrix, type Occupant } from './occupants.js';
+import { checkOccupant, formatId, gapsFor, idNumberError, parseRoster, suggestType, type Matrix, type Occupant } from './occupants.js';
 
 const adult = (p: Partial<Occupant> = {}): Occupant => ({ fullName: 'Ali Raza', idType: 'CNIC', idNumber: '35202-1234567-1', nationality: 'PK', idExpiry: '', ageGroup: 'ADULT', guestType: '', docs: {}, foreign: {}, guardian: null, ...p });
 const BD = '2026-11-05';
@@ -63,5 +63,14 @@ describe('the document matrix on the card', () => {
     expect(gapsFor(f, 0, [f], matrix).map((g) => g.key)).toEqual(['passportIssuePlace', 'visaType', 'stayExpiry', 'entryDate', 'entryPort', 'localAddress', 'nextDestination', 'passportExpiry']);
     const done = { ...f, idExpiry: '2031-01-01', foreign: { passportIssuePlace: 'London', visaType: 'eVisa', stayExpiry: '2026-12-01', entryDate: '2026-11-01', entryPort: 'KHI', localAddress: 'Hotel', nextDestination: 'Lahore' } };
     expect(gapsFor(done, 0, [done], matrix)).toEqual([]);
+  });
+});
+
+describe('parseRoster', () => {
+  it('reads one person per line: CNIC, passport, child, country', () => {
+    const r = parseRoster('Ali Raza, 3520212345671\nSara Raza, child\nJohn Smith; GB; 123456789\n\n12345678901, x\nA');
+    expect(r.people.map((p) => [p.fullName, p.idType, p.idNumber, p.nationality, p.ageGroup])).toEqual([
+      ['Ali Raza', 'CNIC', '35202-1234567-1', 'PK', 'ADULT'], ['Sara Raza', 'CNIC', '', 'PK', 'CHILD'], ['John Smith', 'PASSPORT', '123456789', 'GB', 'ADULT']]);
+    expect(r.skipped).toEqual(['12345678901, x', 'A']);
   });
 });

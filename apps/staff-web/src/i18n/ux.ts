@@ -981,6 +981,17 @@ export const uxEn = {
   'ps.strictHint': 'Off: an incomplete card shows what is missing but check-in can go ahead.',
   'ps.nicop': 'A NICOP alone is accepted for overseas Pakistanis',
   'ps.nicopHint': 'Turn on once Hotel Eye confirms it. Until then the passport is asked for as well.',
+  'ci.pasteList': 'Paste a guest list',
+  'ci.rosterLabel': 'Guest list',
+  'ci.rosterEx': 'Ali Raza, 35202-1234567-1\nSara Raza, child\nJohn Smith, GB, 123456789',
+  'ci.rosterHelp': 'One person per line: name, then the ID number, “child” if under 18, and a two-letter country if not Pakistan. You can still change each person below.',
+  'ci.rosterSkipped': 'Could not read {n} line(s)',
+  'ci.rosterAdd': 'Add these guests',
+  'gt.register': 'Staying the night — register as guest',
+  'gt.registered': 'Registered as guest',
+  'gt.dupConfirm': 'A guest with this phone number already exists. Register this visitor as a new guest anyway?',
+  'rp.r.foreign': 'Foreign-guest register',
+  'rp.d.foreign': 'Foreign guests staying in the period with passport, visa, entry and address details, for the FRO / Hotel Eye. Shows full passport numbers, so it asks for your second factor and is recorded.',
 } as const;
 
 /** اردو */
@@ -1951,4 +1962,15 @@ export const uxUr: Record<keyof typeof uxEn, string> = {
   'ps.strictHint': 'بند: نامکمل کارڈ پر جو باقی ہے وہ دکھایا جاتا ہے مگر چیک اِن ہو سکتا ہے۔',
   'ps.nicop': 'بیرونِ ملک پاکستانیوں کے لیے صرف نیکوپ قابلِ قبول ہے',
   'ps.nicopHint': 'ہوٹل آئی کی تصدیق کے بعد آن کریں۔ تب تک پاسپورٹ بھی مانگا جاتا ہے۔',
+  'ci.pasteList': 'مہمانوں کی فہرست پیسٹ کریں',
+  'ci.rosterLabel': 'مہمانوں کی فہرست',
+  'ci.rosterEx': 'علی رضا, 35202-1234567-1\nسارہ رضا, child\nJohn Smith, GB, 123456789',
+  'ci.rosterHelp': 'ہر سطر میں ایک شخص: نام، پھر شناختی نمبر، 18 سال سے کم ہو تو “child”، اور پاکستان کے علاوہ ہو تو دو حرفی ملک۔ نیچے ہر شخص کو بدلا جا سکتا ہے۔',
+  'ci.rosterSkipped': '{n} سطر نہیں پڑھی جا سکی',
+  'ci.rosterAdd': 'یہ مہمان شامل کریں',
+  'gt.register': 'رات ٹھہر رہا ہے — مہمان کے طور پر درج کریں',
+  'gt.registered': 'مہمان کے طور پر درج',
+  'gt.dupConfirm': 'اس فون نمبر کا مہمان پہلے سے موجود ہے۔ پھر بھی اس ملاقاتی کو نیا مہمان درج کریں؟',
+  'rp.r.foreign': 'غیر ملکی مہمانوں کا اندراج',
+  'rp.d.foreign': 'اس مدت میں ٹھہرنے والے غیر ملکی مہمان، پاسپورٹ، ویزا، داخلے اور پتے کی تفصیل کے ساتھ، FRO / ہوٹل آئی کے لیے۔ مکمل پاسپورٹ نمبر دکھاتا ہے، اس لیے دوسرا فیکٹر مانگتا ہے اور ریکارڈ ہوتا ہے۔',
 };
