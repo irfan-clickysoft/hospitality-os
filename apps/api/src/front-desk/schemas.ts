@@ -7,12 +7,13 @@ export const Occupant = z.object({
   fullName: z.string().trim().min(2).max(160),
   isPrimary: z.boolean().default(false),
   ageGroup: z.enum(['ADULT', 'CHILD']).default('ADULT'),
-  idType: z.enum(['CNIC', 'NICOP', 'PASSPORT', 'DRIVING_LICENSE', 'OTHER']),
-  idNumber: z.string().min(1).max(40),
+  /** Children, and family members covered by one ID, may have none. The main guest's is required (checked with the booking, not here). */
+  idType: z.enum(['CNIC', 'NICOP', 'PASSPORT', 'DRIVING_LICENSE', 'OTHER']).nullish(),
+  idNumber: z.string().trim().max(40).nullish(),
   nationality: z.string().regex(/^[A-Za-z]{2}$/, 'two-letter country code like PK').transform((v) => v.toUpperCase()).nullish(),
   idExpiry: businessDate.nullish(),
 });
-export const Occupants = z.array(Occupant).min(1).max(12);
+export const Occupants = z.array(Occupant.refine((o) => !!o.idNumber === !!o.idType, { message: 'Give both the type and the number of the ID, or neither', path: ['idNumber'] })).min(1).max(12);
 
 export const CheckIn = z.object({
   roomId: uuid.optional(),

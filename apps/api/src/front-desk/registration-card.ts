@@ -4,11 +4,11 @@ const ID: Record<string, string> = { CNIC: 'CNIC', NICOP: 'NICOP', PASSPORT: 'Pa
 
 export interface CardView {
   company: string; property: string; confirmationNo: string; room: string | null; roomType: string; arrival: string; departure: string; adults: number; children: number; printedOn: string; idRevealed: boolean;
-  guests: Array<{ fullName: string; isPrimary: boolean; ageGroup: string; idType: string; idNumber: string; nationality: string | null; idExpiry: string | null }>;
+  guests: Array<{ fullName: string; isPrimary: boolean; ageGroup: string; idType: string | null; idNumber: string | null; nationality: string | null; idExpiry: string | null }>;
 }
 
 export function renderRegistrationCard(v: CardView): string {
-  const rows = v.guests.map((g, i) => `<tr><td>${i + 1}</td><td>${esc(g.fullName)}${g.isPrimary ? ' <span class="muted">(booked by)</span>' : ''}</td><td>${g.ageGroup === 'CHILD' ? 'Child' : 'Adult'}</td><td>${esc(g.nationality ?? '')}</td><td>${esc(ID[g.idType] ?? g.idType)} ${esc(g.idNumber)}${g.idExpiry ? `<br><span class="muted">expires ${esc(g.idExpiry)}</span>` : ''}</td></tr>`).join('');
+  const rows = v.guests.map((g, i) => `<tr><td>${i + 1}</td><td>${esc(g.fullName)}${g.isPrimary ? ' <span class="muted">(booked by)</span>' : ''}</td><td>${g.ageGroup === 'CHILD' ? 'Child' : 'Adult'}</td><td>${esc(g.nationality ?? '')}</td><td>${g.idType ? `${esc(ID[g.idType] ?? g.idType)} ${esc(g.idNumber ?? '')}` : g.ageGroup === 'CHILD' ? '<span class="muted">Child — no ID</span>' : '<span class="muted">Covered by the main guest’s ID</span>'}${g.idExpiry ? `<br><span class="muted">expires ${esc(g.idExpiry)}</span>` : ''}</td></tr>`).join('');
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Registration card ${esc(v.confirmationNo)}</title>
 <style>
 @page { size: A4; margin: 16mm; } body { font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1d2a30; max-width: 760px; margin: 0 auto; padding: 16px; }
