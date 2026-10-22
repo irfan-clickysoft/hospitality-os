@@ -10,6 +10,7 @@ import { TenantDb } from '../db/tenant-db.js';
 import { FolioService } from '../folio/folio.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
+import { RecipesService } from '../recipes/recipes.service.js';
 import { nowAt, whyNot, type Why } from '../menu/menu.service.js';
 import type * as S from './schemas.js';
 
@@ -27,6 +28,7 @@ export class FnbService {
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(RecipesService) private readonly recipes: RecipesService,
     @Inject(CLOCK) private readonly clock: ClockLike,
   ) {}
 
@@ -95,7 +97,7 @@ export class FnbService {
   private async view(trx: Trx, o: Order) {
     const lines = await trx.selectFrom('fnb_order_line').selectAll().where('order_id', '=', o.id).orderBy('name').execute();
     return { id: o.id, number: o.number, payDigitally: o.pay_digital, status: o.status, room: o.room_number, guest: o.guest_name, reservationId: o.reservation_id, note: o.note, total: fmt(o.total_minor, o.currency), createdAt: o.created_at, readyAt: o.ready_at, deliveredAt: o.delivered_at,
-      businessDate: o.business_date, cancelReason: o.cancel_reason, version: o.version, lines: lines.map((l) => ({ id: l.id, name: l.name, variant: l.variant_name, modifiers: l.modifiers, removed: l.removed, quantity: l.quantity, unitPrice: fmt(l.unit_price_minor, o.currency), total: fmt(l.line_minor, o.currency), note: l.note, posted: !!l.posting_id })) };
+      businessDate: o.business_date, cancelReason: o.cancel_reason, version: o.version, lines: lines.map((l) => ({ id: l.id, menuItemId: l.menu_item_id, name: l.name, variant: l.variant_name, modifiers: l.modifiers, removed: l.removed, quantity: l.quantity, unitPrice: fmt(l.unit_price_minor, o.currency), total: fmt(l.line_minor, o.currency), note: l.note, posted: !!l.posting_id })) };
   }
   async create(propertyId: string, userId: string, i: z.infer<typeof S.CreateOrder>) {
     return this.tdb.tx(async (trx) => {
@@ -209,6 +211,9 @@ export class FnbService {
         const postingId = await this.folios.post(trx, { folioId: o.folio_id, propertyId: pid, currency: o.currency, type: 'CHARGE', txnCode: o.pay_digital ? 'FNB_DIGITAL' : 'FNB', amount, quantity: l.quantity, unitPrice: BigInt(l.unit_price_minor), businessDate: bd, sourceType: 'FNB_ORDER', sourceRef: l.id,
           lineId: o.reservation_room_id, description: `${o.number} · ${l.name}`, idempotencyKey: `fnb:${o.id}:${l.id}`, userId });
         await trx.updateTable('fnb_order_line').set({ posting_id: postingId } as never).where('id', '=', l.id).execute();
+      }
+      for (const l of lines) {                                                    // the food leaves the store when it is handed over, free items included
+        await this.recipes.deduct(trx, pid, userId, { id: l.id, menuItemId: l.menu_item_id, quantity: l.quantity, removed: l.removed });
       }
       return { status: 'DELIVERED', delivered_at: new Date(this.clock.now()), delivered_by: userId, business_date: bd };
     }, 'order');

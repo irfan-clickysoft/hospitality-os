@@ -31,7 +31,7 @@ export const cnic = (k) => `3520212345${String(100 + (k % 800)).padStart(3, '0')
 /** Where the screens that used to be tabs live now. The tests go by address, as a bookmark would. */
 export const ROUTES = { Today: '/today', Bookings: '/reservations?tab=bookings', Cashier: '/reservations?tab=cashier', Companies: '/reservations?tab=companies', 'OTA claims': '/reservations?tab=ota', 'Conference room': '/reservations?tab=spaces',
   Rack: '/calendar', 'ریک': '/calendar', 'Night audit': '/reports?tab=nightaudit', Reports: '/reports?tab=downloads', Rates: '/admin?tab=rates', Accounts: '/admin?tab=accounts', Rooms: '/admin?tab=rooms', Tax: '/admin?tab=tax', 'Setup check': '/admin?tab=readiness',
-  Staff: '/admin?tab=staff', Menus: '/admin?tab=menus', Kitchen: '/tasks?tab=kitchen', Board: '/housekeeping?tab=board', Repairs: '/tasks?tab=maintenance' };
+  Staff: '/admin?tab=staff', Menus: '/admin?tab=menus', Recipes: '/admin?tab=recipes', Kitchen: '/tasks?tab=kitchen', Board: '/housekeeping?tab=board', Repairs: '/tasks?tab=maintenance' };
 export const goTab = async (page, name) => { await page.evaluate((h) => { window.location.hash = h; }, ROUTES[name]); await page.waitForTimeout(300); };
 export const mainNav = (page) => page.getByRole('navigation', { name: /Main navigation|مین مینو/ }).first();
 /** The language switch lives in the profile menu. */
