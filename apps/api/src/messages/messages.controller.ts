@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Inject, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Inject, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
 import { BadRequestException } from '@nestjs/common';
 import { RequirePermission } from '../authz/decorators.js';
 import { parse } from '../common/validate.js';
@@ -32,5 +32,5 @@ export class MessagesController {
 
   /** Sends a company its statement with a private link. */
   @Post('properties/:propertyId/companies/:companyId/message') @RequirePermission('company.view', P) @HttpCode(200)
-  company(@Param('propertyId', new ParseUUIDPipe()) p: string, @Param('companyId', new ParseUUIDPipe()) c: string, @Headers('origin') origin?: string) { return this.svc.composeCompany(p, c, origin); }
+  company(@Param('propertyId', new ParseUUIDPipe()) p: string, @Param('companyId', new ParseUUIDPipe()) c: string, @Query('channel') channel?: string, @Headers('origin') origin?: string) { return this.svc.composeCompany(p, c, origin, channel ? ch(channel) : 'WHATSAPP'); }
 }
