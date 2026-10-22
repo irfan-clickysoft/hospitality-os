@@ -13,6 +13,7 @@ export const ShortStayRule = z.object({ tiers: z.array(z.object({ upToHours: z.n
   .refine((v) => v.tiers.every((t, i) => i === 0 || (t.upToHours > v.tiers[i - 1]!.upToHours && t.percent >= v.tiers[i - 1]!.percent)), { message: 'Each step must be a longer stay and a larger share than the one before', path: ['tiers'] });
 export const UpdateProperty = z.object({
   shortStayRule: ShortStayRule.nullable().optional(), name: z.string().min(2).max(120).optional(), timezone: tz.optional(), brandId: uuid.nullish(), weekendDays: z.array(z.number().int().min(1).max(7)).max(7).optional(),
+  registrationStrict: z.boolean().optional(), nicopAloneOk: z.boolean().optional(),
   city: z.string().trim().min(2).max(80).nullable().optional(), mapsUrl: z.string().trim().max(500).regex(/^https:\/\//, 'Use the full https:// link from Google Maps').nullable().optional(),
   terms: z.string().trim().max(8000).nullable().optional(),
   checkInTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(), checkOutTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(), version: z.number().int() });

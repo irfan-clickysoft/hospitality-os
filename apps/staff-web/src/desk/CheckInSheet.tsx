@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
-import { checkOccupant, formatId, type Occupant } from '../lib/occupants.js';
+import { checkOccupant, formatId, type Matrix, type Occupant } from '../lib/occupants.js';
+import { OccupantDocs } from './OccupantDocs.js';
 import { Field } from '../ui/ds.js';
 
 export type { Occupant };
 const ID_TYPES = ['CNIC', 'NICOP', 'PASSPORT', 'DRIVING_LICENSE', 'OTHER'] as const;
-export const blankOccupant = (name = '', foreign = false): Occupant => ({ fullName: name, idType: foreign ? 'PASSPORT' : 'CNIC', idNumber: '', nationality: foreign ? '' : 'PK', idExpiry: '', ageGroup: 'ADULT' });
+export const blankOccupant = (name = '', foreign = false): Occupant => ({ fullName: name, idType: foreign ? 'PASSPORT' : 'CNIC', idNumber: '', nationality: foreign ? '' : 'PK', idExpiry: '', ageGroup: 'ADULT', guestType: '', docs: {}, foreign: {}, guardian: null });
 /** What is sent for one guest. An ID is sent only when one was entered: children and family members covered by the main guest's ID have none. */
-export const occupantBody = (o: Occupant, primary: boolean) => ({ fullName: o.fullName.trim(), isPrimary: primary, ageGroup: o.ageGroup, ...(o.idNumber.trim() ? { idType: o.idType, idNumber: o.idNumber.trim() } : {}), ...(o.nationality.trim() ? { nationality: o.nationality.trim().toUpperCase() } : {}), ...(o.idExpiry && o.idNumber.trim() ? { idExpiry: o.idExpiry } : {}) });
+export const occupantBody = (o: Occupant, primary: boolean) => ({ fullName: o.fullName.trim(), isPrimary: primary, ageGroup: o.ageGroup, ...(o.idNumber.trim() ? { idType: o.idType, idNumber: o.idNumber.trim() } : {}), ...(o.nationality.trim() ? { nationality: o.nationality.trim().toUpperCase() } : {}), ...(o.idExpiry && o.idNumber.trim() ? { idExpiry: o.idExpiry } : {}),
+  ...(o.guestType ? { guestType: o.guestType } : {}), documents: o.docs, ...(Object.values(o.foreign).some((v) => v !== '' && v !== false) ? { foreign: Object.fromEntries(Object.entries(o.foreign).filter(([, v]) => v !== '')) } : {}), ...(o.guardian !== null ? { guardianIndex: o.guardian } : {}) });
 
 /** The registration card: who is staying. Each field is checked as the person leaves it, and the problem is shown next to it. */
-export function OccupantsForm({ occupants, onChange, foreign, businessDate, attempted }: { occupants: Occupant[]; onChange: (o: Occupant[]) => void; foreign: boolean; businessDate: string; attempted: boolean }) {
+export function OccupantsForm({ occupants, onChange, foreign, businessDate, attempted, matrix = null, corporate = false }: { occupants: Occupant[]; onChange: (o: Occupant[]) => void; foreign: boolean; businessDate: string; attempted: boolean; matrix?: Matrix | null; corporate?: boolean }) {
   const { t } = useT();
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const set = (i: number, patch: Partial<Occupant>) => onChange(occupants.map((o, k) => (k === i ? { ...o, ...patch } : o)));
@@ -37,7 +39,8 @@ export function OccupantsForm({ occupants, onChange, foreign, businessDate, atte
               <Field label={t('ci.nationality')} required={i === 0} error={show('nationality')}>{(p) => <input {...p} value={o.nationality} maxLength={2} onChange={(x) => set(i, { nationality: x.target.value.toUpperCase() })} onBlur={() => blur(i, 'nationality')} dir="ltr" placeholder="PK" />}</Field>
               {o.idType === 'PASSPORT' && o.idNumber.trim() !== '' && <Field label={t('ci.expiry')} error={show('idExpiry')}>{(p) => <input {...p} type="date" value={o.idExpiry} onChange={(x) => set(i, { idExpiry: x.target.value })} onBlur={() => blur(i, 'idExpiry')} dir="ltr" />}</Field>}
             </div>
-            {i > 0 && <button type="button" className="link" onClick={() => onChange(occupants.filter((_, k) => k !== i))}>{t('ci.remove')}</button>}
+            <OccupantDocs index={i} all={occupants} matrix={matrix} corporate={corporate} onChange={(patch) => set(i, patch)} />
+            {i > 0 && <button type="button" className="link" onClick={() => onChange(occupants.filter((_, k) => k !== i).map((x) => ({ ...x, guardian: x.guardian === null ? null : x.guardian === i ? null : x.guardian > i ? x.guardian - 1 : x.guardian })))}>{t('ci.remove')}</button>}
           </fieldset>
         );
       })}

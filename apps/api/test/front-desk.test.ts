@@ -239,6 +239,70 @@ describe('room move', () => {
   });
 });
 
+describe('the document matrix at check-in', () => {
+  const walk = (w: W, o: Record<string, unknown>, h = O) => call('POST', `/v1/properties/${w.pid}/front-desk/walk-ins`, h, { guest: { fullName: `Matrix ${++n}`, phone: `0313${String(5000000 + n).slice(-7)}`, nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 1, adults: 2, children: 0, ...o }, { 'idempotency-key': `mx-${++n}-${Date.now()}` });
+  const seen = (...k: string[]) => Object.fromEntries(k.map((x) => [x, { state: 'SEEN' }]));
+  const foreignAdult = (o: Record<string, unknown> = {}) => occ({ isPrimary: true, fullName: 'Tim Matrix', nationality: 'GB', idType: 'PASSPORT', idNumber: `GB${700000 + ++n}`, idExpiry: '2031-05-01', guestType: 'FOREIGN_ADULT', ...o });
+
+  it('by default an incomplete card is allowed through but says exactly what is missing, and the card keeps what was recorded', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const r = await walk(w, { adults: 1, occupants: [occ({ isPrimary: true, guestType: 'PAKISTANI_ADULT' })] });
+    expect(r.statusCode, r.body).toBe(201);
+    expect(r.json().checkIn.registration).toMatchObject({ complete: false, people: [{ guestType: 'PAKISTANI_ADULT', status: 'MISSING', missing: [{ kind: 'DOCUMENT', key: 'CNIC_OR_PASSPORT' }] }] });
+    const card = (await call('GET', `/v1/properties/${w.pid}/reservations/${r.json().id}/rooms/${r.json().lines[0].id}/guests`, O)).json();
+    expect(card.registration.complete).toBe(false); expect(card.items[0]).toMatchObject({ guestType: 'PAKISTANI_ADULT', documents: {} });
+  });
+
+  it('a Pakistani family: the CNIC seen, a child with a B-Form and a linked guardian, the other adult needing their own ID', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const r = await walk(w, { adults: 2, children: 1, occupants: [
+      occ({ isPrimary: true, fullName: 'Imran', documents: seen('CNIC_OR_PASSPORT') }),
+      { fullName: 'Nadia', ageGroup: 'ADULT' },
+      { fullName: 'Little Ali', ageGroup: 'CHILD', documents: seen('MINOR_ID'), guardianIndex: 0 }] });
+    expect(r.statusCode, r.body).toBe(201);
+    const reg = r.json().checkIn.registration;
+    expect(reg.people.map((x: any) => [x.name, x.status])).toEqual([['Imran', 'COMPLETE'], ['Nadia', 'MISSING'], ['Little Ali', 'COMPLETE']]);
+    expect(reg.people[1].missing).toEqual(expect.arrayContaining([{ kind: 'ID', key: 'ID' }]));
+    const card = (await call('GET', `/v1/properties/${w.pid}/reservations/${r.json().id}/rooms/${r.json().lines[0].id}/guests`, O)).json().items;
+    expect(card.find((x: any) => x.fullName === 'Little Ali')).toMatchObject({ guestType: 'PAKISTANI_MINOR', guardianId: card.find((x: any) => x.fullName === 'Imran').id });
+  });
+
+  it('a foreign guest needs the foreign-guest record: with it the card is complete and is kept and printed; without it, the gaps are named', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const docs = seen('FOREIGN_PASSPORT', 'PASSPORT_BIO_COPY', 'VISA_BASIS', 'ENTRY_STAMP');
+    const gap = await walk(w, { adults: 1, nights: 1, occupants: [foreignAdult({ documents: docs })], guest: { fullName: 'Tim Matrix', phone: '+44 7700 900556', nationality: 'GB' } });
+    expect(gap.statusCode, gap.body).toBe(201);
+    expect(gap.json().checkIn.registration.people[0].missing.map((m: any) => m.key)).toEqual(['passportIssuePlace', 'visaType', 'stayExpiry', 'entryDate', 'entryPort', 'localAddress', 'nextDestination']);
+    const foreign = { passportIssuePlace: 'London', visaType: 'eVisa (tourist)', stayExpiry: '2026-12-10', entryDate: '2026-11-03', entryPort: 'Karachi airport', localAddress: 'Sunset BnB Boulevard, Karachi', nextDestination: 'Lahore', froInstruction: false, remarks: 'Travelling for work' };
+    const w2 = await sunset(); await setBd(w2, '2026-11-05');
+    const ok2 = await walk(w2, { adults: 1, occupants: [foreignAdult({ documents: docs, foreign })], guest: { fullName: 'Tim Matrix', phone: '+44 7700 900557', nationality: 'GB' } });
+    expect(ok2.statusCode, ok2.body).toBe(201); expect(ok2.json().checkIn.registration.complete).toBe(true);
+    const html = (await call('GET', `/v1/properties/${w2.pid}/reservations/${ok2.json().id}/rooms/${ok2.json().lines[0].id}/registration-card`, O)).body;
+    expect(html).toContain('Foreign adult'); expect(html).toContain('Entered Pakistan on: 2026-11-03'); expect(html).toContain('Port of entry: Karachi airport'); expect(html).toContain('Visa / entry permission: eVisa (tourist)'); expect(html).toContain('Passport bio-page copy: seen');
+  });
+
+  it('a document not available can be recorded with the reason and shows as an exception, not as missing', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const r = await walk(w, { adults: 1, occupants: [occ({ isPrimary: true, documents: { CNIC_OR_PASSPORT: { state: 'NOT_AVAILABLE', note: 'Lost; FIR copy shown' } } })] });
+    expect(r.json().checkIn.registration).toMatchObject({ complete: true, exceptionCount: 1, people: [{ status: 'EXCEPTIONS', exceptions: [{ key: 'CNIC_OR_PASSPORT', note: 'Lost; FIR copy shown' }] }] });
+  });
+
+  it('strict registration stops check-in until the card is complete; a NICOP-alone setting changes what overseas Pakistanis must show', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const v = (await call('GET', `/v1/properties/${w.pid}`, O)).json().version;
+    await ok(call('PATCH', `/v1/properties/${w.pid}`, O, { registrationStrict: true, version: v }));
+    const body = { adults: 1, occupants: [occ({ isPrimary: true })] };
+    const refused = await walk(w, body);
+    expect(refused.statusCode).toBe(422); expect(refused.json().code).toBe('REGISTRATION_INCOMPLETE'); expect(refused.json().registration.missingCount).toBe(1);
+    expect((await walk(w, { adults: 1, occupants: [occ({ isPrimary: true, documents: seen('CNIC_OR_PASSPORT') })] })).statusCode).toBe(201);
+    const req = async () => (await ok(call('GET', `/v1/properties/${w.pid}/registration/requirements`, O))).types.find((t: any) => t.type === 'OVERSEAS_PAKISTANI').requirements.filter((r: any) => r.required).map((r: any) => r.key);
+    expect(await req()).toEqual(['NICOP', 'PASSPORT']);
+    const v2 = (await call('GET', `/v1/properties/${w.pid}`, O)).json().version;
+    await ok(call('PATCH', `/v1/properties/${w.pid}`, O, { nicopAloneOk: true, version: v2 }));
+    expect(await req()).toEqual(['NICOP']);
+  });
+});
+
 describe('walk-in without every ID', () => {
   const walkKey = () => ({ 'idempotency-key': `walk-${++n}-${Date.now()}` });
   const post = (w: W, b: unknown) => call('POST', `/v1/properties/${w.pid}/front-desk/walk-ins`, O, b, walkKey());
