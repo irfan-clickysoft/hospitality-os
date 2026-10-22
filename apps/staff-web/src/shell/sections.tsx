@@ -33,9 +33,9 @@ export const SECTIONS: Section[] = [
   ] },
   { id: 'guests', path: '/guests', label: 'nav.guests', icon: 'guests', show: any('guest.view') },
   { id: 'inbox', path: '/inbox', label: 'nav.inbox', icon: 'inbox', show: () => true, primary: true },
-  { id: 'tasks', path: '/tasks', label: 'nav.tasks', icon: 'tasks', show: any('maintenance.view', 'compliance.view', 'fnb.order', 'visitor.log', 'arrivals.view_masked'), tabs: [
+  { id: 'tasks', path: '/tasks', label: 'nav.tasks', icon: 'tasks', show: any('maintenance.view', 'maintenance.request', 'compliance.view', 'fnb.order', 'visitor.log', 'arrivals.view_masked'), tabs: [
     { id: 'gate', label: 'nav.gate', show: any('visitor.log', 'arrivals.view_masked'), Page: L(() => import('../desk/Gate.js'), 'Gate') },
-    { id: 'maintenance', label: 'nav.maintenance', show: any('maintenance.view'), Page: L(() => import('../desk/Maintenance.js'), 'Maintenance') },
+    { id: 'maintenance', label: 'nav.maintenance', show: any('maintenance.view', 'maintenance.request'), Page: L(() => import('../desk/Maintenance.js'), 'Maintenance') },
     { id: 'compliance', label: 'nav.compliance', show: any('compliance.view'), Page: L(() => import('../desk/Compliance.js'), 'Compliance') },
     { id: 'kitchen', label: 'nav.kitchen', show: any('fnb.order'), Page: L(() => import('../desk/Kitchen.js'), 'Kitchen') },
   ] },
@@ -69,7 +69,7 @@ export function personaOf(can: Can): Persona {
   if (can('management.view')) return 'manager';
   if (can('frontdesk.check_in') || can('reservation.view')) return 'frontdesk';
   if (can('housekeeping.update') || can('housekeeping.view')) return 'housekeeping';
-  if (can('maintenance.view')) return 'maintenance';
+  if (can('maintenance.work')) return 'maintenance';
   if (can('cashier.operate') || can('report.view')) return 'accounts';
   return 'staff';
 }

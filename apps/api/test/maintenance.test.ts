@@ -113,10 +113,11 @@ describe('maintenance work orders', () => {
   it('who may do what: front desk can look but not create; only the assigned technician (or a manager) moves a job; due dates show overdue; the overview counts them', async () => {
     const w = await sunset(); at('2026-11-01', '09:00');
     const desk = await staff(w, 'front_desk_agent'); const tech = await staff(w, 'maintenance_technician');
-    await code(create(w, {}, desk.h), 403, 'PERMISSION_DENIED');
+    expect((await ok(create(w, {}, desk.h), 201)).status).toBe('REQUESTED');                                 // anyone with the right may ask; it waits for approval
+    await code(create(w, { assignedTo: tech.id }, desk.h), 403, 'PERMISSION_DENIED');                       // but cannot pick who does it
     const wo = await ok(create(w, { title: 'Lobby light', category: 'ELECTRICAL', area: 'Lobby', dueDate: '2026-11-02', assignedTo: tech.id }), 201);
     expect(wo.status).toBe('ASSIGNED');
-    expect((await ok(call('GET', W(w, ''), desk.h))).items).toHaveLength(1);
+    expect((await ok(call('GET', W(w, ''), desk.h))).items).toHaveLength(2);
     await code(act(w, wo.id, 'notes', { note: 'hello' }, desk.h), 403, 'NOT_YOUR_JOB');
     await ok(act(w, wo.id, 'notes', { note: 'Bulb type is E27' }, tech.h));
     await setBd(w, '2026-11-05');
@@ -125,5 +126,100 @@ describe('maintenance work orders', () => {
     expect(m.properties.find((p: any) => p.id === w.pid).maintenance).toMatchObject({ active: 1, overdue: 1, waiting: 0, urgent: 0, toCheck: 0 });
     await code(create(w, { title: 'x', category: 'AC' }, O), 400, 'VALIDATION_FAILED');
     await code(call('POST', W(w, ''), O, { title: 'Needs room', category: 'AC', outOfOrder: { startDate: '2026-11-05', endDate: '2026-11-06' } }), 400, 'VALIDATION_FAILED');
+  });
+});
+
+describe('request, approval and contractors', () => {
+  const W2 = (w: W, tail: string) => `/v1/properties/${w.pid}/work-orders${tail}`;
+  const post = (w: W, tail: string, body: unknown, h: Record<string, string> = O) => call('POST', W2(w, tail), h, body);
+  const vendor = async (o: Record<string, unknown> = {}) => ok(call('POST', '/v1/maintenance/vendors', O, { name: `Cool Air ${++n}`, trade: 'AC', contactName: 'Imran', phone: '0300 1112223', contractRef: 'SLA-2026-01', slaResponseHours: 4, slaFixHours: 24, ...o }), 201);
+
+  it('a request waits for approval; the approver sends it to a contractor with an estimate; the contractor’s work is recorded and checked; the technician list never sees it before', async () => {
+    const w = await sunset(); at('2026-11-01', '09:00');
+    const desk = await staff(w, 'front_desk_agent'); const gm = await staff(w, 'general_manager'); const v = await vendor();
+    const req = await ok(post(w, '', { title: 'AC switches off by itself', description: 'Room 102, compressor trips after ten minutes', category: 'AC', kind: 'CORRECTIVE', priority: 2, roomId: w.room['102'], estimatedCost: '8000' }, desk.h), 201);
+    expect(req).toMatchObject({ status: 'REQUESTED', kind: 'CORRECTIVE', estimatedCost: { amount: '8000.00' }, approvedBy: null });
+    expect((await ok(call('GET', W2(w, '?status=REQUESTED'), O))).items.map((x: any) => x.id)).toEqual([req.id]);
+    await code(post(w, `/${req.id}/approve`, {}, desk.h), 403, 'PERMISSION_DENIED');
+    await code(post(w, `/${req.id}/start`, {}, gm.h), 409, 'WRONG_STATE');                                  // not before it is approved
+    const ok1 = await ok(post(w, `/${req.id}/approve`, { vendorId: v.id, dueDate: '2026-11-02', estimatedCost: '9500', note: 'Call them today' }, gm.h));
+    expect(ok1).toMatchObject({ status: 'ASSIGNED', vendorId: v.id, contractor: 'Cool Air ' + (n - 0), estimatedCost: { amount: '9500.00' }, approvedBy: expect.any(String) });
+    at('2026-11-01', '11:00');
+    await ok(post(w, `/${req.id}/start`, {}, gm.h));                                                         // a manager records that the contractor arrived
+    at('2026-11-01', '15:00');
+    const done = await ok(post(w, `/${req.id}/done`, { note: 'Replaced capacitor', cost: '9000' }, gm.h));
+    expect(done).toMatchObject({ status: 'DONE', cost: { amount: '9000.00' } });
+    expect(done.sla).toMatchObject({ responseHours: 4, fixHours: 24, responseBreached: false, fixBreached: false });
+    await code(post(w, `/${req.id}/verify`, {}, gm.h), 403, 'SELF_VERIFICATION');
+    expect((await ok(post(w, `/${req.id}/verify`, {}, O))).status).toBe('VERIFIED');
+  });
+
+  it('shows when a contractor was slow against their contract', async () => {
+    const w = await sunset(); at('2026-11-01', '09:00');
+    const v = await vendor({ slaResponseHours: 2, slaFixHours: 6 });
+    const wo = await ok(post(w, '', { title: 'Fumigation', category: 'FUMIGATION', kind: 'PREVENTIVE', vendorId: v.id }), 201);
+    expect(wo).toMatchObject({ status: 'ASSIGNED', kind: 'PREVENTIVE', category: 'FUMIGATION' });
+    at('2026-11-01', '13:00');
+    expect((await ok(call('GET', W2(w, `/${wo.id}`), O))).sla).toMatchObject({ responseBreached: true, fixBreached: false });
+    at('2026-11-01', '16:00');
+    expect((await ok(call('GET', W2(w, `/${wo.id}`), O))).sla).toMatchObject({ responseBreached: true, fixBreached: true });
+  });
+
+  it('a request can be turned down with a reason, or withdrawn by the person who made it — nobody else', async () => {
+    const w = await sunset(); at('2026-11-01', '09:00');
+    const d1 = await staff(w, 'front_desk_agent'), d2 = await staff(w, 'front_desk_agent'), gm = await staff(w, 'general_manager');
+    const a = await ok(post(w, '', { title: 'Repaint lobby wall', category: 'OTHER' }, d1.h), 201);
+    await code(post(w, `/${a.id}/reject`, { reason: 'ab' }, gm.h), 400, 'VALIDATION_FAILED');
+    expect(await ok(post(w, `/${a.id}/reject`, { reason: 'Not in this year’s budget' }, gm.h))).toMatchObject({ status: 'REJECTED', rejectedReason: 'Not in this year’s budget' });
+    const b = await ok(post(w, '', { title: 'Replace curtain', category: 'FURNITURE' }, d1.h), 201);
+    await code(post(w, `/${b.id}/cancel`, { reason: 'Another request' }, d2.h), 403, 'PERMISSION_DENIED');
+    expect((await ok(post(w, `/${b.id}/cancel`, { reason: 'Fixed it myself' }, d1.h))).status).toBe('CANCELLED');
+  });
+
+  it('approving can also take the room out of order, for those who may; requests cannot', async () => {
+    const w = await sunset(); at('2026-11-01', '09:00');
+    const desk = await staff(w, 'front_desk_agent'); const gm = await staff(w, 'general_manager');
+    await code(post(w, '', { title: 'Ceiling leak', category: 'PLUMBING', roomId: w.room['103'], outOfOrder: { startDate: '2026-11-01', endDate: '2026-11-04' } }, desk.h), 403, 'PERMISSION_DENIED');
+    const r = await ok(post(w, '', { title: 'Ceiling leak', category: 'PLUMBING', roomId: w.room['103'] }, desk.h), 201);
+    expect((await ok(post(w, `/${r.id}/approve`, { priority: 1, outOfOrder: { startDate: '2026-11-01', endDate: '2026-11-04' } }, gm.h)))).toMatchObject({ status: 'OPEN', priority: 1, blockId: expect.any(String) });
+  });
+
+  it('contractors: only those with the right manage them; names are unique; an inactive contractor cannot be given work', async () => {
+    const w = await sunset(); const tech = await staff(w, 'maintenance_technician'); const gm = await staff(w, 'general_manager');
+    const v = await vendor({ name: `Unique ${++n}` });
+    await code(call('POST', '/v1/maintenance/vendors', tech.h, { name: 'Sneaky Ltd' }), 403, 'PERMISSION_DENIED');
+    await code(call('POST', '/v1/maintenance/vendors', gm.h, { name: v.name }), 409, 'DUPLICATE_VENDOR');
+    await code(call('POST', '/v1/maintenance/vendors', gm.h, { name: 'Dates Ltd', contractStart: '2026-12-01', contractEnd: '2026-11-01' }), 422, 'VALIDATION_FAILED');
+    expect((await ok(call('GET', '/v1/maintenance/vendors', tech.h))).items.map((x: any) => x.id)).toContain(v.id);        // technicians can see the list
+    await ok(call('PATCH', `/v1/maintenance/vendors/${v.id}`, gm.h, { status: 'INACTIVE' }));
+    const wo = await ok(post(w, '', { title: 'Fan noise', category: 'ELECTRICAL' }), 201);
+    await code(post(w, `/${wo.id}/assign`, { vendorId: v.id }), 422, 'VENDOR_INACTIVE');
+    await code(post(w, `/${wo.id}/assign`, { vendorId: v.id, assignedTo: tech.id }), 400, 'VALIDATION_FAILED');
+    expect((await ok(call('GET', '/v1/maintenance/vendors', gm.h))).items.map((x: any) => x.id)).not.toContain(v.id);        // inactive ones are hidden by default
+  });
+
+  it('lists the work by kind, by contractor, by technician and by trade', async () => {
+    const w = await sunset(); at('2026-11-01', '09:00');
+    const tech = await staff(w, 'maintenance_technician'); const v = await vendor();
+    await ok(post(w, '', { title: 'Service the chillers', category: 'AC', kind: 'PREVENTIVE', vendorId: v.id, estimatedCost: '5000' }), 201);
+    await ok(post(w, '', { title: 'Fix AC remote', category: 'AC', assignedTo: tech.id }), 201);
+    await ok(post(w, '', { title: 'Flush the tanks', category: 'PLUMBING', kind: 'PREVENTIVE' }), 201);
+    const by = async (k: string) => (await ok(call('GET', W2(w, `/summary?by=${k}`), O))).items as Array<{ key: string | null; label: string | null; open: number; active: number; estimated: { amount: string } }>;
+    expect((await by('kind')).map((g) => [g.key, g.open + g.active]).sort()).toEqual([['CORRECTIVE', 1], ['PREVENTIVE', 2]]);
+    expect(await by('vendor')).toEqual([expect.objectContaining({ key: v.id, active: 1, estimated: { amount: '5000.00', currency: 'PKR' } })]);
+    expect(await by('technician')).toEqual([expect.objectContaining({ key: tech.id, active: 1 })]);
+    expect((await by('category')).find((g) => g.key === 'AC')).toMatchObject({ active: 2 });
+    expect((await ok(call('GET', W2(w, `?kind=PREVENTIVE&vendorId=${v.id}`), O))).items).toHaveLength(1);
+  });
+
+  it('writes the message to the technician or contractor, in the owner’s wording, ready for WhatsApp', async () => {
+    const w = await sunset(); at('2026-11-01', '09:00');
+    const v = await vendor({ contactName: 'Imran', name: `Msg Air ${++n}` });
+    const wo = await ok(post(w, '', { title: 'AC trips', description: 'Compressor stops after 10 min', category: 'AC', priority: 1, roomId: w.room['101'], dueDate: '2026-11-02', vendorId: v.id }), 201);
+    const m = await ok(call('POST', `/v1/properties/${w.pid}/work-orders/${wo.id}/message`, O, {}));
+    expect(m.phone).toBe('0300 1112223');
+    expect(m.text).toContain('Hello Imran (Msg Air'); expect(m.text).toContain('URGENT repair job'); expect(m.text).toContain('Where: Room 101'); expect(m.text).toContain('Details: Compressor stops after 10 min'); expect(m.text).toContain('Please finish by: 2 November 2026');
+    const free = await ok(post(w, '', { title: 'Tap', category: 'PLUMBING' }), 201);
+    await code(call('POST', `/v1/properties/${w.pid}/work-orders/${free.id}/message`, O, {}), 422, 'NOT_ASSIGNED');
   });
 });

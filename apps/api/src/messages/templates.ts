@@ -1,6 +1,6 @@
 /** The wording guests receive, and how a template is filled in. Pure functions: no database, easy to test. */
 
-export const EVENTS = ['RESERVATION_CONFIRMED', 'CHECK_IN', 'PAYMENT_RECEIVED', 'SERVICE_ORDER', 'CHECK_OUT', 'REFUND', 'DOCUMENT'] as const;
+export const EVENTS = ['RESERVATION_CONFIRMED', 'CHECK_IN', 'PAYMENT_RECEIVED', 'SERVICE_ORDER', 'CHECK_OUT', 'REFUND', 'DOCUMENT', 'MAINTENANCE_ASSIGNED'] as const;
 export type MessageEvent = (typeof EVENTS)[number];
 export const CHANNELS = ['WHATSAPP', 'EMAIL'] as const;
 export type Channel = (typeof CHANNELS)[number];
@@ -17,15 +17,28 @@ export const VARIABLES: Record<MessageEvent, readonly string[]> = {
   CHECK_OUT: [...COMMON, ...MONEY, 'check_out_date_time'],
   REFUND: [...COMMON, ...MONEY, 'payment_method', 'payment_date', 'receipt_number'],
   DOCUMENT: [...COMMON, ...MONEY, 'document_title', 'reference_number', 'transaction_date', 'description'],
+  MAINTENANCE_ASSIGNED: ['recipient_name', 'property_name', 'manager_name', 'work_order_number', 'work_title', 'work_details', 'work_room', 'work_priority', 'work_kind', 'work_due', 'requested_by'],
 };
 
 export const TITLES: Record<MessageEvent, string> = {
   RESERVATION_CONFIRMED: 'Reservation confirmed', CHECK_IN: 'Check-in completed', PAYMENT_RECEIVED: 'Payment received', SERVICE_ORDER: 'Additional service ordered',
-  CHECK_OUT: 'Check-out completed', REFUND: 'Refund or adjustment', DOCUMENT: 'Any other document',
+  CHECK_OUT: 'Check-out completed', REFUND: 'Refund or adjustment', DOCUMENT: 'Any other document', MAINTENANCE_ASSIGNED: 'Job sent to a technician or contractor',
 };
 
 const SIGN = '\nWarm regards,\n{{manager_name}}\n{{property_name}}';
 const WHATSAPP: Record<MessageEvent, string> = {
+  MAINTENANCE_ASSIGNED: `Hello {{recipient_name}},
+
+A {{work_priority}} {{work_kind}} job needs your attention at {{property_name}}.
+
+Job: {{work_order_number}} — {{work_title}}
+Where: {{work_room}}
+Details: {{work_details}}
+Please finish by: {{work_due}}
+Asked by: {{requested_by}}
+
+Please reply to confirm you have received this and tell us when you can attend.
+${SIGN}`,
   RESERVATION_CONFIRMED: `Dear {{guest_name}},
 
 Greetings from {{property_name}}.
@@ -123,7 +136,7 @@ ${SIGN}
 /** Email uses the same wording, with a subject. */
 const SUBJECTS: Record<MessageEvent, string> = {
   RESERVATION_CONFIRMED: 'Your reservation at {{property_name}} is confirmed ({{booking_reference}})', CHECK_IN: 'Welcome to {{property_name}}', PAYMENT_RECEIVED: 'Payment receipt {{receipt_number}} — {{property_name}}',
-  SERVICE_ORDER: 'Your order {{order_number}} — {{property_name}}', CHECK_OUT: 'Thank you for staying at {{property_name}}', REFUND: 'Your refund {{receipt_number}} — {{property_name}}', DOCUMENT: '{{document_title}} {{reference_number}} — {{property_name}}',
+  SERVICE_ORDER: 'Your order {{order_number}} — {{property_name}}', CHECK_OUT: 'Thank you for staying at {{property_name}}', REFUND: 'Your refund {{receipt_number}} — {{property_name}}', DOCUMENT: '{{document_title}} {{reference_number}} — {{property_name}}', MAINTENANCE_ASSIGNED: '{{work_priority}} job {{work_order_number}} — {{property_name}}',
 };
 
 export function defaultTemplate(event: MessageEvent, channel: Channel): { subject: string | null; body: string } {

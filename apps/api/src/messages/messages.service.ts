@@ -104,4 +104,32 @@ export class MessagesService {
     const body = stored?.body ?? d.body, subject = stored ? stored.subject : d.subject;
     return { text: render(body, vars), subject: subject ? render(subject, vars) : null, phone: g.phone, missing: [] as string[] };
   }
+
+  /** The message that tells a technician or contractor about a job, in the owner's wording. The phone is the contractor's, or the technician's if one is on file. */
+  async composeWorkOrder(propertyId: string, workOrderId: string) {
+    const actorId = currentTenant().actorId;
+    const d = await this.tdb.tx(async (trx) => {
+      const w = await trx.selectFrom('work_order').selectAll().where('id', '=', workOrderId).where('property_id', '=', propertyId).executeTakeFirst();
+      if (!w) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Work order not found' });
+      const [p, room, vendor, tech, reporter, actor, stored] = await Promise.all([
+        trx.selectFrom('property').select(['name', 'city']).where('id', '=', propertyId).executeTakeFirstOrThrow(),
+        w.room_id ? trx.selectFrom('room').select('number').where('id', '=', w.room_id).executeTakeFirst() : undefined,
+        w.vendor_id ? trx.selectFrom('maintenance_vendor').select(['name', 'contact_name', 'phone']).where('id', '=', w.vendor_id).executeTakeFirst() : undefined,
+        w.assigned_to ? trx.selectFrom('staff_user').select(['full_name', 'phone']).where('id', '=', w.assigned_to).executeTakeFirst() : undefined,
+        trx.selectFrom('staff_user').select('full_name').where('id', '=', w.reported_by).executeTakeFirst(),
+        actorId ? trx.selectFrom('staff_user').select('full_name').where('id', '=', actorId).executeTakeFirst() : undefined,
+        trx.selectFrom('message_template').selectAll().where('event', '=', 'MAINTENANCE_ASSIGNED').where('channel', '=', 'WHATSAPP').executeTakeFirst(),
+      ]);
+      return { w, p, room, vendor, tech, reporter, actor, stored };
+    });
+    const { w, p, room, vendor, tech, reporter, actor, stored } = d;
+    if (!vendor && !tech) throw new UnprocessableEntityException({ code: 'NOT_ASSIGNED', message: 'Give the job to a technician or a contractor first' });
+    const priority = ['URGENT', 'High-priority', 'Normal', 'Low-priority'][w.priority - 1] ?? 'Normal';
+    const vars: Record<string, string | null> = {
+      recipient_name: vendor ? (vendor.contact_name ? `${vendor.contact_name} (${vendor.name})` : vendor.name) : tech!.full_name, property_name: p.city ? `${p.name}, ${p.city}` : p.name, manager_name: actor?.full_name ?? null,
+      work_order_number: w.number, work_title: w.title, work_details: w.description, work_room: room ? `Room ${room.number}` : w.area, work_priority: priority, work_kind: w.kind === 'PREVENTIVE' ? 'preventive maintenance' : 'repair',
+      work_due: w.due_date ? date(w.due_date) : null, requested_by: reporter?.full_name ?? null,
+    };
+    return { text: render(stored?.body ?? defaultTemplate('MAINTENANCE_ASSIGNED', 'WHATSAPP').body, vars), phone: vendor?.phone ?? tech?.phone ?? null, recipient: vars.recipient_name };
+  }
 }
