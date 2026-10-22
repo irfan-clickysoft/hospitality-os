@@ -7,6 +7,7 @@ import { money, whatsappNumber } from '../lib/format.js';
 import { useStepUp } from '../lib/stepup.js';
 import { useAuth, useLive } from '../state.js';
 import { Badge, Empty, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
+import { EmailSend } from './EmailSend.js';
 import { AccountPicker } from './AccountPicker.js';
 import type { Billing, CompanyLite } from './BillToCompany.js';
 import type { Amount } from './types.js';
@@ -206,6 +207,9 @@ function SendStatement({ company, onClose }: { company: Company; onClose: () => 
             {wa ? <a className="primary button" href={`https://wa.me/${wa}?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">{t('wa.send')}</a> : <p className="warnbox small">{t('mw.noPhone')}</p>}
             <button onClick={() => void navigator.clipboard?.writeText(text)}>{t('wa.copy')}</button>
           </div>
+          <EmailSend
+            compose={() => api<{ text: string; subject: string | null; email: string | null }>('POST', `${b}/companies/${company.id}/message?channel=EMAIL`)}
+            send={(v) => api('POST', `${b}/email/company/${company.id}`, v)} />
         </div>)}
     </Sheet>
   );

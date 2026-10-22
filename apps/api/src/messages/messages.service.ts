@@ -78,7 +78,7 @@ export class MessagesService {
       if (!r) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Booking not found' });
       const [p, g, lines, folio, actor, stored] = await Promise.all([
         trx.selectFrom('property').selectAll().where('id', '=', propertyId).executeTakeFirstOrThrow(),
-        trx.selectFrom('guest').select(['full_name', 'phone']).where('id', '=', r.guest_id).executeTakeFirstOrThrow(),
+        trx.selectFrom('guest').select(['full_name', 'phone', 'email']).where('id', '=', r.guest_id).executeTakeFirstOrThrow(),
         trx.selectFrom('reservation_room').select(['arrival', 'departure', 'checked_out_at', 'status']).where('reservation_id', '=', i.reservationId).orderBy('arrival').execute(),
         trx.selectFrom('folio').select(['balance_minor', 'currency']).where('reservation_id', '=', i.reservationId).orderBy('created_at').executeTakeFirst(),
         actorId ? trx.selectFrom('staff_user').select('full_name').where('id', '=', actorId).executeTakeFirst() : undefined,
@@ -111,7 +111,7 @@ export class MessagesService {
     else if (i.event === 'CHECK_OUT') vars.document_link = (await this.docs.linkFor(propertyId, { kind: 'STATEMENT', refId: i.reservationId }, actorId ?? null, i.origin).catch(() => null))?.url ?? null;
     const d = defaultTemplate(i.event, i.channel);
     const body = stored?.body ?? d.body, subject = stored ? stored.subject : d.subject;
-    return { text: render(body, vars), subject: subject ? render(subject, vars) : null, phone: g.phone, missing: [] as string[] };
+    return { text: render(body, vars), subject: subject ? render(subject, vars) : null, phone: g.phone, email: g.email, missing: [] as string[] };
   }
 
   /** The message that tells a technician or contractor about a job, in the owner's wording. The phone is the contractor's, or the technician's if one is on file. */
@@ -143,7 +143,7 @@ export class MessagesService {
   }
 
   /** The message that sends a company its statement ("Bill to company"): the account for the last 90 days and a private link to view or print it. Goes to the company's contact. */
-  async composeCompany(propertyId: string, companyId: string, origin?: string) {
+  async composeCompany(propertyId: string, companyId: string, origin?: string, channel: Channel = 'WHATSAPP') {
     const actorId = currentTenant().actorId;
     const probe = await this.ar.statement(companyId);
     const to = probe.to; const from = new Date(new Date(`${to}T00:00:00Z`).getTime() - 90 * 86_400_000).toISOString().slice(0, 10);
@@ -152,7 +152,7 @@ export class MessagesService {
       const [p, actor, stored] = await Promise.all([
         trx.selectFrom('property').select(['name', 'city']).where('id', '=', propertyId).executeTakeFirstOrThrow(),
         actorId ? trx.selectFrom('staff_user').select('full_name').where('id', '=', actorId).executeTakeFirst() : undefined,
-        trx.selectFrom('message_template').selectAll().where('event', '=', 'COMPANY_STATEMENT').where('channel', '=', 'WHATSAPP').executeTakeFirst(),
+        trx.selectFrom('message_template').selectAll().where('event', '=', 'COMPANY_STATEMENT').where('channel', '=', channel).executeTakeFirst(),
       ]);
       const c = await trx.selectFrom('company').select(['contact_name', 'contact_phone', 'contact_email']).where('id', '=', companyId).executeTakeFirstOrThrow();
       return { p, actor, stored, c };
@@ -167,6 +167,7 @@ export class MessagesService {
       statement_period: `${date(v.from)} to ${date(v.to)}`, currency: cur, balance_due: due > 0n ? amt(due, cur) : null, overdue_amount: overdue > 0n ? amt(overdue, cur) : null,
       payment_terms: `${v.company.termsDays} days`, document_link: link,
     };
-    return { text: render(d.stored?.body ?? defaultTemplate('COMPANY_STATEMENT', 'WHATSAPP').body, vars), phone: d.c.contact_phone, email: d.c.contact_email, recipient: vars.recipient_name };
+    const dt = defaultTemplate('COMPANY_STATEMENT', channel); const subj = d.stored ? d.stored.subject : dt.subject;
+    return { text: render(d.stored?.body ?? dt.body, vars), subject: channel === 'EMAIL' && subj ? render(subj, vars) : null, phone: d.c.contact_phone, email: d.c.contact_email, recipient: vars.recipient_name };
   }
 }

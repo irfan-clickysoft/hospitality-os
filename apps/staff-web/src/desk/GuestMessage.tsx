@@ -4,6 +4,7 @@ import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
 import { whatsappNumber } from '../lib/format.js';
 import { useAuth } from '../state.js';
+import { EmailSend } from './EmailSend.js';
 
 export const EVENTS = ['RESERVATION_CONFIRMED', 'CHECK_IN', 'PAYMENT_RECEIVED', 'SERVICE_ORDER', 'CHECK_OUT', 'REFUND', 'DOCUMENT'] as const;
 export type MessageEvent = (typeof EVENTS)[number];
@@ -35,6 +36,9 @@ export function GuestMessage({ reservationId, event, paymentId, extra }: { reser
         {wa ? <a className="primary button" href={`https://wa.me/${wa}?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">{t('wa.send')}</a> : <p className="warnbox small">{t('ws.noPhone')}</p>}
         <button onClick={() => { void navigator.clipboard?.writeText(text); setCopied(true); }}>{copied ? t('wa.copied') : t('wa.copy')}</button>
       </div>
+      <EmailSend
+        compose={() => api<{ text: string; subject: string | null; email: string | null }>('POST', `/v1/properties/${property!.id}/messages/compose`, { event, channel: 'EMAIL', reservationId, ...(paymentId ? { paymentId } : {}), ...(salutation ? { salutation } : {}), origin: window.location.origin, extra: extra ?? {} })}
+        send={(v) => api('POST', `/v1/properties/${property!.id}/email/guest`, { reservationId, ...v })} />
     </div>
   );
 }
