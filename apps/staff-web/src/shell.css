@@ -164,5 +164,7 @@ a:not([class]) { color: var(--info-fg); }
 .okbox { background: var(--ok-bg, #e6f4ea); border-radius: 8px; padding: 8px 12px; margin: 0; font-weight: 600; }
 @media print { .noprint { display: none !important; } .print-only { display: block; } .gb { max-width: none; padding: 0; } .gb-media video { display: none; } .gb-room, .gb-block, .gb-ticket { break-inside: avoid; } body { background: #fff; color: #000; } }
 
+.lf-thumb { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; flex: 0 0 auto; background: var(--line-strong); } .lf-none { display: grid; place-items: center; font-weight: 700; }
+.lf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; } .lf-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; border-radius: 8px; }
 .mt-list { display: grid; gap: 4px; align-content: start; } .mt-list .pick.on { outline: 2px solid var(--focus, currentColor); }
 .split { display: grid; grid-template-columns: minmax(220px, 280px) 1fr; gap: 16px; } @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
