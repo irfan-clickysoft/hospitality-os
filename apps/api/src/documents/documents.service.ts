@@ -7,6 +7,8 @@ import { AuditService } from '../audit/audit.service.js';
 import { fmt, type Trx } from '../companies/companies.service.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { PaymentsService } from '../folio/payments.service.js';
+import { InvoiceService } from '../invoices/invoice.service.js';
+import { renderInvoiceHtml } from '../invoices/render.js';
 import { MediaService, mediaUrl } from '../media/media.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { currentTenant, runWithTenant } from '../tenancy/tenant-context.js';
@@ -26,6 +28,7 @@ export class DocumentsService {
   constructor(
     @Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(MediaService) private readonly media: MediaService,
     @Inject(OutboxService) private readonly outbox: OutboxService, @Inject(PaymentsService) private readonly payments: PaymentsService,
+    @Inject(InvoiceService) private readonly invoices: InvoiceService,
   ) {}
 
   // ───────────── the look ─────────────
@@ -113,13 +116,14 @@ export class DocumentsService {
   }
   /** A document for staff, drawn now. */
   async html(propertyId: string, kind: (typeof import('./schemas.js'))['KINDS'][number], refId: string, nonce: string) {
+    if (kind === 'INVOICE') return renderInvoiceHtml((await this.invoices.get(propertyId, refId)) as never);
     return this.tdb.tx(async (trx) => renderDocument(await this.brand(trx, propertyId), await this.build(trx, propertyId, kind, refId), nonce));
   }
   /** The private link to a document: one live link per document, made on first use. */
   async linkFor(propertyId: string, i: z.infer<typeof S.LinkBody>, userId: string | null, origin?: string) {
     const tenantId = currentTenant().tenantId;
     return this.tdb.tx(async (trx) => {
-      await this.build(trx, propertyId, i.kind, i.refId);                            // the document must exist, and belong to this property
+      if (i.kind === 'INVOICE') await this.invoices.get(propertyId, i.refId); else await this.build(trx, propertyId, i.kind, i.refId);       // the document must exist, and belong to this property
       let l = await trx.selectFrom('document_link').select(['token']).where('kind', '=', i.kind).where('ref_id', '=', i.refId).where('revoked_at', 'is', null).executeTakeFirst();
       if (!l) {
         const token = `${tenantId.replace(/-/g, '')}-${randomBytes(16).toString('hex')}`;
@@ -138,10 +142,11 @@ export class DocumentsService {
     return runWithTenant({ tenantId: toUuid(token.slice(0, 32)) }, () => this.tdb.tx(async (trx) => {
       const l = await trx.selectFrom('document_link').selectAll().where('token', '=', token).where('revoked_at', 'is', null).executeTakeFirst();
       if (!l || (l.expires_at && new Date(l.expires_at) < new Date())) return null;
-      const doc = await this.build(trx, l.property_id, l.kind, l.ref_id).catch(() => null);
-      if (!doc) return null;
+      const inv = l.kind === 'INVOICE' ? await this.invoices.get(l.property_id, l.ref_id).catch(() => null) : null;
+      const doc = l.kind === 'INVOICE' ? null : await this.build(trx, l.property_id, l.kind, l.ref_id).catch(() => null);
+      if (!doc && !inv) return null;
       await trx.updateTable('document_link').set({ views: sql`views + 1`, last_viewed_at: sql`now()` } as never).where('id', '=', l.id).execute();
-      return renderDocument(await this.brand(trx, l.property_id), doc, nonce);
+      return inv ? renderInvoiceHtml(inv as never) : renderDocument(await this.brand(trx, l.property_id), doc!, nonce);
     }));
   }
 

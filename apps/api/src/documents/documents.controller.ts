@@ -30,6 +30,8 @@ export class DocumentsController {
   async payment(@Param('propertyId', uuid()) p: string, @Param('id', uuid()) id: string, @Res() reply: FastifyReply) { const n = nonce(); return page(reply, await this.svc.html(p, 'PAYMENT', id, n), 200, n); }
   @Get('documents/statement/:id') @RequirePermission('folio.view', P)
   async statement(@Param('propertyId', uuid()) p: string, @Param('id', uuid()) id: string, @Res() reply: FastifyReply) { const n = nonce(); return page(reply, await this.svc.html(p, 'STATEMENT', id, n), 200, n); }
+  @Get('documents/invoice/:id') @RequirePermission('folio.view', P)
+  async invoice(@Param('propertyId', uuid()) p: string, @Param('id', uuid()) id: string, @Res() reply: FastifyReply) { const n = nonce(); return page(reply, await this.svc.html(p, 'INVOICE', id, n), 200, n); }
   @Get('documents/order/:id') @RequirePermission('fnb.order', P)
   async order(@Param('propertyId', uuid()) p: string, @Param('id', uuid()) id: string, @Res() reply: FastifyReply) { const n = nonce(); return page(reply, await this.svc.html(p, 'ORDER', id, n), 200, n); }
   @Post('documents/links') @RequirePermission('folio.view', P) @HttpCode(200)

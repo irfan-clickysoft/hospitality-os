@@ -4,13 +4,16 @@ import { defaultTemplate, EVENTS, render, unknownVariables, VARIABLES } from '..
 describe('message templates', () => {
   it('fills a payment message in your wording', () => {
     const text = render(defaultTemplate('PAYMENT_RECEIVED', 'WHATSAPP').body, { guest_name: 'Mr. Ali Raza', property_name: 'Sunset BnB Boulevard, Karachi', booking_reference: 'BLVD-2600002', currency: 'PKR', amount: '25,000',
-      payment_date: '22 October 2026', payment_method: 'Cash', receipt_number: 'RCT-BLVD-26-00012', balance: '10,000', secure_link: 'https://pms.example/#/d/abc', document_link: 'https://pms.example/v1/guest/doc/abc', manager_name: 'Hira Khan' });
+      payment_date: '22 October 2026', payment_method: 'Cash', receipt_number: 'RCT-BLVD-26-00012', balance: '10,000', secure_link: 'https://pms.example/#/d/abc', document_link: 'https://pms.example/v1/guest/doc/abc', room_number: '204', payment_description: 'Advance deposit', paid_by: 'Ali Raza (HBL)', manager_name: 'Hira Khan' });
     expect(text).toBe(`Dear Mr. Ali Raza,
 
 Thank you. We confirm receipt of your payment for your reservation at Sunset BnB Boulevard, Karachi.
 
 Booking reference: BLVD-2600002
+Room: 204
 Amount received: PKR 25,000
+For: Advance deposit
+Paid by: Ali Raza (HBL)
 Payment date: 22 October 2026
 Payment method: Cash
 Receipt number: RCT-BLVD-26-00012

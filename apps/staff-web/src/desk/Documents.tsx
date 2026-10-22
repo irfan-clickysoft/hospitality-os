@@ -9,7 +9,7 @@ import { Badge, Empty, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 import type { Amount } from './types.js';
 import { AccountPicker } from './AccountPicker.js';
 
-type Kind = 'payment' | 'statement' | 'order';
+type Kind = 'payment' | 'statement' | 'order' | 'invoice';
 
 /** Open the branded page to print or save as PDF, and copy the private link to send to the guest. */
 export function DocButtons({ kind, refId, labels }: { kind: Kind; refId: string; labels?: { open?: Key; link?: Key } }) {

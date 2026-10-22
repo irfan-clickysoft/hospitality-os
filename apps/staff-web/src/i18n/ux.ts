@@ -1166,6 +1166,7 @@ export const uxEn = {
   'doc.gs.SUBMITTED': 'Received, being checked',
   'doc.gs.LINKED': 'Payment recorded',
   'doc.gs.REJECTED': 'Could not be matched',
+  'doc.copyInvoiceLink': 'Copy invoice link for the guest or company',
 } as const;
 
 /** اردو */
@@ -2321,4 +2322,5 @@ export const uxUr: Record<keyof typeof uxEn, string> = {
   'doc.gs.SUBMITTED': 'موصول، جانچ جاری',
   'doc.gs.LINKED': 'ادائیگی درج ہو گئی',
   'doc.gs.REJECTED': 'میل نہیں کھا سکی',
+  'doc.copyInvoiceLink': 'مہمان یا کمپنی کے لیے انوائس کا لنک کاپی کریں',
 };

@@ -13,7 +13,7 @@ CREATE TABLE document_link (
   tenant_id      uuid NOT NULL,
   id             uuid NOT NULL DEFAULT gen_random_uuid(),
   property_id    uuid NOT NULL,
-  kind           text NOT NULL CHECK (kind IN ('PAYMENT','STATEMENT','ORDER')),
+  kind           text NOT NULL CHECK (kind IN ('PAYMENT','STATEMENT','ORDER','INVOICE')),
   ref_id         uuid NOT NULL,                                       -- the payment, the reservation or the order
   token          text NOT NULL UNIQUE CHECK (token ~ '^[0-9a-f]{32}-[0-9a-f]{32}$'),
   created_by     uuid,

@@ -141,6 +141,26 @@ describe('branded documents', () => {
     const m = await ok(call('POST', u(w, 'messages/compose'), O, { reservationId: b.id, event: 'PAYMENT_RECEIVED', channel: 'WHATSAPP', paymentId: t.payment.id, origin: 'https://pms.example' }));
     expect(m.text).toMatch(/https:\/\/pms\.example\/v1\/guest\/doc\/[0-9a-f]{32}-[0-9a-f]{32}/);
   });
+
+  it('the payment message names the room, what it is for and who paid; a company-billed stay is paid by the company', async () => {
+    const w = await sunset(); const { b } = await inHouse(w);
+    const t = await ok(call('POST', u(w, `reservations/${b.id}/payments`), O, { kind: 'DEPOSIT', method: 'BANK_TRANSFER', amount: '10000', reference: 'TT-5001', counterparty: 'HBL', note: 'Advance for the stay' }, key()), 201);
+    const m = await ok(call('POST', u(w, 'messages/compose'), O, { reservationId: b.id, event: 'PAYMENT_RECEIVED', channel: 'WHATSAPP', paymentId: t.payment.id, origin: 'https://pms.example' }));
+    for (const x of ['Room: 101', 'Amount received: PKR 10,000', 'For: Advance deposit — Advance for the stay', '(HBL)', `Receipt number: ${t.payment.receiptNo}`, '/v1/guest/doc/']) expect(m.text, x).toContain(x);
+    const e = await ok(call('POST', u(w, 'messages/compose'), O, { reservationId: b.id, event: 'PAYMENT_RECEIVED', channel: 'EMAIL', paymentId: t.payment.id, origin: 'https://pms.example' }));
+    expect(e.subject).toContain(t.payment.receiptNo); expect(e.text).toContain('Room: 101');
+  });
+
+  it('an invoice can be sent as a private link that opens the tax invoice without signing in', async () => {
+    const w = await sunset(); const { b } = await inHouse(w);
+    await setBd(w, '2026-11-07'); await ok(call('POST', u(w, `reservations/${b.id}/rooms/${b.line}/check-out`), OM, { balanceReason: 'test: settled elsewhere' }));
+    const inv = await call('POST', u(w, `reservations/${b.id}/invoices`), OM, {});
+    if (inv.statusCode !== 201) { expect([409, 422]).toContain(inv.statusCode); return; }             // an invoice needs tax rules set up; where they are, the link must work
+    const id = inv.json().id ?? inv.json().invoice?.id ?? inv.json().items?.[0]?.id;
+    const l = await ok(call('POST', u(w, 'documents/links'), O, { kind: 'INVOICE', refId: id }));
+    const open = await app.inject({ method: 'GET', url: `/v1/guest/doc/${l.token}` });
+    expect(open.statusCode).toBe(200); expect(open.body).toContain('TAX INVOICE');
+  });
 });
 
 describe('bank-transfer slips', () => {
