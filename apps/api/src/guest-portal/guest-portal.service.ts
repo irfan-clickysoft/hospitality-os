@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
+import { fmt } from '../companies/companies.service.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { mediaUrl } from '../media/media.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
@@ -76,6 +77,8 @@ export class GuestPortalService {
             media: media.filter((m) => m.room_type_id === t.id).map((m) => ({ kind: m.kind, url: mediaUrl(tenantId, m.file_name, ''), caption: m.caption })),
           };
         }),
+        slips: (await trx.selectFrom('payment_slip').select(['id', 'status', 'claimed_amount_minor', 'reference', 'reject_reason', 'submitted_at']).where('reservation_id', '=', reservationId).where('source', '=', 'GUEST').orderBy('submitted_at').execute())
+          .map((x) => ({ id: x.id, status: x.status, claimed: x.claimed_amount_minor === null ? null : fmt(x.claimed_amount_minor, r.currency), reference: x.reference, rejectReason: x.reject_reason, submittedAt: x.submitted_at })),
         requests: reqs.map((q) => ({ id: q.id, kind: q.kind, neededOn: q.needed_on, neededTime: q.needed_time, flightNo: q.flight_no, passengers: q.passengers, note: q.note, status: q.status, staffNote: q.staff_note, createdAt: q.created_at })),
       };
     });

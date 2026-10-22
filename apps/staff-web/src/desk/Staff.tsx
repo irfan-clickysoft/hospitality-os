@@ -8,8 +8,9 @@ import { useAuth, useLive } from '../state.js';
 import { Badge, Empty, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 
 interface Assignment { id: string; roleKey: string; role: string; scopeType: string; scopeId: string | null; scope: string | null; validTo: string | null }
-interface User { id: string; email: string; fullName: string; status: string; mfaEnabled: boolean; locale: string; lastLogin: string | null; assignments: Assignment[] }
+interface User { id: string; email: string; fullName: string; phone: string | null; status: string; mfaEnabled: boolean; locale: string; lastLogin: string | null; assignments: Assignment[] }
 interface Role { key: string; name: string; permissions: string[] }
+interface Preset { key: string; name: string; description: string; roles: string[] }
 const tone = (s: string) => (s === 'ACTIVE' ? 'clean' : s === 'INVITED' ? 'warn' : 'neutral') as 'clean' | 'warn' | 'neutral';
 const linkFor = (token: string) => `${window.location.origin}/?invite=${encodeURIComponent(token)}&tenant=${encodeURIComponent((() => { try { return localStorage.getItem('hos.tenant') ?? ''; } catch { return ''; } })())}`;
 
@@ -69,25 +70,51 @@ function AddSheet({ onDone, onClose }: { onDone: (name: string, url: string) => 
 function UserSheet({ user, onChanged, onLink, onClose, stepUp }: { user: User; onChanged: () => void; onLink: (name: string, url: string) => void; onClose: () => void; stepUp: <T>(fn: () => Promise<T>) => Promise<T> }) {
   const { t } = useT();
   const { me, property } = useAuth();
-  const roles = useLive<{ items: Role[] }>('/v1/roles', 300_000);
+  const roles = useLive<{ items: Role[]; presets: Preset[]; permissionLabels: Record<string, string> }>('/v1/roles', 300_000);
   const props = useLive<{ items: Array<{ id: string; name: string }> }>('/v1/properties', 300_000);
-  const [role, setRole] = useState(''); const [scope, setScope] = useState<string>(property?.id ?? 'TENANT'); const [reason, setReason] = useState('');
+  const [phone, setPhone] = useState(user.phone ?? ''); const [pick, setPick] = useState<string[]>([]); const [drop, setDrop] = useState<string[]>([]); const [scope, setScope] = useState<string>(property?.id ?? 'TENANT'); const [reason, setReason] = useState('');
+  const [note, setNote] = useState<string | null>(null);
   const { busy, problem, run } = useAction();
   const self = me?.user.id === user.id;
-  const act = async (fn: () => Promise<unknown>) => { if (await run(() => stepUp(fn))) { onChanged(); setReason(''); } };
+  const act = async (fn: () => Promise<unknown>) => { if (await run(() => stepUp(fn))) { onChanged(); setReason(''); return true; } return false; };
   const need = reason.trim().length >= 3;
+  const here = (a: Assignment) => (scope === 'TENANT' ? a.scopeType === 'TENANT' : a.scopeId === scope);
+  const held = new Set(user.assignments.filter(here).map((a) => a.roleKey));
+  const byKey = new Map((roles.data?.items ?? []).map((r) => [r.key, r]));
+  const labels = roles.data?.permissionLabels ?? {};
+  const allowed = [...new Set([...held, ...pick].flatMap((k) => byKey.get(k)?.permissions ?? []))].map((p) => labels[p] ?? p).sort();
+  const toggle = (k: string) => { setNote(null); setPick(pick.includes(k) ? pick.filter((x) => x !== k) : [...pick, k]); };
+  const give = async () => {
+    const r = await run(() => stepUp(() => api<{ given: unknown[]; already: string[] }>('POST', `/v1/users/${user.id}/roles/bulk`, { roleKeys: pick, scopeType: scope === 'TENANT' ? 'TENANT' : 'PROPERTY', scopeId: scope === 'TENANT' ? null : scope })));
+    if (r) { setPick([]); setNote(t('st.gaveN', { n: r.given.length })); onChanged(); }
+  };
   return (
     <Sheet title={user.fullName} onClose={onClose}>
       <p className="muted small" dir="ltr">{user.email} · <Badge tone={tone(user.status)}>{t(`st.s.${user.status}` as Key)}</Badge>{user.lastLogin ? ` · ${new Date(user.lastLogin).toLocaleDateString()}` : ''}</p>
+      <div className="row"><label>{t('bk.phone')}<input value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" inputMode="tel" /></label><button disabled={busy || phone.trim() === (user.phone ?? '')} onClick={() => act(() => api('PUT', `/v1/users/${user.id}/phone`, { phone: phone.trim() || null }))}>{t('common.save')}</button></div>
+      <p className="muted small">{t('st.phoneNote')}</p>
       <h3>{t('st.roles')}</h3>
       {user.assignments.length === 0 && <p className="muted small">{t('st.noRoles')}</p>}
       <ul className="plain">{user.assignments.map((a) => (
-        <li key={a.id} className="row between small"><span><strong>{a.role}</strong> · {a.scope ?? t('st.wholeBusiness')}{a.validTo ? ` · ${a.validTo.slice(0, 10)}` : ''}</span>
-          {!self && <button className="link" disabled={busy || !need} onClick={() => act(() => api('DELETE', `/v1/users/${user.id}/roles/${a.id}?reason=${encodeURIComponent(reason.trim())}`))}>{t('st.remove')}</button>}</li>))}</ul>
+        <li key={a.id} className="row between small">
+          <label className="check">{!self && <input type="checkbox" checked={drop.includes(a.id)} onChange={() => setDrop(drop.includes(a.id) ? drop.filter((x) => x !== a.id) : [...drop, a.id])} />} <span><strong>{a.role}</strong> · {a.scope ?? t('st.wholeBusiness')}{a.validTo ? ` · ${a.validTo.slice(0, 10)}` : ''}</span></label></li>))}</ul>
+      {!self && drop.length > 0 && <button disabled={busy || !need} onClick={async () => { if (await act(() => api('POST', `/v1/users/${user.id}/roles/remove`, { assignmentIds: drop, reason: reason.trim() }))) setDrop([]); }}>{t('st.removeN', { n: drop.length })}</button>}
       {!self && (<div className="card inner stack">
-        <label>{t('st.role')}<select value={role} onChange={(e) => setRole(e.target.value)}><option value="">—</option>{roles.data?.items.map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}</select></label>
-        <label>{t('st.where')}<select value={scope} onChange={(e) => setScope(e.target.value)}><option value="TENANT">{t('st.wholeBusiness')}</option>{props.data?.items.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-        <button disabled={busy || !role} onClick={() => act(() => api('POST', `/v1/users/${user.id}/roles`, { roleKey: role, scopeType: scope === 'TENANT' ? 'TENANT' : 'PROPERTY', scopeId: scope === 'TENANT' ? null : scope }))}>{t('st.give')}</button>
+        <strong>{t('st.giveRoles')}</strong>
+        <label>{t('st.where')}<select value={scope} onChange={(e) => { setScope(e.target.value); setPick([]); }}><option value="TENANT">{t('st.wholeBusiness')}</option>{props.data?.items.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        {(roles.data?.presets.length ?? 0) > 0 && (<fieldset className="stack"><legend>{t('st.presets')}</legend><p className="muted small">{t('st.presetsHelp')}</p>
+          <div className="chips">{roles.data!.presets.map((p) => <button key={p.key} type="button" className="chip" title={p.description} onClick={() => { setNote(null); setPick([...new Set([...pick, ...p.roles.filter((k) => !held.has(k))])]); }}>{p.name}</button>)}</div></fieldset>)}
+        <fieldset className="stack"><legend>{t('st.chooseRoles')}</legend>
+          {!roles.data ? <Spinner /> : roles.data.items.map((r) => (
+            <div key={r.key} className="stack small">
+              <label className="check"><input type="checkbox" checked={held.has(r.key) || pick.includes(r.key)} disabled={held.has(r.key) || busy} onChange={() => toggle(r.key)} /> <strong>{r.name}</strong>{held.has(r.key) && <span className="muted"> · {t('st.has')}</span>}</label>
+              <details><summary className="muted small">{t('st.allows', { n: r.permissions.length })}</summary><ul className="small">{r.permissions.map((p) => <li key={p}>{labels[p] ?? p}</li>)}</ul></details>
+            </div>))}
+        </fieldset>
+        {allowed.length > 0 && <details><summary><strong>{t('st.together', { n: allowed.length })}</strong></summary><ul className="small">{allowed.map((p) => <li key={p}>{p}</li>)}</ul></details>}
+        <p className="muted small">{t('st.secondPerson')}</p>
+        <button className="primary" disabled={busy || pick.length === 0} onClick={give}>{t('st.giveN', { n: pick.length })}</button>
+        {note && <p className="ok small" role="status">✓ {note}</p>}
       </div>)}
       {!self && (<>
         <label>{t('common.reason')}<input value={reason} onChange={(e) => setReason(e.target.value)} /></label>

@@ -108,4 +108,58 @@ export class MediaService {
     const ext = fileName.split('.')[1] as Ext;
     return { size: st.size, type: TYPES[ext].type, stream: (range?: { start: number; end: number }) => createReadStream(path, range) };
   }
+
+  /** Stores a picture or video for something shown to guests (a menu item): checked by its bytes, kept under an unguessable name, served by the public media route. */
+  async storePublic(data: Buffer): Promise<{ fileName: string; kind: 'IMAGE' | 'VIDEO'; contentType: string; size: number }> {
+    const ext = sniff(data);
+    if (!ext) throw new BadRequestException({ code: 'MEDIA_TYPE_UNSUPPORTED', message: 'Use a JPG, PNG or WebP picture, or an MP4 or WebM video' });
+    const { type, kind } = TYPES[ext];
+    if (data.length > (kind === 'IMAGE' ? MAX_IMAGE : MAX_VIDEO)) throw new PayloadTooLargeException({ code: 'MEDIA_TOO_LARGE', message: kind === 'IMAGE' ? 'Pictures can be up to 8 MB' : 'Videos can be up to 40 MB' });
+    const fileName = `${randomBytes(16).toString('hex')}.${ext}`;
+    const folder = join(dir(), currentTenant().tenantId);
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, fileName), data, { flag: 'wx' });
+    return { fileName, kind, contentType: type, size: data.length };
+  }
+  async removePublic(fileName: string) { if (/^[0-9a-f]{32}\.(jpg|png|webp|mp4|webm)$/.test(fileName)) await rm(join(dir(), currentTenant().tenantId, fileName), { force: true }); }
+  /** A picture that only signed-in staff may fetch (an account's QR code): same checks as room pictures, but kept out of the public folder and the public route. */
+  async savePrivateImage(data: Buffer, maxBytes = 2 * 1024 * 1024): Promise<string> {
+    const ext = sniff(data);
+    if (!ext || TYPES[ext].kind !== 'IMAGE') throw new BadRequestException({ code: 'MEDIA_TYPE_UNSUPPORTED', message: 'Use a JPG, PNG or WebP picture' });
+    if (data.length > maxBytes) throw new PayloadTooLargeException({ code: 'MEDIA_TOO_LARGE', message: `The picture can be up to ${Math.round(maxBytes / 1024 / 1024)} MB` });
+    const fileName = `${randomBytes(16).toString('hex')}.${ext}`;
+    const folder = join(dir(), currentTenant().tenantId, 'private');
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, fileName), data, { flag: 'wx' });
+    return fileName;
+  }
+  async readPrivate(fileName: string) {
+    if (!/^[0-9a-f]{32}\.(jpg|png|webp)$/.test(fileName)) throw new NotFoundException();
+    const { readFile } = await import('node:fs/promises');
+    const data = await readFile(join(dir(), currentTenant().tenantId, 'private', fileName)).catch(() => null);
+    if (!data) throw new NotFoundException();
+    return { data, type: TYPES[fileName.split('.')[1] as Ext].type };
+  }
+
+  /** A bill or other private paper: a PDF, JPG, PNG or WebP of up to 10 MB, kept under a name nobody can guess in a folder the public route never serves. Opened only through a route that checks who is asking. */
+  async storePrivate(data: Buffer): Promise<{ fileName: string; contentType: string; size: number }> {
+    const pdf = data.length > 5 && data.toString('latin1', 0, 5) === '%PDF-';
+    const ext = pdf ? 'pdf' : sniff(data);
+    if (!ext || ext === 'mp4' || ext === 'webm') throw new BadRequestException({ code: 'MEDIA_TYPE_UNSUPPORTED', message: 'Use a PDF, or a JPG, PNG or WebP picture of the bill' });
+    if (data.length > 10 * 1024 * 1024) throw new PayloadTooLargeException({ code: 'MEDIA_TOO_LARGE', message: 'A bill can be up to 10 MB' });
+    const fileName = `${randomBytes(16).toString('hex')}.${ext}`;
+    const folder = join(dir(), currentTenant().tenantId, 'private');
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, fileName), data, { flag: 'wx' });
+    return { fileName, contentType: ext === 'pdf' ? 'application/pdf' : TYPES[ext].type, size: data.length };
+  }
+  async openPrivate(fileName: string) {
+    if (!/^[0-9a-f]{32}\.(pdf|jpg|png|webp)$/.test(fileName)) throw new NotFoundException();
+    const path = join(dir(), currentTenant().tenantId, 'private', fileName);
+    const st = await stat(path).catch(() => null);
+    if (!st?.isFile()) throw new NotFoundException();
+    const ext = fileName.split('.')[1]!;
+    return { size: st.size, type: ext === 'pdf' ? 'application/pdf' : TYPES[ext as Ext].type, stream: () => createReadStream(path) };
+  }
+  async removePrivate(fileName: string | null) { if (fileName && /^[0-9a-f]{32}\.(pdf|jpg|png|webp)$/.test(fileName)) await rm(join(dir(), currentTenant().tenantId, 'private', fileName), { force: true }); }
 }

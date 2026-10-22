@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { money } from '../folio/schemas.js';
+import { DOCUMENT_KEYS, GUEST_TYPES } from '../registration/rules.js';
 import { CreateGuest } from '../guests/schemas.js';
 import { businessDate, uuid } from '../property-setup/schemas.js';
 
@@ -6,12 +8,25 @@ export const Occupant = z.object({
   fullName: z.string().trim().min(2).max(160),
   isPrimary: z.boolean().default(false),
   ageGroup: z.enum(['ADULT', 'CHILD']).default('ADULT'),
-  idType: z.enum(['CNIC', 'NICOP', 'PASSPORT', 'DRIVING_LICENSE', 'OTHER']),
-  idNumber: z.string().min(1).max(40),
+  /** Children, and family members covered by one ID, may have none. The main guest's is required (checked with the booking, not here). */
+  idType: z.enum(['CNIC', 'NICOP', 'PASSPORT', 'DRIVING_LICENSE', 'OTHER']).nullish(),
+  idNumber: z.string().trim().max(40).nullish(),
   nationality: z.string().regex(/^[A-Za-z]{2}$/, 'two-letter country code like PK').transform((v) => v.toUpperCase()).nullish(),
   idExpiry: businessDate.nullish(),
+  /** The kind of guest, which decides the documents asked for; worked out from the card if not given. */
+  guestType: z.enum(GUEST_TYPES).nullish(),
+  /** For each document: seen, or not available with the reason. */
+  documents: z.partialRecord(z.enum(DOCUMENT_KEYS), z.object({ state: z.enum(['SEEN', 'NOT_AVAILABLE']), note: z.string().trim().max(200).nullish() })).default({}),
+  /** The foreign-guest record kept under the Foreigners Act. */
+  foreign: z.object({
+    passportIssuePlace: z.string().trim().max(120).nullish(), visaType: z.string().trim().max(80).nullish(), stayExpiry: businessDate.nullish(), entryDate: businessDate.nullish(), entryPort: z.string().trim().max(120).nullish(),
+    localAddress: z.string().trim().max(300).nullish(), nextDestination: z.string().trim().max(160).nullish(), froInstruction: z.boolean().nullish(), formCRef: z.string().trim().max(80).nullish(),
+    residentialPermitRef: z.string().trim().max(80).nullish(), remarks: z.string().trim().max(500).nullish(),
+  }).nullish(),
+  /** Which other person on the card is this child's accompanying adult (their position in the list, from 0). */
+  guardianIndex: z.number().int().min(0).max(11).nullish(),
 });
-export const Occupants = z.array(Occupant).min(1).max(12);
+export const Occupants = z.array(Occupant.refine((o) => !!o.idNumber === !!o.idType, { message: 'Give both the type and the number of the ID, or neither', path: ['idNumber'] })).min(1).max(12);
 
 export const CheckIn = z.object({
   roomId: uuid.optional(),
@@ -20,7 +35,11 @@ export const CheckIn = z.object({
   allowNotReady: z.boolean().default(false),
   complianceApproval: z.object({ reason: z.string().trim().min(3).max(300) }).optional(),
 });
+/** How a same-day early departure is charged: by the property's short-stay rule, a whole night, or an amount the desk chooses (zero waives it; needs the override-rate permission and a reason). */
+export const ShortStay = z.object({ mode: z.enum(['RULE', 'FULL_NIGHT', 'CUSTOM']), amount: money.optional(), reason: z.string().trim().min(3).max(300).optional() })
+  .refine((v) => v.mode !== 'CUSTOM' || (v.amount !== undefined && !!v.reason), { message: 'Give the amount and the reason', path: ['amount'] });
 export const CheckOut = z.object({
+  shortStay: ShortStay.optional(),
   reason: z.string().min(3).max(300).optional(),
   /** Let the guest leave with an unpaid or overpaid folio. Needs the checkout-with-balance permission and a fresh second factor. */
   balanceReason: z.string().min(3).max(300).optional(),

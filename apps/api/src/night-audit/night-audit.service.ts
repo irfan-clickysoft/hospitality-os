@@ -10,6 +10,7 @@ import { TenantDb } from '../db/tenant-db.js';
 import { FolioService } from '../folio/folio.service.js';
 import { HousekeepingService } from '../housekeeping/housekeeping.service.js';
 import { HORIZON_DAYS, InventoryService } from '../inventory/inventory.service.js';
+import { MaintenanceExtrasService } from '../maintenance/maintenance-extras.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { TaxService } from '../tax/tax.service.js';
 import { ReservationsService } from '../reservations/reservations.service.js';
@@ -37,6 +38,7 @@ export class NightAuditService {
     @Inject(TenantDb) private readonly tdb: TenantDb,
     @Inject(FolioService) private readonly folios: FolioService,
     @Inject(HousekeepingService) private readonly hk: HousekeepingService,
+    @Inject(MaintenanceExtrasService) private readonly maint: MaintenanceExtrasService,
     @Inject(ReservationsService) private readonly res: ReservationsService,
     @Inject(InventoryService) private readonly inv: InventoryService,
     @Inject(TaxService) private readonly tax: TaxService,
@@ -225,6 +227,7 @@ export class NightAuditService {
       if (!rolled) throw fail(409, 'STALE_BUSINESS_DATE', 'The business date has already moved on.');
       const horizon = await this.inv.ensureHorizon(trx, propertyId, next, addDays(next, HORIZON_DAYS));
       const hk = await this.hk.generateIn(trx, propertyId, userId);
+      await this.maint.generateDueIn(trx, propertyId, next, userId);                                  // preventive jobs that fall due in the coming days
       const summary = { businessDate: bd, nextBusinessDate: next, roomsSold: snap.roomsSold, roomsAvailable: snap.roomsAvailable, occupancyPct: snap.occupancyBp / 100, roomRevenue: fmt(snap.roomRevenue, p.currency), adr: fmt(snap.adr, p.currency),
         revPar: fmt(snap.revpar, p.currency), arrivals: snap.arrivals, departures: snap.departures, inHouse: snap.inHouse, noShows: snap.noShows, guestLedger: fmt(snap.guestLedger, p.currency), inventoryDaysAdded: horizon, housekeeping: hk, tax: fmt(snap.tax, p.currency) };
       await trx.updateTable('night_audit_step').set({ status: 'DONE', finished_at: new Date(this.clock.now()), result: JSON.stringify({ rolledTo: next, ...summary }) }).where('run_id', '=', runId).where('step_key', '=', 'CLOSE_DAY').execute();

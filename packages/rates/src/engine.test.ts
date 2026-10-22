@@ -84,6 +84,15 @@ describe('occupancy and extras', () => {
     expect(roomOnly.nights[0]!.mealMinor).toBe(0n);
     expect(bb.nights[0]!.mealMinor).toBe(R(800) + R(400));
   });
+  it('an extra bed lets the room take one more person, and the price includes it', () => {
+    const tight: RoomTypeLimits = { maxAdults: 2, maxChildren: 1, maxOccupancy: 3, baseOccupancy: 2 };
+    expect(codes(price({ limits: tight, req: { adults: 2, children: 2 } }))).toEqual(['OCCUPANCY_EXCEEDED']);          // four in a room made for three
+    const withBed = price({ limits: tight, req: { adults: 2, children: 2, extraBeds: 1 } });
+    expect(withBed.sellable).toBe(true);
+    expect(price({ limits: tight, req: { adults: 2, children: 2, extraBeds: 1 } }).subtotalMinor > price({ limits: tight, req: { adults: 2, children: 1 } }).subtotalMinor).toBe(true);
+    expect(codes(price({ limits: tight, req: { adults: 3, children: 1, extraBeds: 1 } }))).toEqual(['OCCUPANCY_EXCEEDED']);   // a bed is not a third adult place
+    expect(codes(price({ limits: tight, req: { adults: 2, children: 3, extraBeds: 1 } }))).toEqual(['OCCUPANCY_EXCEEDED']);   // nor two more children
+  });
   it('rejects occupancy beyond the room type but still reports the price', () => {
     const q = price({ req: { adults: 3, children: 2 } });                                       // 5 > maxOccupancy 4
     expect(q.sellable).toBe(false); expect(codes(q)).toEqual(['OCCUPANCY_EXCEEDED']); expect(q.subtotalMinor > 0n).toBe(true);

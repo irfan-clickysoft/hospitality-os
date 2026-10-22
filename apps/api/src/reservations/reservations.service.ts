@@ -64,7 +64,7 @@ export class ReservationsService {
 
   // ───────────── helpers ─────────────
   async prop(trx: Trx, id: string) {
-    const p = await trx.selectFrom('property').select(['id', 'code', 'currency', 'business_date', 'timezone', 'check_in_time', 'status']).where('id', '=', id).executeTakeFirst();
+    const p = await trx.selectFrom('property').select(['id', 'code', 'currency', 'business_date', 'timezone', 'check_in_time', 'status', 'registration_strict', 'nicop_alone_ok']).where('id', '=', id).executeTakeFirst();
     if (!p) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Property not found' });
     return p;
   }

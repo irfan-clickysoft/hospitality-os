@@ -6,6 +6,10 @@ import { currentTenant } from '../tenancy/tenant-context.js';
 import { FrontDeskService } from './front-desk.service.js';
 import { renderRegistrationCard } from './registration-card.js';
 import * as S from './schemas.js';
+import { z } from 'zod';
+import { businessDate } from '../property-setup/schemas.js';
+
+const Period = z.object({ from: businessDate, to: businessDate }).refine((v) => v.from <= v.to, { message: 'The start is after the end', path: ['to'] });
 
 const P = { scope: (req: any) => ({ propertyId: req.params.propertyId }) };
 const uuid = () => new ParseUUIDPipe();
@@ -22,6 +26,8 @@ export class FrontDeskController {
   checkIn(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Body() body: unknown) { return this.svc.checkIn(pid, id, line, me(), parse(S.CheckIn, body)); }
   @Post('reservations/:id/rooms/:lineId/undo-check-in') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
   undo(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Body() body: unknown) { return this.svc.undoCheckIn(pid, id, line, me(), parse(S.UndoCheckIn, body).reason); }
+  @Get('reservations/:id/rooms/:lineId/check-out-preview') @RequirePermission('frontdesk.check_out', P)
+  checkOutPreview(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) lineId: string) { return this.svc.checkOutPreview(pid, id, lineId); }
   @Post('reservations/:id/rooms/:lineId/check-out') @RequirePermission('frontdesk.check_out', P) @HttpCode(200)
   checkOut(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Body() body: unknown) { return this.svc.checkOut(pid, id, line, me(), parse(S.CheckOut, body ?? {})); }
   @Post('reservations/:id/rooms/:lineId/move') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
@@ -45,4 +51,8 @@ export class FrontDeskController {
     return r.body;
   }
 
+
+  /** The foreign-guest register for the FRO / Hotel Eye: full passport numbers, so a view-ID permission and a fresh second factor are needed. */
+  @Get('registration/foreign-register') @RequirePermission('frontdesk.view_id', P)
+  foreignRegister(@Param('propertyId', uuid()) pid: string, @Query() q: unknown) { const x = parse(Period, q); return this.svc.foreignRegister(pid, me(), x.from, x.to); }
 }

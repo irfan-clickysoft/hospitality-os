@@ -33,9 +33,9 @@ export const SECTIONS: Section[] = [
   ] },
   { id: 'guests', path: '/guests', label: 'nav.guests', icon: 'guests', show: any('guest.view') },
   { id: 'inbox', path: '/inbox', label: 'nav.inbox', icon: 'inbox', show: () => true, primary: true },
-  { id: 'tasks', path: '/tasks', label: 'nav.tasks', icon: 'tasks', show: any('maintenance.view', 'compliance.view', 'fnb.order', 'visitor.log', 'arrivals.view_masked'), tabs: [
+  { id: 'tasks', path: '/tasks', label: 'nav.tasks', icon: 'tasks', show: any('maintenance.view', 'maintenance.request', 'compliance.view', 'fnb.order', 'visitor.log', 'arrivals.view_masked'), tabs: [
     { id: 'gate', label: 'nav.gate', show: any('visitor.log', 'arrivals.view_masked'), Page: L(() => import('../desk/Gate.js'), 'Gate') },
-    { id: 'maintenance', label: 'nav.maintenance', show: any('maintenance.view'), Page: L(() => import('../desk/Maintenance.js'), 'Maintenance') },
+    { id: 'maintenance', label: 'nav.maintenance', show: any('maintenance.view', 'maintenance.request'), Page: L(() => import('../desk/Maintenance.js'), 'Maintenance') },
     { id: 'compliance', label: 'nav.compliance', show: any('compliance.view'), Page: L(() => import('../desk/Compliance.js'), 'Compliance') },
     { id: 'kitchen', label: 'nav.kitchen', show: any('fnb.order'), Page: L(() => import('../desk/Kitchen.js'), 'Kitchen') },
   ] },
@@ -45,12 +45,15 @@ export const SECTIONS: Section[] = [
     { id: 'nightaudit', label: 'nav.audit', show: any('nightaudit.run'), Page: L(() => import('../desk/NightAudit.js'), 'NightAudit') },
     { id: 'trail', label: 'nav.audit2', show: any('audit.view'), Page: L(() => import('../desk/AuditLog.js'), 'AuditLog') },
   ] },
-  { id: 'admin', path: '/admin', label: 'nav.admin', icon: 'admin', show: any('property.manage', 'rate.manage', 'tax.configure', 'tax.approve', 'paymentaccount.view', 'management.view', 'user.manage', 'data.import'), tabs: [
+  { id: 'admin', path: '/admin', label: 'nav.admin', icon: 'admin', show: any('property.manage', 'rate.manage', 'tax.configure', 'tax.approve', 'paymentaccount.view', 'management.view', 'user.manage', 'data.import', 'fnb.manage'), tabs: [
     { id: 'properties', label: 'nav.properties', show: any('property.manage'), Page: L(() => import('../pages/PropertyAdmin.js'), 'PropertiesTab') },
     { id: 'rooms', label: 'nav.rooms', show: any('property.manage'), Page: L(() => import('../desk/Rooms.js'), 'Rooms') },
+    { id: 'menus', label: 'mn.nav', show: any('fnb.manage'), Page: L(() => import('../desk/Menus.js'), 'Menus') },
+    { id: 'recipes', label: 'rc.nav', show: any('fnb.manage'), Page: L(() => import('../desk/Recipes.js'), 'Recipes') },
     { id: 'rates', label: 'nav.rates', show: any('rate.manage'), Page: L(() => import('../desk/Rates.js'), 'Rates') },
     { id: 'tax', label: 'nav.tax', show: any('tax.configure', 'tax.approve'), Page: L(() => import('../desk/Tax.js'), 'Tax') },
     { id: 'accounts', label: 'nav.accounts', show: any('paymentaccount.view'), Page: L(() => import('../desk/Accounts.js'), 'Accounts') },
+    { id: 'messages', label: 'nav.messages', show: any('tenant.manage'), Page: L(() => import('../pages/MessageTemplates.js'), 'MessageTemplates') },
     { id: 'readiness', label: 'nav.readiness', show: any('management.view'), Page: L(() => import('../desk/Readiness.js'), 'Readiness') },
     { id: 'staff', label: 'nav.staff', show: any('user.manage'), Page: L(() => import('../desk/Staff.js'), 'Staff') },
     { id: 'import', label: 'nav.import', show: any('data.import'), Page: L(() => import('../desk/Import.js'), 'Import') },
@@ -66,7 +69,7 @@ export function personaOf(can: Can): Persona {
   if (can('management.view')) return 'manager';
   if (can('frontdesk.check_in') || can('reservation.view')) return 'frontdesk';
   if (can('housekeeping.update') || can('housekeeping.view')) return 'housekeeping';
-  if (can('maintenance.view')) return 'maintenance';
+  if (can('maintenance.work')) return 'maintenance';
   if (can('cashier.operate') || can('report.view')) return 'accounts';
   return 'staff';
 }

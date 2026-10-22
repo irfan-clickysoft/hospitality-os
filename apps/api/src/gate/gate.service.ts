@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import { CLOCK, type ClockLike } from '../common/clock.js';
 import { TenantDb } from '../db/tenant-db.js';
+import { GuestsService } from '../guests/guests.service.js';
 import { FolioService } from '../folio/folio.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 
@@ -18,7 +19,7 @@ export const LogVisit = z.object({
 /** The gate: who is expected today (names shortened, nothing else about the guest), and a log of visitors, vehicles and deliveries coming in and going out. */
 @Injectable()
 export class GateService {
-  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(FolioService) private readonly folios: FolioService, @Inject(AuditService) private readonly audit: AuditService, @Inject(CLOCK) private readonly clock: ClockLike) {}
+  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(FolioService) private readonly folios: FolioService, @Inject(AuditService) private readonly audit: AuditService, @Inject(GuestsService) private readonly guests: GuestsService, @Inject(CLOCK) private readonly clock: ClockLike) {}
 
   /** "Sara Khan" → "Sara K.": enough for the gate to recognise an arrival, not enough to identify the guest elsewhere. */
   private short(full: string) { const p = full.trim().split(/\s+/); return p.length < 2 ? p[0]! : `${p[0]} ${p[p.length - 1]![0]!.toUpperCase()}.`; }
@@ -37,8 +38,8 @@ export class GateService {
     });
   }
 
-  private view(v: { id: string; kind: string; name: string | null; phone: string | null; id_last4: string | null; plate: string | null; visiting: string | null; purpose: string | null; note: string | null; in_at: Date; out_at: Date | null }) {
-    return { id: v.id, kind: v.kind, name: v.name, phone: v.phone, idLast4: v.id_last4, plate: v.plate, visiting: v.visiting, purpose: v.purpose, note: v.note, inAt: v.in_at, outAt: v.out_at };
+  private view(v: { id: string; kind: string; name: string | null; phone: string | null; id_last4: string | null; plate: string | null; visiting: string | null; purpose: string | null; note: string | null; in_at: Date; out_at: Date | null; guest_id?: string | null }) {
+    return { id: v.id, kind: v.kind, name: v.name, phone: v.phone, idLast4: v.id_last4, plate: v.plate, visiting: v.visiting, purpose: v.purpose, note: v.note, inAt: v.in_at, outAt: v.out_at, guestId: v.guest_id ?? null };
   }
   async log(propertyId: string, userId: string, i: z.infer<typeof LogVisit>) {
     return this.tdb.tx(async (trx) => {
@@ -57,6 +58,19 @@ export class GateService {
       const u = await trx.updateTable('gate_visit').set({ out_at: new Date(this.clock.now()), out_by: userId } as never).where('id', '=', id).returningAll().executeTakeFirstOrThrow();
       await this.audit.record(trx, { action: 'gate.out', resourceType: 'gate_visit', resourceId: id, propertyId });
       return this.view(u as never);
+    });
+  }
+  /** A visitor who is staying the night is registered as a guest (name and phone from the gate log); the full ID is taken at check-in, on the registration card. */
+  async register(propertyId: string, id: string, userId: string, nationality: string | null, allowDuplicate: boolean) {
+    return this.tdb.tx(async (trx) => {
+      const v = await trx.selectFrom('gate_visit').selectAll().where('id', '=', id).where('property_id', '=', propertyId).forUpdate().executeTakeFirst();
+      if (!v) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Entry not found' });
+      if (v.kind !== 'VISITOR' || !v.name) throw fail(422, 'NOT_A_VISITOR', 'Only a named visitor can be registered as a guest');
+      if (v.guest_id) throw fail(409, 'ALREADY_REGISTERED', 'This visitor is already registered as a guest');
+      const g = await this.guests.createIn(trx, { fullName: v.name, phone: v.phone, nationality, vip: false, allowDuplicate } as never);
+      await trx.updateTable('gate_visit').set({ guest_id: g.id } as never).where('id', '=', id).execute();
+      await this.audit.record(trx, { action: 'gate.register_guest', resourceType: 'gate_visit', resourceId: id, propertyId, after: { guestId: g.id } });
+      return { guest: g, visit: this.view({ ...v, guest_id: g.id } as never) };
     });
   }
   /** Who is at the property now, and what came and went today (by business date). */

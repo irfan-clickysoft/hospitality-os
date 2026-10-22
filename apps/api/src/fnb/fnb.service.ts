@@ -10,7 +10,11 @@ import { TenantDb } from '../db/tenant-db.js';
 import { FolioService } from '../folio/folio.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
+import { RecipesService } from '../recipes/recipes.service.js';
+import { nowAt, whyNot, type Why } from '../menu/menu.service.js';
 import type * as S from './schemas.js';
+
+const WHY: Record<Why, string> = { INACTIVE: 'is not available', OUTLET_CLOSED: 'is from an outlet that is closed', MENU_CLOSED: 'is on a menu that is not in use', NOT_TODAY: 'is not served today', NOT_NOW: 'is not served at this hour', SOLD_OUT: 'is sold out', NONE_LEFT: 'has none left', CATEGORY_GONE: 'is not available' };
 
 const fail = (status: number, code: string, message: string, extra: object = {}) => new HttpException({ code, message, ...extra }, status);
 type Order = Awaited<ReturnType<FnbService['row']>>;
@@ -24,6 +28,7 @@ export class FnbService {
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(RecipesService) private readonly recipes: RecipesService,
     @Inject(CLOCK) private readonly clock: ClockLike,
   ) {}
 
@@ -92,7 +97,7 @@ export class FnbService {
   private async view(trx: Trx, o: Order) {
     const lines = await trx.selectFrom('fnb_order_line').selectAll().where('order_id', '=', o.id).orderBy('name').execute();
     return { id: o.id, number: o.number, payDigitally: o.pay_digital, status: o.status, room: o.room_number, guest: o.guest_name, reservationId: o.reservation_id, note: o.note, total: fmt(o.total_minor, o.currency), createdAt: o.created_at, readyAt: o.ready_at, deliveredAt: o.delivered_at,
-      businessDate: o.business_date, cancelReason: o.cancel_reason, version: o.version, lines: lines.map((l) => ({ id: l.id, name: l.name, quantity: l.quantity, unitPrice: fmt(l.unit_price_minor, o.currency), total: fmt(l.line_minor, o.currency), note: l.note, posted: !!l.posting_id })) };
+      businessDate: o.business_date, cancelReason: o.cancel_reason, version: o.version, lines: lines.map((l) => ({ id: l.id, menuItemId: l.menu_item_id, name: l.name, variant: l.variant_name, modifiers: l.modifiers, removed: l.removed, quantity: l.quantity, unitPrice: fmt(l.unit_price_minor, o.currency), total: fmt(l.line_minor, o.currency), note: l.note, posted: !!l.posting_id })) };
   }
   async create(propertyId: string, userId: string, i: z.infer<typeof S.CreateOrder>) {
     return this.tdb.tx(async (trx) => {
@@ -108,18 +113,59 @@ export class FnbService {
       const ids = [...new Set(i.lines.map((l) => l.menuItemId))];
       const items = await trx.selectFrom('menu_item').selectAll().where('property_id', '=', propertyId).where('id', 'in', ids).execute();
       const byId = new Map(items.map((m) => [m.id, m]));
+      const tz = (await trx.selectFrom('property').select('timezone').where('id', '=', propertyId).executeTakeFirstOrThrow()).timezone;
+      const now = nowAt(this.clock.now(), tz);
+      const catIds = items.map((m) => m.category_id).filter((x): x is string => !!x);
+      const cats = catIds.length ? await trx.selectFrom('menu_category').select(['id', 'menu_id']).where('id', 'in', catIds).execute() : [];
+      const menuIds = [...new Set(cats.map((c) => c.menu_id))];
+      const menus = menuIds.length ? await trx.selectFrom('menu').selectAll().where('id', 'in', menuIds).execute() : [];
+      const outlets = menus.length ? await trx.selectFrom('outlet').selectAll().where('id', 'in', [...new Set(menus.map((m) => m.outlet_id))]).execute() : [];
+      const variants = await trx.selectFrom('menu_item_variant').selectAll().where('item_id', 'in', ids).where('active', '=', true).execute();
+      const links = await trx.selectFrom('menu_item_modifier_group').select(['item_id', 'group_id']).where('item_id', 'in', ids).execute();
+      const groups = links.length ? await trx.selectFrom('modifier_group').selectAll().where('id', 'in', [...new Set(links.map((x) => x.group_id))]).where('active', '=', true).execute() : [];
+      const options = groups.length ? await trx.selectFrom('modifier_option').selectAll().where('group_id', 'in', groups.map((g) => g.id)).where('active', '=', true).execute() : [];
+      const asked = new Map<string, number>(); let outletId: string | null = null;
       let total = 0n; const lines = i.lines.map((l) => {
         const m = byId.get(l.menuItemId);
         if (!m) throw fail(422, 'MENU_ITEM_INVALID', 'An item is not on this menu');
-        if (!m.active) throw fail(422, 'MENU_ITEM_UNAVAILABLE', `"${m.name}" is not available`);
-        const lineMinor = BigInt(m.price_minor) * BigInt(l.quantity); total += lineMinor;
-        return { menuItemId: m.id, name: m.name, quantity: l.quantity, unit: BigInt(m.price_minor), lineMinor, note: l.note ?? null };
+        const menu = menus.find((x) => x.id === cats.find((c) => c.id === m.category_id)?.menu_id);
+        const outlet = outlets.find((o) => o.id === menu?.outlet_id);
+        if (outlet) outletId ??= outlet.id;
+        const why = whyNot(m as never, menu as never, outlet, now);
+        if (why) throw fail(422, why === 'INACTIVE' ? 'MENU_ITEM_UNAVAILABLE' : 'ITEM_NOT_ORDERABLE', `"${m.name}" ${WHY[why]}`);
+        if (l.quantity < m.min_quantity) throw fail(422, 'QUANTITY_TOO_LOW', `"${m.name}" must be ordered at least ${m.min_quantity} at a time`);
+        if (m.max_quantity && l.quantity > m.max_quantity) throw fail(422, 'QUANTITY_TOO_HIGH', `"${m.name}" can be ordered at most ${m.max_quantity} at a time`);
+        if (l.note && !m.special_instructions) throw fail(422, 'NOTE_NOT_ALLOWED', `"${m.name}" does not take special instructions`);
+        const sizes = variants.filter((v) => v.item_id === m.id);
+        const size = l.variantId ? sizes.find((v) => v.id === l.variantId) : undefined;
+        if (l.variantId && !size) throw fail(422, 'VARIANT_INVALID', `That size is not offered for "${m.name}"`);
+        if (!size && sizes.length) throw fail(422, 'VARIANT_REQUIRED', `Choose a size for "${m.name}"`);
+        const attached = groups.filter((g) => links.some((x) => x.item_id === m.id && x.group_id === g.id));
+        const picked = l.modifierOptionIds.map((id) => options.find((o) => o.id === id && attached.some((g) => g.id === o.group_id)));
+        if (picked.some((o) => !o)) throw fail(422, 'OPTION_INVALID', `An option is not offered for "${m.name}"`);
+        if (new Set(l.modifierOptionIds).size !== l.modifierOptionIds.length) throw fail(422, 'OPTION_INVALID', 'An option was chosen twice');
+        for (const g of attached) {
+          const n = picked.filter((o) => o!.group_id === g.id).length;
+          if (n < g.min_select) throw fail(422, 'OPTION_REQUIRED', `Choose ${g.min_select === 1 ? 'one' : `at least ${g.min_select}`} for "${g.name}" on "${m.name}"`);
+          if (n > g.max_select) throw fail(422, 'OPTION_TOO_MANY', `"${g.name}" on "${m.name}" allows at most ${g.max_select}`);
+        }
+        const can = new Set(m.removable_ingredients ?? []);
+        const bad = l.removed.find((r) => !can.has(r));
+        if (bad) throw fail(422, 'CANNOT_REMOVE', `"${bad}" cannot be left out of "${m.name}"`);
+        const unit = BigInt(size ? size.price_minor : m.discounted_price_minor ?? m.price_minor) + picked.reduce((a, o) => a + BigInt(o!.price_delta_minor), 0n);
+        const lineMinor = unit * BigInt(l.quantity); total += lineMinor;
+        if (m.availability === 'LIMITED') asked.set(m.id, (asked.get(m.id) ?? 0) + l.quantity);
+        return { menuItemId: m.id, name: m.name, variant: size?.name ?? null, modifiers: picked.map((o) => ({ name: o!.name, price: o!.price_delta_minor })), removed: l.removed, quantity: l.quantity, unit, lineMinor, note: l.note ?? null };
       });
+      for (const [id, q] of asked) {                                              // a limited dish is counted down atomically, so two waiters cannot both take the last one
+        const r = await sql`UPDATE menu_item SET limited_quantity = limited_quantity - ${q} WHERE id = ${id} AND availability = 'LIMITED' AND limited_quantity >= ${q}`.execute(trx);
+        if (!Number(r.numAffectedRows)) throw fail(409, 'ITEM_NOT_ORDERABLE', `"${byId.get(id)!.name}" does not have ${q} left`);
+      }
       const seq = (await sql<{ v: string }>`INSERT INTO property_counter (tenant_id, property_id, name, value) VALUES (${currentTenant().tenantId}, ${propertyId}, 'fnb', 1)
         ON CONFLICT (tenant_id, property_id, name) DO UPDATE SET value = property_counter.value + 1 RETURNING value::text AS v`.execute(trx)).rows[0]!.v;
       const o = await trx.insertInto('fnb_order').values({ tenant_id: currentTenant().tenantId, property_id: propertyId, number: `${p.code}-FB${seq.padStart(5, '0')}`, reservation_id: stay.reservation_id, reservation_room_id: stay.id, folio_id: folio.id,
-        room_number: stay.room, guest_name: stay.guest, note: i.note ?? null, pay_digital: i.payDigitally, total_minor: total.toString(), currency: p.currency, created_by: userId } as never).returningAll().executeTakeFirstOrThrow();
-      await trx.insertInto('fnb_order_line').values(lines.map((l) => ({ tenant_id: currentTenant().tenantId, order_id: o.id, menu_item_id: l.menuItemId, name: l.name, quantity: l.quantity, unit_price_minor: l.unit.toString(), line_minor: l.lineMinor.toString(), note: l.note })) as never).execute();
+        room_number: stay.room, guest_name: stay.guest, note: i.note ?? null, pay_digital: i.payDigitally, total_minor: total.toString(), currency: p.currency, created_by: userId, outlet_id: outletId } as never).returningAll().executeTakeFirstOrThrow();
+      await trx.insertInto('fnb_order_line').values(lines.map((l) => ({ tenant_id: currentTenant().tenantId, order_id: o.id, menu_item_id: l.menuItemId, name: l.name, quantity: l.quantity, unit_price_minor: l.unit.toString(), line_minor: l.lineMinor.toString(), note: l.note, variant_name: l.variant, modifiers: JSON.stringify(l.modifiers), removed: l.removed })) as never).execute();
       await this.audit.record(trx, { action: 'fnb.order_create', resourceType: 'fnb_order', resourceId: o.id, propertyId, after: { number: o.number, room: stay.room, total: total.toString() } });
       await this.outbox.publish(trx, { aggregateType: 'fnb_order', aggregateId: o.id, eventType: 'FnbOrderPlaced', propertyId, businessDate: p.business_date, payload: { orderId: o.id, number: o.number, room: stay.room } });
       return this.view(trx, o);
@@ -143,9 +189,11 @@ export class FnbService {
   prepare(pid: string, id: string, userId: string) { return this.move(pid, id, userId, 'prepare', async (_t, o) => { if (o.status !== 'NEW') throw this.wrong(o); return { status: 'PREPARING', prepared_at: new Date(this.clock.now()) }; }, 'manage'); }
   ready(pid: string, id: string, userId: string) { return this.move(pid, id, userId, 'ready', async (_t, o) => { if (o.status !== 'NEW' && o.status !== 'PREPARING') throw this.wrong(o); return { status: 'READY', ready_at: new Date(this.clock.now()) }; }, 'manage'); }
   cancel(pid: string, id: string, userId: string, reason: string) {
-    return this.move(pid, id, userId, 'cancel', async (_t, o) => {
+    return this.move(pid, id, userId, 'cancel', async (trx, o) => {
       if (o.status === 'DELIVERED') throw fail(409, 'ALREADY_DELIVERED', 'This order is already on the guest’s bill. Reverse the charges on the bill instead.');
       if (o.status === 'CANCELLED') throw this.wrong(o);
+      const back = await trx.selectFrom('fnb_order_line').select(['menu_item_id', 'quantity']).where('order_id', '=', o.id).execute();
+      for (const l of back) await sql`UPDATE menu_item SET limited_quantity = limited_quantity + ${l.quantity} WHERE id = ${l.menu_item_id} AND availability = 'LIMITED'`.execute(trx);
       return { status: 'CANCELLED', cancel_reason: reason, cancelled_by: userId };
     }, 'order');
   }
@@ -163,6 +211,9 @@ export class FnbService {
         const postingId = await this.folios.post(trx, { folioId: o.folio_id, propertyId: pid, currency: o.currency, type: 'CHARGE', txnCode: o.pay_digital ? 'FNB_DIGITAL' : 'FNB', amount, quantity: l.quantity, unitPrice: BigInt(l.unit_price_minor), businessDate: bd, sourceType: 'FNB_ORDER', sourceRef: l.id,
           lineId: o.reservation_room_id, description: `${o.number} · ${l.name}`, idempotencyKey: `fnb:${o.id}:${l.id}`, userId });
         await trx.updateTable('fnb_order_line').set({ posting_id: postingId } as never).where('id', '=', l.id).execute();
+      }
+      for (const l of lines) {                                                    // the food leaves the store when it is handed over, free items included
+        await this.recipes.deduct(trx, pid, userId, { id: l.id, menuItemId: l.menu_item_id, quantity: l.quantity, removed: l.removed });
       }
       return { status: 'DELIVERED', delivered_at: new Date(this.clock.now()), delivered_by: userId, business_date: bd };
     }, 'order');

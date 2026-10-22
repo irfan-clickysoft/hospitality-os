@@ -16,8 +16,9 @@ const KINDS: Record<Method, string[]> = { CASH: [], BANK_TRANSFER: ['BANK'], CHE
 export class PaymentAccountsService {
   constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService) {}
 
-  private view(a: { id: string; property_id: string | null; kind: string; name: string; bank_name: string | null; account_title: string | null; last4: string | null; owner_type: string; owner_name: string | null; currency: string; status: string; note: string | null; version: number }) {
-    return { id: a.id, propertyId: a.property_id, kind: a.kind, name: a.name, bankName: a.bank_name, accountTitle: a.account_title, last4: a.last4, ownerType: a.owner_type, ownerName: a.owner_name, flagged: a.owner_type !== 'COMPANY', currency: a.currency, status: a.status, note: a.note, version: a.version };
+  private view(a: { branch?: string | null; branch_code?: string | null; branch_address?: string | null; iban?: string | null; account_number?: string | null; swift_code?: string | null; qr_file?: string | null; id: string; property_id: string | null; kind: string; name: string; bank_name: string | null; account_title: string | null; last4: string | null; owner_type: string; owner_name: string | null; currency: string; status: string; note: string | null; version: number }) {
+    return { id: a.id, propertyId: a.property_id, kind: a.kind, name: a.name, bankName: a.bank_name, accountTitle: a.account_title, last4: a.last4, ownerType: a.owner_type, ownerName: a.owner_name, flagged: a.owner_type !== 'COMPANY', currency: a.currency, status: a.status, note: a.note, version: a.version,
+      branch: a.branch ?? null, branchCode: a.branch_code ?? null, branchAddress: a.branch_address ?? null, iban: a.iban ?? null, accountNumber: a.account_number ?? null, swiftCode: a.swift_code ?? null, hasQr: !!a.qr_file };
   }
   async list(propertyId: string | null, includeClosed = false) {
     return this.tdb.tx(async (trx) => {
@@ -31,7 +32,7 @@ export class PaymentAccountsService {
     return this.tdb.tx(async (trx) => {
       if (i.propertyId && !(await trx.selectFrom('property').select('id').where('id', '=', i.propertyId).executeTakeFirst())) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Property not found' });
       let a;
-      try { a = await trx.insertInto('payment_account').values({ tenant_id: currentTenant().tenantId, property_id: i.propertyId ?? null, kind: i.kind, name: i.name, bank_name: i.bankName ?? null, account_title: i.accountTitle ?? null, last4: i.last4 ?? null, owner_type: i.ownerType, owner_name: i.ownerName ?? null, note: i.note ?? null, created_by: userId } as never).returningAll().executeTakeFirstOrThrow(); }
+      try { a = await trx.insertInto('payment_account').values({ tenant_id: currentTenant().tenantId, property_id: i.propertyId ?? null, kind: i.kind, name: i.name, bank_name: i.bankName ?? null, account_title: i.accountTitle ?? null, last4: i.last4 ?? (i.accountNumber ? i.accountNumber.replace(/[^0-9A-Za-z]/g, '').slice(-4) : null), branch: i.branch ?? null, branch_code: i.branchCode ?? null, branch_address: i.branchAddress ?? null, iban: i.iban ?? null, account_number: i.accountNumber ?? null, swift_code: i.swiftCode ?? null, owner_type: i.ownerType, owner_name: i.ownerName ?? null, note: i.note ?? null, created_by: userId } as never).returningAll().executeTakeFirstOrThrow(); }
       catch (e) { if ((e as { code?: string }).code === '23505') throw fail(409, 'DUPLICATE', `An account called "${i.name}" already exists`); throw e; }
       await this.audit.record(trx, { action: 'payment_account.create', resourceType: 'payment_account', resourceId: a.id, after: { name: i.name, kind: i.kind, ownerType: i.ownerType, ownerName: i.ownerName ?? null }, reasonCode: i.ownerType === 'COMPANY' ? undefined : 'NON_COMPANY_ACCOUNT' });
       return this.view(a as never);
@@ -44,13 +45,31 @@ export class PaymentAccountsService {
       if (cur.version !== i.version) throw fail(412, 'VERSION_CONFLICT', 'Someone else changed this account. Reload and try again.');
       const m: Record<string, unknown> = {};
       if (i.name !== undefined) m.name = i.name; if (i.kind !== undefined) m.kind = i.kind; if (i.propertyId !== undefined) m.property_id = i.propertyId; if (i.bankName !== undefined) m.bank_name = i.bankName; if (i.accountTitle !== undefined) m.account_title = i.accountTitle;
-      if (i.last4 !== undefined) m.last4 = i.last4; if (i.ownerType !== undefined) m.owner_type = i.ownerType; if (i.ownerName !== undefined) m.owner_name = i.ownerName; if (i.note !== undefined) m.note = i.note;
+      if (i.last4 !== undefined) m.last4 = i.last4; else if (i.accountNumber) m.last4 = i.accountNumber.replace(/[^0-9A-Za-z]/g, '').slice(-4);
+      if (i.branch !== undefined) m.branch = i.branch; if (i.branchCode !== undefined) m.branch_code = i.branchCode; if (i.branchAddress !== undefined) m.branch_address = i.branchAddress;
+      if (i.iban !== undefined) m.iban = i.iban; if (i.accountNumber !== undefined) m.account_number = i.accountNumber; if (i.swiftCode !== undefined) m.swift_code = i.swiftCode; if (i.ownerType !== undefined) m.owner_type = i.ownerType; if (i.ownerName !== undefined) m.owner_name = i.ownerName; if (i.note !== undefined) m.note = i.note;
       let a;
       try { a = await trx.updateTable('payment_account').set({ ...m, version: sql`version + 1` } as never).where('id', '=', id).returningAll().executeTakeFirstOrThrow(); }
       catch (e) { const c = (e as { code?: string }).code; if (c === '23505') throw fail(409, 'DUPLICATE', 'Another account already has that name'); if (c === '23514') throw fail(422, 'OWNER_REQUIRED', 'Say whose account this is'); throw e; }
       await this.audit.record(trx, { action: 'payment_account.update', resourceType: 'payment_account', resourceId: id, before: this.view(cur as never), after: this.view(a as never), reasonCode: a.owner_type !== 'COMPANY' || cur.owner_type !== a.owner_type ? 'NON_COMPANY_ACCOUNT' : undefined });
       return this.view(a as never);
     });
+  }
+  /** The account's QR code (a picture the guest scans to pay): stored privately, shown only to staff who may see payment accounts. */
+  async setQr(id: string, file: string | null) {
+    const old = await this.tdb.tx(async (trx) => {
+      const cur = await trx.selectFrom('payment_account').select(['id', 'qr_file']).where('id', '=', id).forUpdate().executeTakeFirst();
+      if (!cur) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Payment account not found' });
+      await trx.updateTable('payment_account').set({ qr_file: file, version: sql`version + 1` } as never).where('id', '=', id).execute();
+      await this.audit.record(trx, { action: file ? 'payment_account.qr_set' : 'payment_account.qr_remove', resourceType: 'payment_account', resourceId: id });
+      return cur.qr_file;
+    });
+    return old;
+  }
+  async qrFile(id: string) {
+    const a = await this.tdb.tx((trx) => trx.selectFrom('payment_account').select('qr_file').where('id', '=', id).executeTakeFirst());
+    if (!a?.qr_file) throw new NotFoundException({ code: 'NOT_FOUND', message: 'This account has no QR code' });
+    return a.qr_file;
   }
   async close(userId: string, id: string, i: z.infer<typeof S.CloseAccount>) {
     return this.tdb.tx(async (trx) => {

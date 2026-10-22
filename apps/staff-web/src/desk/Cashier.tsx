@@ -9,12 +9,13 @@ import { useAuth, useLive } from '../state.js';
 import { Badge, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 import { CashSafe } from './CashSafe.js';
 import type { Amount } from './types.js';
+import { SlipLinks } from './Documents.js';
 
 interface Session {
   id: string; registerName: string; userId: string; status: 'OPEN' | 'CLOSED' | 'REVIEWED'; openedAt: string; openingFloat: Amount; closedAt: string | null; counted?: Amount | null; expected?: Amount | null; variance?: Amount | null;
   tenders?: Array<{ method: string; kind: string; count: number; total?: Amount }>; cash?: { receipts: Amount; refunds: Amount; drops: Amount }; dropCount?: number; reviewNote: string | null;
 }
-interface Pending { id: string; kind: string; method: string; amount: Amount; reference: string | null; counterparty: string | null; folioNo: string; confirmationNo: string | null }
+interface Pending { id: string; kind: string; method: string; amount: Amount; reference: string | null; counterparty: string | null; folioNo: string; confirmationNo: string | null; slipCount?: number }
 
 /** The drawer. Cash is counted blind: you see what moved, never the total you are supposed to be counting against. */
 export function Cashier() {
@@ -69,6 +70,7 @@ function PendingRow({ p, onDone }: { p: Pending; onDone: () => void }) {
     <li className="card inner stack small">
       <div className="row between"><span>{p.kind === 'REFUND' ? t('pay.k.REFUND') : t('pay.k.PAYMENT')} · {p.counterparty} · <span dir="ltr">{p.reference}</span></span><strong>{money(p.amount)}</strong></div>
       <span className="muted">{p.confirmationNo ?? p.folioNo}</span>
+      <SlipLinks paymentId={p.id} count={p.slipCount ?? 0} />
       <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('cash.verifyNote')} />
       <ErrorLine code={a.problem?.code} detail={a.problem?.detail} />
       <div className="actions"><button className="primary" disabled={a.busy} onClick={() => act(true)}>{t('cash.approve')}</button><button disabled={a.busy || note.trim().length < 3} onClick={() => act(false)}>{t('cash.reject')}</button></div>

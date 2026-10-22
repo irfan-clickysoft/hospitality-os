@@ -22,7 +22,4 @@ export const ReportIssue = z.object({
 }).refine((v) => v.roomId || v.area, { message: 'give a room or an area' });
 export const ResolveIssue = z.object({ note: z.string().trim().max(300).nullish() });
 export const IssuesQuery = z.object({ status: z.enum(['OPEN', 'RESOLVED']).default('OPEN') });
-export const LostFoundCreate = z.object({ roomId: uuid.optional(), location: z.string().trim().max(120).optional(), item: z.string().trim().min(2).max(200), description: z.string().trim().max(500).optional() });
-export const LostFoundClose = z.object({ status: z.enum(['RETURNED', 'DISPOSED']), note: z.string().trim().max(300).nullish() });
-export const LostFoundQuery = z.object({ status: z.enum(['FOUND', 'RETURNED', 'DISPOSED']).default('FOUND') });
 export const OverrideStatus = z.object({ status: z.enum(['CLEAN', 'DIRTY', 'INSPECTED']) });

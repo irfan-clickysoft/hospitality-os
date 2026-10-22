@@ -5,6 +5,7 @@ import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
 import { clock12 } from '../lib/confirmation.js';
 import { addDays } from '../lib/format.js';
+import { GuestSlipUpload } from '../desk/Documents.js';
 
 interface Room {
   roomType: { name: string; description: string | null; bedConfig: string | null; sizeSqm: string | null; maxOccupancy: number }; adults: number; children: number; arrival: string; departure: string; status: string;
@@ -14,7 +15,7 @@ interface Req { id: string; kind: string; neededOn: string | null; neededTime: s
 interface Page {
   property: { name: string; city: string | null; mapsUrl: string | null; checkInTime: string; checkOutTime: string; terms: string | null };
   booking: { confirmationNo: string; status: string; guestName: string; arrival: string | null; departure: string | null; canRequest: boolean; specialRequests: string | null };
-  rooms: Room[]; requests: Req[];
+  rooms: Room[]; requests: Req[]; slips?: Array<{ id: string; status: string; claimed: { amount: string; currency: string } | null; reference: string | null; rejectReason: string | null; submittedAt: string }>;
 }
 const KINDS = ['AIRPORT_PICKUP', 'AIRPORT_DROP', 'GROUND_FLOOR', 'WHEELCHAIR', 'EARLY_CHECKIN', 'LATE_CHECKOUT', 'EXTRA_BED', 'OTHER'] as const;
 type Kind = (typeof KINDS)[number];
@@ -88,6 +89,13 @@ export function GuestBooking({ token }: { token: string }) {
               {q.neededOn && <span className="muted small"> · {date(q.neededOn)}{q.neededTime ? ` ${clock12(q.neededTime)}` : ''}{q.flightNo ? ` · ${q.flightNo}` : ''}</span>}
               <span className={`st st-${q.status === 'DONE' ? 'ok' : q.status === 'DECLINED' ? 'danger' : 'warn'}`}>{t(`gp.s.${q.status}` as Key)}</span>
               {q.staffNote && <p className="small">{q.staffNote}</p>}</li>))}</ul>
+        </section>
+      )}
+
+      {b.canRequest && (
+        <section className="gb-block noprint" aria-labelledby="gb-slip"><h2 id="gb-slip">{t('doc.guestTitle')}</h2>
+          {(page.slips ?? []).length > 0 && <ul className="plain">{page.slips!.map((x) => <li key={x.id} className="gb-reqrow"><strong>{x.claimed ? `${x.claimed.currency} ${x.claimed.amount}` : t('doc.slipSent')}</strong>{x.reference ? <span className="muted small"> · {x.reference}</span> : null}<span className={`st st-${x.status === 'LINKED' ? 'ok' : x.status === 'REJECTED' ? 'danger' : 'warn'}`}>{t(`doc.gs.${x.status}` as Key)}</span>{x.rejectReason && <p className="small">{x.rejectReason}</p>}</li>)}</ul>}
+          <GuestSlipUpload token={token} onSent={load} />
         </section>
       )}
 

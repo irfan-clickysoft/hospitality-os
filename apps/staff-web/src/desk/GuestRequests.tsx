@@ -9,6 +9,7 @@ import { useAuth, useLive } from '../state.js';
 import { StatusBadge } from '../ui/ds.js';
 import { Empty, ErrorLine } from '../ui/kit.js';
 import { Link } from '../shell/router.js';
+import { PaymentSlips } from './Documents.js';
 
 interface Item { id: string; reservationId: string; confirmationNo: string; guestName: string; kind: string; neededOn: string | null; neededTime: string | null; flightNo: string | null; passengers: number | null; note: string | null; status: string; staffNote: string | null; createdAt: string }
 
@@ -25,6 +26,7 @@ export function GuestRequests() {
       <label className="check"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> {t('gr.showAll')}</label>
       {list.data && items.length === 0 && <Empty text={t('gr.none')} />}
       <ul className="plain">{items.map((q) => <Row key={q.id} q={q} base={base} canAnswer={can('reservation.modify')} onDone={list.reload} locale={locale} />)}</ul>
+      <PaymentSlips />
     </div>
   );
 

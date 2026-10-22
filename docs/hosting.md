@@ -92,6 +92,26 @@ The address in the browser must be exactly `https://pms-s.sunsetbb.com` (that is
 
 **Not tested:** this shared layout has been validated (the compose file resolves, publishes only on 127.0.0.1, sets the right origin) but not run on a server; the images were only partly built here (Docker Hub rate limits).
 
+## Turning on email (Amazon SES)
+
+Guest messages and company statements can be sent by email from the staff app. It stays off until the server has these settings in `deploy/.env`:
+
+1. **SES**, in the AWS console, in the region you will use (for example `ap-south-1`):
+   - Verified identities → create one for the domain `sunsetbb.com` (add the DKIM records it shows to your DNS) or for the single address `guestcare@sunsetbb.com`.
+   - Account dashboard → **Request production access**. Until it is granted, SES only delivers to addresses you have verified.
+2. **An IAM user** for the server (Lightsail instances cannot take an IAM role): create a user with no console access and a policy allowing only `ses:SendEmail` (and `ses:SendRawEmail`), then create an access key for it.
+3. **`deploy/.env`** on the server:
+   ```
+   MAIL_FROM=guestcare@sunsetbb.com
+   MAIL_REPLY_TO=guestcare@sunsetbb.com
+   SES_REGION=ap-south-1
+   AWS_ACCESS_KEY_ID=...
+   AWS_SECRET_ACCESS_KEY=...
+   ```
+   Never commit this file or paste the keys into chat.
+4. Restart the API only: `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d api` (use your `-p hos-pms -f deploy/docker-compose.shared.yml` form on a shared server).
+5. Check: open a booking → a guest message → **Write an email**, send it to your own address. If the button is missing, email is still off (`MAIL_FROM` or `SES_REGION` empty). If sending fails, **Reports → email log** is not built yet; ask for `GET /v1/properties/<id>/email/recent`, which shows the reason SES gave.
+
 ## Updating it
 
 ```bash

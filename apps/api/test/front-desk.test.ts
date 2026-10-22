@@ -239,6 +239,137 @@ describe('room move', () => {
   });
 });
 
+describe('the document matrix at check-in', () => {
+  const walk = (w: W, o: Record<string, unknown>, h = O) => call('POST', `/v1/properties/${w.pid}/front-desk/walk-ins`, h, { guest: { fullName: `Matrix ${++n}`, phone: `0313${String(5000000 + n).slice(-7)}`, nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 1, adults: 2, children: 0, ...o }, { 'idempotency-key': `mx-${++n}-${Date.now()}` });
+  const seen = (...k: string[]) => Object.fromEntries(k.map((x) => [x, { state: 'SEEN' }]));
+  const foreignAdult = (o: Record<string, unknown> = {}) => occ({ isPrimary: true, fullName: 'Tim Matrix', nationality: 'GB', idType: 'PASSPORT', idNumber: `GB${700000 + ++n}`, idExpiry: '2031-05-01', guestType: 'FOREIGN_ADULT', ...o });
+
+  it('by default an incomplete card is allowed through but says exactly what is missing, and the card keeps what was recorded', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const r = await walk(w, { adults: 1, occupants: [occ({ isPrimary: true, guestType: 'PAKISTANI_ADULT' })] });
+    expect(r.statusCode, r.body).toBe(201);
+    expect(r.json().checkIn.registration).toMatchObject({ complete: false, people: [{ guestType: 'PAKISTANI_ADULT', status: 'MISSING', missing: [{ kind: 'DOCUMENT', key: 'CNIC_OR_PASSPORT' }] }] });
+    const card = (await call('GET', `/v1/properties/${w.pid}/reservations/${r.json().id}/rooms/${r.json().lines[0].id}/guests`, O)).json();
+    expect(card.registration.complete).toBe(false); expect(card.items[0]).toMatchObject({ guestType: 'PAKISTANI_ADULT', documents: {} });
+  });
+
+  it('a Pakistani family: the CNIC seen, a child with a B-Form and a linked guardian, the other adult needing their own ID', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const r = await walk(w, { adults: 2, children: 1, occupants: [
+      occ({ isPrimary: true, fullName: 'Imran', documents: seen('CNIC_OR_PASSPORT') }),
+      { fullName: 'Nadia', ageGroup: 'ADULT' },
+      { fullName: 'Little Ali', ageGroup: 'CHILD', documents: seen('MINOR_ID'), guardianIndex: 0 }] });
+    expect(r.statusCode, r.body).toBe(201);
+    const reg = r.json().checkIn.registration;
+    expect(reg.people.map((x: any) => [x.name, x.status])).toEqual([['Imran', 'COMPLETE'], ['Nadia', 'MISSING'], ['Little Ali', 'COMPLETE']]);
+    expect(reg.people[1].missing).toEqual(expect.arrayContaining([{ kind: 'ID', key: 'ID' }]));
+    const card = (await call('GET', `/v1/properties/${w.pid}/reservations/${r.json().id}/rooms/${r.json().lines[0].id}/guests`, O)).json().items;
+    expect(card.find((x: any) => x.fullName === 'Little Ali')).toMatchObject({ guestType: 'PAKISTANI_MINOR', guardianId: card.find((x: any) => x.fullName === 'Imran').id });
+  });
+
+  it('a foreign guest needs the foreign-guest record: with it the card is complete and is kept and printed; without it, the gaps are named', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const docs = seen('FOREIGN_PASSPORT', 'PASSPORT_BIO_COPY', 'VISA_BASIS', 'ENTRY_STAMP');
+    const gap = await walk(w, { adults: 1, nights: 1, occupants: [foreignAdult({ documents: docs })], guest: { fullName: 'Tim Matrix', phone: '+44 7700 900556', nationality: 'GB' } });
+    expect(gap.statusCode, gap.body).toBe(201);
+    expect(gap.json().checkIn.registration.people[0].missing.map((m: any) => m.key)).toEqual(['passportIssuePlace', 'visaType', 'stayExpiry', 'entryDate', 'entryPort', 'localAddress', 'nextDestination']);
+    const foreign = { passportIssuePlace: 'London', visaType: 'eVisa (tourist)', stayExpiry: '2026-12-10', entryDate: '2026-11-03', entryPort: 'Karachi airport', localAddress: 'Sunset BnB Boulevard, Karachi', nextDestination: 'Lahore', froInstruction: false, remarks: 'Travelling for work' };
+    const w2 = await sunset(); await setBd(w2, '2026-11-05');
+    const ok2 = await walk(w2, { adults: 1, occupants: [foreignAdult({ documents: docs, foreign })], guest: { fullName: 'Tim Matrix', phone: '+44 7700 900557', nationality: 'GB' } });
+    expect(ok2.statusCode, ok2.body).toBe(201); expect(ok2.json().checkIn.registration.complete).toBe(true);
+    const html = (await call('GET', `/v1/properties/${w2.pid}/reservations/${ok2.json().id}/rooms/${ok2.json().lines[0].id}/registration-card`, O)).body;
+    expect(html).toContain('Foreign adult'); expect(html).toContain('Entered Pakistan on: 2026-11-03'); expect(html).toContain('Port of entry: Karachi airport'); expect(html).toContain('Visa / entry permission: eVisa (tourist)'); expect(html).toContain('Passport bio-page copy: seen');
+  });
+
+  it('a document not available can be recorded with the reason and shows as an exception, not as missing', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const r = await walk(w, { adults: 1, occupants: [occ({ isPrimary: true, documents: { CNIC_OR_PASSPORT: { state: 'NOT_AVAILABLE', note: 'Lost; FIR copy shown' } } })] });
+    expect(r.json().checkIn.registration).toMatchObject({ complete: true, exceptionCount: 1, people: [{ status: 'EXCEPTIONS', exceptions: [{ key: 'CNIC_OR_PASSPORT', note: 'Lost; FIR copy shown' }] }] });
+  });
+
+  it('strict registration stops check-in until the card is complete; a NICOP-alone setting changes what overseas Pakistanis must show', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const v = (await call('GET', `/v1/properties/${w.pid}`, O)).json().version;
+    await ok(call('PATCH', `/v1/properties/${w.pid}`, O, { registrationStrict: true, version: v }));
+    const body = { adults: 1, occupants: [occ({ isPrimary: true })] };
+    const refused = await walk(w, body);
+    expect(refused.statusCode).toBe(422); expect(refused.json().code).toBe('REGISTRATION_INCOMPLETE'); expect(refused.json().registration.missingCount).toBe(1);
+    expect((await walk(w, { adults: 1, occupants: [occ({ isPrimary: true, documents: seen('CNIC_OR_PASSPORT') })] })).statusCode).toBe(201);
+    const req = async () => (await ok(call('GET', `/v1/properties/${w.pid}/registration/requirements`, O))).types.find((t: any) => t.type === 'OVERSEAS_PAKISTANI').requirements.filter((r: any) => r.required).map((r: any) => r.key);
+    expect(await req()).toEqual(['NICOP', 'PASSPORT']);
+    const v2 = (await call('GET', `/v1/properties/${w.pid}`, O)).json().version;
+    await ok(call('PATCH', `/v1/properties/${w.pid}`, O, { nicopAloneOk: true, version: v2 }));
+    expect(await req()).toEqual(['NICOP']);
+  });
+
+  it('the foreign-guest register lists foreign guests with their full passport number for a period, behind the view-ID permission and a fresh second factor, and is recorded', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const docs = seen('FOREIGN_PASSPORT', 'PASSPORT_BIO_COPY', 'VISA_BASIS', 'ENTRY_STAMP');
+    const foreign = { passportIssuePlace: 'London', visaType: 'eVisa (tourist)', stayExpiry: '2026-12-10', entryDate: '2026-11-03', entryPort: 'Karachi airport', localAddress: 'Sunset BnB Boulevard, Karachi', nextDestination: 'Lahore', froInstruction: true };
+    const r = await walk(w, { adults: 1, occupants: [foreignAdult({ documents: docs, foreign, idNumber: 'GB7000555' })], guest: { fullName: 'Tim Matrix', phone: '+44 7700 900558', nationality: 'GB' } });
+    expect(r.statusCode, r.body).toBe(201);
+    await walk(w, { adults: 1, occupants: [occ({ isPrimary: true, documents: seen('CNIC_OR_PASSPORT') })] });            // a Pakistani guest is not in the register
+    const url = `/v1/properties/${w.pid}/registration/foreign-register?from=2026-11-01&to=2026-11-30`;
+    await code(call('GET', url, O), 403, 'MFA_REQUIRED');
+    const x = await ok(call('GET', url, OM));
+    expect(x.count).toBe(1); expect(x.filename).toContain('foreign-guest-register-2026-11-01_2026-11-30');
+    expect(x.csv).toContain('GB7000555'); expect(x.csv).toContain('Karachi airport'); expect(x.csv).toContain('Yes'); expect(x.csv).not.toContain('35202');
+    const hk = await addUser(T.tenantId, `hk${++n}@fd.test`); await assignRole(T.tenantId, hk, 'housekeeper', 'PROPERTY', w.pid); await code(call('GET', url, as(T.tenantId, hk, { mfa: true })), 403, 'PERMISSION_DENIED');
+    await code(call('GET', `${url}&to=2026-10-01`, OM), 400, 'VALIDATION_FAILED');
+  });
+});
+
+describe('walk-in without every ID', () => {
+  const walkKey = () => ({ 'idempotency-key': `walk-${++n}-${Date.now()}` });
+  const post = (w: W, b: unknown) => call('POST', `/v1/properties/${w.pid}/front-desk/walk-ins`, O, b, walkKey());
+  const base = (w: W, o: Record<string, unknown> = {}) => ({ guest: { fullName: `Family ${++n}`, phone: `0312${String(4000000 + n).slice(-7)}`, nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 1, adults: 2, children: 2, extraBeds: 1, ...o });
+
+  it('a family of four can check in on the main guest’s ID alone: children and family members need none', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const main = occ({ isPrimary: true, fullName: 'Imran Khan' });
+    const r = await post(w, base(w, { occupants: [main, { fullName: 'Nadia Khan', ageGroup: 'ADULT' }, { fullName: 'Ali Khan', ageGroup: 'CHILD' }, { fullName: 'Sara Khan', ageGroup: 'CHILD' }] }));
+    expect(r.statusCode, r.body).toBe(201);
+    const line = r.json().lines[0];
+    const card = (await call('GET', `/v1/properties/${w.pid}/reservations/${r.json().id}/rooms/${line.id}/guests`, O)).json().items;
+    expect(card).toHaveLength(4);
+    expect(card.filter((c: any) => c.idType === null).map((c: any) => c.fullName).sort()).toEqual(['Ali Khan', 'Nadia Khan', 'Sara Khan']);
+    expect(card.find((c: any) => c.fullName === 'Imran Khan').idNumber).toMatch(/^\*+/);                    // still masked
+  });
+
+  it('the main guest’s ID is still required, and a bad number says whose and what', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const none = await post(w, base(w, { occupants: [{ fullName: 'No Id', isPrimary: true }] }));
+    expect(none.statusCode).toBe(422); expect(none.json().code).toBe('ID_REQUIRED');
+    const bad = await post(w, base(w, { occupants: [occ({ isPrimary: true }), occ({ fullName: 'Nadia Khan', idNumber: '123' })] }));
+    expect(bad.statusCode).toBe(422); expect(bad.json().code).toBe('ID_INVALID'); expect(bad.json().detail).toContain('Nadia Khan'); expect(bad.json().detail).toContain('13 digits');
+    const half = await post(w, base(w, { occupants: [occ({ isPrimary: true }), { fullName: 'Half', idType: 'CNIC' }] }));
+    expect(half.statusCode).toBe(400);
+  });
+});
+
+describe('finding a returning guest', () => {
+  const search = async (q: string) => (await ok(call('GET', `/v1/guests/search?q=${encodeURIComponent(q)}`, O))).items as Array<{ fullName: string; stays: number; matchedById: boolean }>;
+  it('finds them by name in any order, by phone in any format, and by CNIC or passport — and counts their stays', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const id = `35201${String(7000000 + (++n % 1000)).slice(-7)}9`;
+    const r = await call('POST', `/v1/properties/${w.pid}/front-desk/walk-ins`, O, { guest: { fullName: 'Zubair Ahmed Qureshi', phone: '0333 7654321', nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 1, adults: 1,
+      occupants: [{ fullName: 'Zubair Ahmed Qureshi', isPrimary: true, idType: 'CNIC', idNumber: id, nationality: 'PK' }] }, { 'idempotency-key': `walk-${++n}-${Date.now()}` });
+    expect(r.statusCode, r.body).toBe(201);
+    expect((await search('Qureshi Zubair')).map((g) => g.fullName)).toContain('Zubair Ahmed Qureshi');
+    expect((await search('zubair q')).map((g) => g.fullName)).toContain('Zubair Ahmed Qureshi');
+    expect((await search('+92 333 7654321')).map((g) => g.fullName)).toContain('Zubair Ahmed Qureshi');
+    const byId = await search(`${id.slice(0, 5)}-${id.slice(5, 12)}-${id.slice(12)}`);
+    expect(byId.find((g) => g.fullName === 'Zubair Ahmed Qureshi')).toMatchObject({ matchedById: true });
+    expect((await search(id)).map((g) => g.fullName)).toContain('Zubair Ahmed Qureshi');                // dashes are optional
+    expect((await search('3520199999999')).map((g) => g.fullName)).not.toContain('Zubair Ahmed Qureshi');
+    expect(byId.find((g) => g.fullName === 'Zubair Ahmed Qureshi')!.stays).toBe(1);
+  });
+  it('the stored ID cannot be read from the search index', async () => {
+    const rows = await adminDb.selectFrom('stay_guest').select(['id_hash', 'id_number_sealed']).where('id_hash', 'is not', null).limit(5).execute();
+    for (const r of rows) { expect(r.id_hash).toMatch(/^[0-9a-f]{64}$/); expect(r.id_number_sealed).not.toMatch(/\d{5}-?\d{7}/); }
+  });
+});
+
 describe('walk-in', () => {
   const body = (w: W, o: Record<string, unknown> = {}) => ({ guest: { fullName: `Walker ${++n}`, phone: `0311${String(3000000 + n).slice(-7)}`, nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 2, adults: 2,
     occupants: [occ({ isPrimary: true })], ...o });
@@ -328,5 +459,73 @@ describe('housekeeping status', () => {
     expect((await call('PUT', `/v1/properties/${w.pid}/housekeeping/rooms/${other.room['101']}/status`, H, { status: 'CLEAN' })).statusCode).toBe(404);
     expect((await call('PUT', `/v1/properties/${w.pid}/housekeeping/rooms/${w.room['101']}/status`, H, { status: 'SPARKLING' })).statusCode).toBe(400);
     expect(await adminDb.selectFrom('audit_log').select('id').where('tenant_id', '=', T.tenantId).where('action', '=', 'housekeeping.status').where('resource_id', '=', w.room['101']).execute()).toHaveLength(2);
+  });
+
+});
+
+describe('short stays', () => {
+  const rule = { tiers: [{ upToHours: 3, percent: 30 }, { upToHours: 6, percent: 50 }, { upToHours: 12, percent: 75 }] };
+  const setRule = async (w: W, r: unknown) => { const v = (await call('GET', `/v1/properties/${w.pid}`, O)).json().version; return call('PATCH', `/v1/properties/${w.pid}`, O, { shortStayRule: r, version: v }); };
+  const at = (time: string, date = '2026-11-05') => testClock.set(zonedToUtcMs(date, time, 'Asia/Karachi'));
+  const inAt = async (w: W, time: string) => { await setBd(w, '2026-11-05'); const b = await book(w); at(time); await ok(checkIn(w, b, '101')); return b; };
+  const out = (w: W, b: { id: string; line: string }, body: Record<string, unknown> = {}, h = OM) => call('POST', url(w, b.id, b.line, 'check-out'), h, { reason: 'Leaving for a flight', balanceReason: 'test: settled elsewhere', ...body });
+  const folioBal = async (w: W, b: { id: string }) => (await ok(call('GET', `/v1/properties/${w.pid}/reservations/${b.id}/folio`, O))).folio.balance.amount as string;
+
+  it('a guest who leaves a few hours after checking in is charged the share of the night the property sets for that length of stay, and the other nights are released', async () => {
+    const w = await sunset(); expect((await setRule(w, rule)).statusCode).toBe(200);
+    const b = await inAt(w, '12:00'); at('14:00');
+    const pre = await ok(call('GET', url(w, b.id, b.line, 'check-out-preview'), O));
+    expect(pre).toMatchObject({ eligible: true, hoursStayed: 2, default: 'RULE', night: { amount: '12000.00' } });
+    expect(pre.options).toMatchObject([{ mode: 'RULE', percent: 30, charge: { amount: '3600.00' } }, { mode: 'FULL_NIGHT', percent: 100, charge: { amount: '12000.00' } }]);
+    const r = await ok(out(w, b));
+    expect(r.checkOut).toMatchObject({ earlyDeparture: true, shortStay: { mode: 'RULE', percent: 30, hoursStayed: 2, charged: { amount: '3600.00' }, waived: { amount: '8400.00' } } });
+    expect(await folioBal(w, b)).toBe('3600.00');
+    const posts = (await ok(call('GET', `/v1/properties/${w.pid}/reservations/${b.id}/folio`, O))).postings.map((p: any) => p.description);
+    expect(posts.some((d: string) => d.startsWith('Short stay'))).toBe(true);
+    expect((await avail(w, 'STD', '2026-11-06')).available).toBeGreaterThan(0);                           // the night after is sellable again
+    const ev = await adminDb.selectFrom('outbox_event').select('event_type').where('aggregate_id', '=', b.id).where('event_type', '=', 'ShortStayCharged').execute(); expect(ev).toHaveLength(1);
+  });
+
+  it('a longer stay moves up the tiers; past the last tier, or with no rule, it is the whole night', async () => {
+    const w = await sunset(); await setRule(w, rule);
+    const b1 = await inAt(w, '12:00'); at('17:00');                                                       // 5 hours → 50 %
+    expect((await ok(out(w, b1))).checkOut.shortStay).toMatchObject({ percent: 50, charged: { amount: '6000.00' } });
+    const b2 = await book(w); at('12:00'); await ok(checkIn(w, b2, '102')); at('14:00', '2026-11-05'); at('23:30');   // 11.5 hours → 75 %
+    expect((await ok(out(w, b2))).checkOut.shortStay).toMatchObject({ percent: 75, charged: { amount: '9000.00' } });
+    const w2 = await sunset(); const b3 = await inAt(w2, '12:00'); at('13:00');                           // no rule: the whole night, as before
+    expect((await ok(call('GET', url(w2, b3.id, b3.line, 'check-out-preview'), O))).default).toBe('FULL_NIGHT');
+    expect((await ok(out(w2, b3))).checkOut.shortStay).toMatchObject({ mode: 'FULL_NIGHT', percent: 100, charged: { amount: '12000.00' } });
+  });
+
+  it('the desk can charge the whole night anyway; a different amount or waiving it needs the override permission and a reason', async () => {
+    const w = await sunset(); await setRule(w, rule);
+    const b1 = await inAt(w, '12:00'); at('13:00');
+    expect((await ok(out(w, b1, { shortStay: { mode: 'FULL_NIGHT' } }))).checkOut.shortStay).toMatchObject({ percent: 100, charged: { amount: '12000.00' } });
+    const fd = await addUser(T.tenantId, `fd${++n}@sh.test`); await assignRole(T.tenantId, fd, 'front_desk_agent', 'PROPERTY', w.pid);
+    const b2 = await book(w); at('12:00'); await ok(checkIn(w, b2, '102')); at('13:30');
+    await code(out(w, b2, { shortStay: { mode: 'CUSTOM', amount: '0', reason: 'Guest was unwell, goodwill' }, balanceReason: undefined }, as(T.tenantId, fd)), 403, 'PERMISSION_DENIED');
+    await code(out(w, b2, { shortStay: { mode: 'CUSTOM', amount: '5000' } }), 400, 'VALIDATION_FAILED');
+    await code(out(w, b2, { shortStay: { mode: 'CUSTOM', amount: '99999', reason: 'Too much' } }), 422, 'VALIDATION_FAILED');
+    const r = await ok(out(w, b2, { shortStay: { mode: 'CUSTOM', amount: '0', reason: 'Guest was unwell, goodwill' } }));
+    expect(r.checkOut.shortStay).toMatchObject({ mode: 'CUSTOM', charged: { amount: '0.00' }, waived: { amount: '12000.00' } });
+    expect(await folioBal(w, b2)).toBe('0.00');
+  });
+
+  it('only same-day departures are short stays; a guest who stayed the night is charged the nights stayed as before', async () => {
+    const w = await sunset(); await setRule(w, rule);
+    const b = await inAt(w, '12:00');
+    await setBd(w, '2026-11-06'); at('09:00', '2026-11-06');
+    expect((await ok(call('GET', url(w, b.id, b.line, 'check-out-preview'), O))).eligible).toBe(false);
+    await code(out(w, b, { shortStay: { mode: 'RULE' } }), 422, 'SHORT_STAY_NOT_ELIGIBLE');
+    const r = await ok(out(w, b)); expect(r.checkOut.shortStay).toBeNull(); expect(await folioBal(w, b)).toBe('12000.00');
+  });
+
+  it('the rule is saved with steps that go up, and refused when they do not', async () => {
+    const w = await sunset();
+    expect((await setRule(w, { tiers: [{ upToHours: 6, percent: 50 }, { upToHours: 3, percent: 30 }] })).statusCode).toBe(400);
+    expect((await setRule(w, { tiers: [{ upToHours: 3, percent: 60 }, { upToHours: 6, percent: 50 }] })).statusCode).toBe(400);
+    expect((await setRule(w, { tiers: [] })).statusCode).toBe(400);
+    expect((await setRule(w, rule)).json().shortStayRule).toEqual(rule);
+    expect((await setRule(w, null)).json().shortStayRule).toBeNull();
   });
 });

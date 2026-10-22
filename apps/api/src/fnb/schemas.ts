@@ -6,7 +6,7 @@ export const CreateItem = z.object({ category: z.string().trim().min(2).max(60),
 export const UpdateItem = CreateItem.partial().extend({ active: z.boolean().optional(), version: z.number().int() });
 export const CreateOrder = z.object({
   reservationRoomId: uuid, payDigitally: z.boolean().default(false), note: z.string().trim().max(300).nullish(),
-  lines: z.array(z.object({ menuItemId: uuid, quantity: z.number().int().min(1).max(99).default(1), note: z.string().trim().max(160).nullish() })).min(1).max(40),
+  lines: z.array(z.object({ menuItemId: uuid, quantity: z.number().int().min(1).max(99).default(1), note: z.string().trim().max(160).nullish(), variantId: uuid.nullish(), modifierOptionIds: z.array(uuid).max(30).default([]), removed: z.array(z.string().trim().min(1).max(80)).max(30).default([]) })).min(1).max(40),
 });
 export const Cancel = z.object({ reason: z.string().trim().min(3).max(300) });
 export const QueueQuery = z.object({ status: z.enum(['OPEN', 'DELIVERED', 'CANCELLED', 'ALL']).default('OPEN'), limit: z.coerce.number().int().min(1).max(200).default(100) });

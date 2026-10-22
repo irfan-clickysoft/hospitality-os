@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { useT } from '../i18n/index.js';
+import { groupIban } from '../lib/iban.js';
 import { useAuth, useLive } from '../state.js';
 
-export interface PayAccount { id: string; name: string; kind: string; flagged: boolean; ownerName: string | null; last4: string | null }
+export interface PayAccount { id: string; name: string; kind: string; flagged: boolean; ownerName: string | null; last4: string | null; bankName?: string | null; accountTitle?: string | null; branch?: string | null; branchCode?: string | null; iban?: string | null; accountNumber?: string | null; swiftCode?: string | null; hasQr?: boolean }
 const KINDS: Record<string, string[]> = { CASH: [], BANK_TRANSFER: ['BANK'], CHEQUE: ['BANK'], CARD_SLIP: ['CARD_CLEARING', 'GATEWAY'], WALLET: ['WALLET', 'GATEWAY'] };
 
 /** Which account the money went into. Shown only when accounts of the right kind exist; chosen for you when there is just one, flagged when it is not the company’s. */
@@ -18,6 +19,13 @@ export function AccountPicker({ method, value, onChange }: { method: string; val
     <>
       <label>{t('pa.account')}<select value={value} onChange={(e) => onChange(e.target.value)}>{cands.length > 1 && <option value="">—</option>}{cands.map((a) => <option key={a.id} value={a.id}>{a.name}{a.last4 ? ` ····${a.last4}` : ''}{a.flagged ? ` ⚠ ${t('pa.notCompany')}` : ''}</option>)}</select></label>
       {chosen?.flagged && <p className="warnbox">{t('pa.flagNote', { owner: chosen.ownerName ?? '' })}</p>}
+      {chosen && (chosen.iban || chosen.accountNumber || chosen.hasQr) && (
+        <details className="block"><summary>{t('pa.showDetails')}</summary>
+          <dl className="small">{[[t('pa.bankName'), chosen.bankName], [t('pa.title'), chosen.accountTitle], [t('pa.branch'), [chosen.branch, chosen.branchCode].filter(Boolean).join(' · ')], [t('pa.accountNumber'), chosen.accountNumber], [t('pa.iban'), chosen.iban ? groupIban(chosen.iban) : null], [t('pa.swift'), chosen.swiftCode]]
+            .filter(([, v]) => !!v).map(([k, v]) => <div key={k as string} className="row between"><dt className="muted">{k}</dt><dd dir="ltr">{v}</dd></div>)}</dl>
+          {chosen.hasQr && <img src={`/v1/properties/${property!.id}/payment-accounts/${chosen.id}/qr`} alt={`${t('pa.qr')} — ${chosen.name}`} style={{ maxWidth: 200, width: '100%', background: '#fff', padding: 8, borderRadius: 8 }} />}
+        </details>
+      )}
     </>
   );
 }
