@@ -1,8 +1,10 @@
 import { Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { sql } from 'kysely';
 import { Money } from '@hos/domain-types';
 import { AuditService } from '../audit/audit.service.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { GuestPortalService } from '../guest-portal/guest-portal.service.js';
+import { DocumentsService } from '../documents/documents.service.js';
 import { TaxService } from '../tax/tax.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { CHANNELS, defaultTemplate, EVENTS, render, TITLES, unknownVariables, VARIABLES, type Channel, type MessageEvent } from './templates.js';
@@ -18,7 +20,7 @@ const METHOD: Record<string, string> = { CASH: 'Cash', CARD_SLIP: 'Card', WALLET
 
 @Injectable()
 export class MessagesService {
-  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(GuestPortalService) private readonly portal: GuestPortalService, @Inject(TaxService) private readonly tax: TaxService) {}
+  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(GuestPortalService) private readonly portal: GuestPortalService, @Inject(TaxService) private readonly tax: TaxService, @Inject(DocumentsService) private readonly docs: DocumentsService) {}
 
   /** Every message the system sends, with the wording in use (the owner's, or the built-in one). */
   async list() {
@@ -82,9 +84,11 @@ export class MessagesService {
         trx.selectFrom('message_template').selectAll().where('event', '=', i.event).where('channel', '=', i.channel).executeTakeFirst(),
       ]);
       const pay = i.paymentId ? await trx.selectFrom('payment').selectAll().where('id', '=', i.paymentId).executeTakeFirst() : undefined;
-      return { r, p, g, lines, folio, actor, stored, pay, owed: await this.owed(trx, propertyId, i.reservationId, p.business_date, r.residency) };
+      const rooms = await sql<{ number: string }>`SELECT DISTINCT rm.number FROM reservation_room l JOIN room_assignment a ON a.assignment_ref = l.id JOIN room rm ON rm.id = a.room_id WHERE l.tenant_id = ${tenantId} AND l.reservation_id = ${i.reservationId} ORDER BY rm.number`.execute(trx);
+      const payFolio = pay ? await trx.selectFrom('folio as f').leftJoin('company as c', 'c.id', 'f.company_id').select(['c.name as company']).where('f.id', '=', pay.folio_id).executeTakeFirst() : undefined;
+      return { rooms: rooms.rows.map((x) => x.number), company: payFolio?.company ?? null, r, p, g, lines, folio, actor, stored, pay, owed: await this.owed(trx, propertyId, i.reservationId, p.business_date, r.residency) };
     });
-    const { r, p, g, lines, folio, actor, stored, pay, owed } = data;
+    const { r, p, g, lines, folio, actor, stored, pay, owed, rooms, company } = data;
     const cur = folio?.currency ?? r.currency;
     const arrival = lines.map((l) => l.arrival).sort()[0], departure = lines.map((l) => l.departure).sort().slice(-1)[0];
     const place = p.city ? `${p.name}, ${p.city}` : p.name;
@@ -94,12 +98,16 @@ export class MessagesService {
       guest_name: `${i.salutation ? `${i.salutation} ` : ''}${g.full_name}`, property_name: place, property_address: p.city ?? null, property_contact: null, manager_name: actor?.full_name ?? null,
       booking_reference: r.confirmation_no, secure_link: `${(i.origin ?? process.env.PUBLIC_BASE_URL ?? '').replace(/\/$/, '')}/#/b/${token}`,
       check_in_date_time: arrival ? `${date(arrival)} at ${clock(String(p.check_in_time))}` : null, check_out_date_time: departure ? `${date(departure)} at ${clock(String(p.check_out_time))}` : null, maps_link: p.maps_url,
-      currency: cur, balance: bal > 0n ? amt(bal, cur) : null, amount: null, payment_method: null, payment_date: null, receipt_number: null,
+      currency: cur, balance: bal > 0n ? amt(bal, cur) : null, document_link: null, room_number: rooms.length ? rooms.join(', ') : null, payment_description: null, paid_by: null, amount: null, payment_method: null, payment_date: null, receipt_number: null,
       ...i.extra,
     };
     if (pay) {
       vars.amount = amt(pay.amount_minor, pay.currency); vars.payment_method = METHOD[pay.method] ?? pay.method; vars.payment_date = date(pay.business_date); vars.receipt_number = pay.receipt_no;
+      vars.payment_description = `${pay.kind === 'DEPOSIT' ? 'Advance deposit' : pay.kind === 'REFUND' ? 'Refund' : 'Payment toward your stay'}${pay.note ? ` — ${pay.note}` : ''}`;
+      vars.paid_by = `${company ?? g.full_name}${pay.counterparty ? ` (${pay.counterparty})` : ''}`;
     }
+    if ((i.event === 'PAYMENT_RECEIVED' || i.event === 'REFUND') && pay) vars.document_link = (await this.docs.linkFor(propertyId, { kind: 'PAYMENT', refId: pay.id }, actorId ?? null, i.origin)).url;
+    else if (i.event === 'CHECK_OUT') vars.document_link = (await this.docs.linkFor(propertyId, { kind: 'STATEMENT', refId: i.reservationId }, actorId ?? null, i.origin).catch(() => null))?.url ?? null;
     const d = defaultTemplate(i.event, i.channel);
     const body = stored?.body ?? d.body, subject = stored ? stored.subject : d.subject;
     return { text: render(body, vars), subject: subject ? render(subject, vars) : null, phone: g.phone, missing: [] as string[] };

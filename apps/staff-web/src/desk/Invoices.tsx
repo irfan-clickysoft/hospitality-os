@@ -8,6 +8,7 @@ import { useStepUp } from '../lib/stepup.js';
 import { useAuth, useLive } from '../state.js';
 import { Badge, ErrorLine, Sheet } from '../ui/kit.js';
 import type { Amount } from './types.js';
+import { DocButtons } from './Documents.js';
 
 interface Invoice {
   id: string; docType: 'TAX_INVOICE' | 'CREDIT_NOTE'; number: string; issueDate: string; total: Amount; net: Amount; tax: Amount; reason: string | null;
@@ -32,7 +33,8 @@ export function InvoicePanel({ reservationId, finished }: { reservationId: strin
           <div className="row between"><strong dir="ltr">{i.number}</strong><strong>{money(i.total)}</strong></div>
           <div className="row between"><span className="muted">{i.issueDate}{i.billTo?.name ? ` · ${i.billTo.name}` : ''}</span>{i.docType === 'CREDIT_NOTE' ? <Badge tone="warn">{t('inv.creditNote')}</Badge> : i.creditedBy ? <Badge tone="neutral">{t('inv.creditedBy', { no: i.creditedBy.number })}</Badge> : null}</div>
           {i.taxSummary.map((s) => <div key={s.code + s.ratePercent} className="row between muted"><span>{s.code} {s.ratePercent}%</span><span dir="ltr">{money(s.tax)}</span></div>)}
-          <div className="row"><a className="button" href={`${base}/invoices/${i.id}/print`} target="_blank" rel="noreferrer">{t('inv.print')}</a>
+          <DocButtons kind="invoice" refId={i.id} labels={{ open: 'inv.print', link: 'doc.copyInvoiceLink' }} />
+          <div className="row">
             {i.docType === 'TAX_INVOICE' && !i.creditedBy && can('invoice.credit') && <button className="link" onClick={() => setDialog(i)}>{t('inv.credit')}</button>}</div>
         </li>))}</ul>
       {finished && can('invoice.issue') && <div className="actions"><button onClick={() => setDialog('issue')}>{t('inv.issue')}</button></div>}

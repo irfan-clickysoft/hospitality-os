@@ -12,11 +12,11 @@ const MONEY = ['currency', 'amount', 'balance'] as const;
 export const VARIABLES: Record<MessageEvent, readonly string[]> = {
   RESERVATION_CONFIRMED: [...COMMON, ...STAY],
   CHECK_IN: [...COMMON, ...STAY],
-  PAYMENT_RECEIVED: [...COMMON, ...MONEY, 'payment_method', 'payment_date', 'receipt_number'],
+  PAYMENT_RECEIVED: [...COMMON, ...MONEY, 'payment_method', 'payment_date', 'receipt_number', 'document_link', 'room_number', 'payment_description', 'paid_by'],
   SERVICE_ORDER: [...COMMON, ...MONEY, 'service_name', 'order_number', 'service_details', 'service_time'],
-  CHECK_OUT: [...COMMON, ...MONEY, 'check_out_date_time'],
-  REFUND: [...COMMON, ...MONEY, 'payment_method', 'payment_date', 'receipt_number'],
-  DOCUMENT: [...COMMON, ...MONEY, 'document_title', 'reference_number', 'transaction_date', 'description'],
+  CHECK_OUT: [...COMMON, ...MONEY, 'check_out_date_time', 'document_link'],
+  REFUND: [...COMMON, ...MONEY, 'payment_method', 'payment_date', 'receipt_number', 'document_link', 'room_number', 'payment_description', 'paid_by'],
+  DOCUMENT: [...COMMON, ...MONEY, 'document_title', 'reference_number', 'transaction_date', 'description', 'document_link'],
   MAINTENANCE_ASSIGNED: ['recipient_name', 'property_name', 'manager_name', 'work_order_number', 'work_title', 'work_details', 'work_room', 'work_priority', 'work_kind', 'work_due', 'requested_by'],
 };
 
@@ -70,13 +70,17 @@ ${SIGN}`,
 Thank you. We confirm receipt of your payment for your reservation at {{property_name}}.
 
 Booking reference: {{booking_reference}}
+Room: {{room_number}}
 Amount received: {{currency}} {{amount}}
+For: {{payment_description}}
+Paid by: {{paid_by}}
 Payment date: {{payment_date}}
 Payment method: {{payment_method}}
 Receipt number: {{receipt_number}}
 Remaining balance: {{currency}} {{balance}}
 
-Your payment receipt is available here: {{secure_link}}
+Your payment receipt (to view or print): {{document_link}}
+Your booking page: {{secure_link}}
 ${SIGN}`,
   SERVICE_ORDER: `Dear {{guest_name}},
 
@@ -97,7 +101,8 @@ Thank you for staying with us. Your check-out from {{property_name}} has been co
 Booking reference: {{booking_reference}}
 Final balance: {{currency}} {{balance}}
 
-View your final statement: {{secure_link}}
+Your final statement (to view or print): {{document_link}}
+Your booking page: {{secure_link}}
 
 We hope you had a pleasant stay and look forward to welcoming you again.
 ${SIGN}`,
@@ -105,13 +110,17 @@ ${SIGN}`,
 
 We confirm your refund / adjustment for booking {{booking_reference}} at {{property_name}}.
 
+Room: {{room_number}}
 Amount: {{currency}} {{amount}}
+For: {{payment_description}}
+Paid to: {{paid_by}}
 Date: {{payment_date}}
 Method: {{payment_method}}
 Reference: {{receipt_number}}
 Remaining balance: {{currency}} {{balance}}
 
-View your document: {{secure_link}}
+Your refund voucher (to view or print): {{document_link}}
+Your booking page: {{secure_link}}
 ${SIGN}`,
   DOCUMENT: `Dear {{guest_name}},
 

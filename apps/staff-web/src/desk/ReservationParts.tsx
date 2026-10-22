@@ -12,6 +12,7 @@ import { OtaClaimPanel } from './OtaClaims.js';
 import { CompanyBillings } from './BillToCompany.js';
 import { InvoicePanel } from './Invoices.js';
 import type { FolioView, Line, ReservationDetail } from './types.js';
+import { DocButtons } from './Documents.js';
 
 /** Pieces of the reservation workspace that are dialogs or panels in their own right: cancel / no-show, the bill, and fixing a payment. */
 export function CancelSheet({ r, line, noShow, onDone, onClose }: { r: ReservationDetail; line?: Line; noShow: boolean; onDone: () => void; onClose: () => void }) {
@@ -53,13 +54,15 @@ export function FolioPanel({ f, r, open, onChanged }: { f: FolioView | null; r: 
         {can('payment.take') && r.status !== 'CHECKED_OUT' && <button onClick={() => open('deposit')}>{t('pay.k.DEPOSIT')}</button>}
         {can('folio.post') && f.folio?.status === 'OPEN' && <button onClick={() => open('charge')}>{t('chg.title')}</button>}
       </div>
+      {f.folio && <DocButtons kind="statement" refId={r.id} labels={{ open: 'doc.statement', link: 'doc.statementLink' }} />}
       {f.payments.length > 0 && <>
         <h3>{t('fo.payments')}</h3>
         <ul className="plain">{f.payments.map((p) => (
           <li key={p.id} className="card inner small"><div className="row between"><span>{t(`pay.k.${p.kind === 'REFUND' ? 'REFUND' : p.kind}` as Key)} · {t(`pay.m.${p.method}` as Key)}{p.reference ? ` · ${p.reference}` : ''}</span><strong>{money(p.amount)}</strong></div>
             <div className="row between"><Badge tone={p.status === 'CAPTURED' ? 'clean' : p.status === 'PENDING_VERIFICATION' ? 'warn' : 'neutral'}>{t(`pay.s.${p.status}` as Key)}</Badge>
               <span className="row">{p.status === 'CAPTURED' && p.kind !== 'REFUND' && can('folio.adjust') && <button className="link" onClick={() => open('void', p.id)}>{t('fo.void')}</button>}
-                {p.status === 'CAPTURED' && p.kind !== 'REFUND' && can('payment.refund') && <button className="link" onClick={() => open('refund', p.id)}>{t('fo.refund')}</button>}</span></div></li>))}</ul></>}
+                {p.status === 'CAPTURED' && p.kind !== 'REFUND' && can('payment.refund') && <button className="link" onClick={() => open('refund', p.id)}>{t('fo.refund')}</button>}</span></div>
+            {['CAPTURED', 'PENDING_VERIFICATION'].includes(p.status) && <DocButtons kind="payment" refId={p.id} />}</li>))}</ul></>}
       <h3>{t('fo.postings')}</h3>
       {f.postings.length === 0 ? <p className="muted small">{t('common.none')}</p> : (
         <ul className="plain small">{f.postings.map((p) => <li key={p.id} className={`row between${p.reversed ? ' struck' : ''}`}><span>{p.businessDate} · {p.description ?? p.txnCode}</span><span dir="ltr">{money(p.amount)}</span></li>)}</ul>)}
