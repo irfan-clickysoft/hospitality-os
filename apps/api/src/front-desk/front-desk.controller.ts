@@ -22,6 +22,8 @@ export class FrontDeskController {
   checkIn(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Body() body: unknown) { return this.svc.checkIn(pid, id, line, me(), parse(S.CheckIn, body)); }
   @Post('reservations/:id/rooms/:lineId/undo-check-in') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
   undo(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Body() body: unknown) { return this.svc.undoCheckIn(pid, id, line, me(), parse(S.UndoCheckIn, body).reason); }
+  @Get('reservations/:id/rooms/:lineId/check-out-preview') @RequirePermission('frontdesk.check_out', P)
+  checkOutPreview(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) lineId: string) { return this.svc.checkOutPreview(pid, id, lineId); }
   @Post('reservations/:id/rooms/:lineId/check-out') @RequirePermission('frontdesk.check_out', P) @HttpCode(200)
   checkOut(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Body() body: unknown) { return this.svc.checkOut(pid, id, line, me(), parse(S.CheckOut, body ?? {})); }
   @Post('reservations/:id/rooms/:lineId/move') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)

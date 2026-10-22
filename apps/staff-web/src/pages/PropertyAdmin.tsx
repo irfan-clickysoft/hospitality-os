@@ -8,6 +8,7 @@ import { Banner, ConfirmCard, Field, SidePanel, Skeleton, StatusBadge } from '..
 import { Icon } from '../ui/icons.js';
 import { Empty, ErrorLine } from '../ui/kit.js';
 import { Link, navigate, useRoute } from '../shell/router.js';
+import { ShortStayRule } from './ShortStayRule.js';
 
 interface Prop { id: string; code: string; name: string; status: string; timezone: string; currency?: string; businessDate?: string; weekendDays?: number[]; version?: number; city?: string | null; mapsUrl?: string | null; terms?: string | null; checkInTime?: string; checkOutTime?: string }
 interface Status { property: Prop & { version: number; weekendDays: number[] }; steps: Record<string, boolean>; counts: { floors: number; roomTypes: number; rooms: number }; blockers: string[]; readyToGoLive: boolean }
@@ -148,6 +149,7 @@ function Details({ prop, onSaved }: { prop: Status['property']; onSaved: () => v
         <Field label={t('ps.checkOut')}>{(p) => <input {...p} type="time" dir="ltr" value={f.checkOut} onChange={(e) => edit({ checkOut: e.target.value })} />}</Field>
       </div>
       <Field label={t('ps.terms')} hint={t('ps.termsHint')}>{(p) => <textarea {...p} rows={6} maxLength={8000} value={f.terms} onChange={(e) => edit({ terms: e.target.value })} />}</Field>
+      <ShortStayRule prop={prop as never} onSaved={onSaved} />
       <datalist id="zones2">{ZONES.map((z) => <option key={z} value={z} />)}</datalist>
       <fieldset className="guestcard"><legend>{t('ps.weekend')}</legend><div className="chips">{DAYS.map(([d, k]) => <label key={d} className="check"><input type="checkbox" checked={f.weekend.includes(d)} onChange={() => toggle(d)} /> {t(k)}</label>)}</div><p className="hint">{t('ps.weekendHint')}</p></fieldset>
       <ErrorLine code={problem?.code} detail={problem?.detail} />

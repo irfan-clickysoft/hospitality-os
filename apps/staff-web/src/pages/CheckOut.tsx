@@ -5,7 +5,7 @@ import type { Key } from '../i18n/en.js';
 import { useAction } from '../lib/action.js';
 import { isZero, money } from '../lib/format.js';
 import { StepUpSlot, useStepUp } from '../lib/stepup.js';
-import { useAuth, useWork } from '../state.js';
+import { useAuth, useLive, useWork } from '../state.js';
 import { CompanyBillings } from '../desk/BillToCompany.js';
 import { PaymentSheet } from '../desk/PaymentSheet.js';
 import { PaymentFixSheet } from '../desk/ReservationParts.js';
@@ -16,6 +16,7 @@ import { ErrorLine } from '../ui/kit.js';
 import { Link, navigate } from '../shell/router.js';
 import type { Stay } from './useStay.js';
 
+interface Preview { eligible: boolean; hoursStayed: number; night: Amount; default: 'RULE' | 'FULL_NIGHT'; options: Array<{ mode: string; percent: number; charge: Amount }> }
 const minor = (a: Amount) => Math.round(parseFloat(a.amount) * 100);
 const asAmount = (m: number, cur: string): Amount => ({ amount: (m / 100).toFixed(2), currency: cur });
 
@@ -28,9 +29,18 @@ export function CheckOut({ stay }: { stay: Stay }) {
   const res = r!, ln = line!;
   const f = folio.data;
   const early = businessDate < ln.departure;
+  // a guest who checks in and leaves the same day has had a short stay: how it is charged is chosen here, and the bill below follows the choice
+  const pre = useLive<Preview>(can('frontdesk.check_out') && ln.status === 'CHECKED_IN' ? `/v1/properties/${property!.id}/reservations/${res.id}/rooms/${ln.id}/check-out-preview` : null, 30_000);
+  const sp = pre.data?.eligible ? pre.data : null;
+  const [mode, setMode] = useState<'' | 'RULE' | 'FULL_NIGHT' | 'CUSTOM'>(''); const [custom, setCustom] = useState({ amount: '', why: '' });
+  const chosen = sp ? (mode || sp.default) : null;
+  const nightMinor = sp ? minor(sp.night) : 0;
+  const chargeMinor = !sp ? 0 : chosen === 'CUSTOM' ? Math.round((parseFloat(custom.amount) || 0) * 100) : chosen === 'RULE' ? minor(sp.options.find((o) => o.mode === 'RULE')!.charge) : nightMinor;
+  const shortAdj = sp ? Math.max(0, nightMinor - Math.min(nightMinor, chargeMinor)) : 0;
   const current = f?.folio?.balance;
   // what the bill will be once the nights stayed are posted at check-out (the server posts them, so the balance shown now is not the final one)
-  const final: Amount | undefined = f ? (early ? f.projection.balanceAfterDue : f.projection.balanceAtEndOfStay) : undefined;
+  const finalBase: Amount | undefined = f ? (early ? f.projection.balanceAfterDue : f.projection.balanceAtEndOfStay) : undefined;
+  const final: Amount | undefined = finalBase && shortAdj ? { amount: ((minor(finalBase) - shortAdj) / 100).toFixed(2), currency: finalBase.currency } : finalBase;
   const cur = current?.currency ?? 'PKR';
   const [paying, setPaying] = useState(false); const [refunding, setRefunding] = useState(false); const [reason, setReason] = useState('');
   const [changed, setChanged] = useState<{ delta: number } | null>(null); const [lock, setLock] = useState(false);
@@ -55,6 +65,7 @@ export function CheckOut({ stay }: { stay: Stay }) {
   const captured = (f?.payments ?? []).filter((p) => p.status === 'CAPTURED' && p.kind !== 'REFUND');
   const lines = (f?.postings ?? []).filter((p) => !p.reversed && p.type !== 'PAYMENT');
   const needReason = early && reason.trim().length < 3;
+  const customBad = chosen === 'CUSTOM' && (custom.why.trim().length < 3 || custom.amount.trim() === '' || !(parseFloat(custom.amount) >= 0) || chargeMinor > nightMinor);
   const closedBy = ln.status === 'CHECKED_OUT';
 
   const finish = async (balanceReason?: string) => {
@@ -62,12 +73,13 @@ export function CheckOut({ stay }: { stay: Stay }) {
     const body: Record<string, string> = {};
     if (reason.trim()) body.reason = reason.trim();
     if (balanceReason) body.balanceReason = balanceReason;
+    if (sp && chosen) (body as Record<string, unknown>).shortStay = chosen === 'CUSTOM' ? { mode: 'CUSTOM', amount: custom.amount.trim(), reason: custom.why.trim() } : { mode: chosen };
     const out = await run(() => withStepUp(() => api<ReservationDetail>('POST', `/v1/properties/${property!.id}/reservations/${res.id}/rooms/${ln.id}/check-out`, body)));
     if (out) { stay.settle(out); navigate(`/reservations/${res.id}?done=checkout${res.lines.length > 1 ? `&line=${ln.id}` : ''}`, { replace: true }); }
     else stay.refresh();
   };
   const primaryIsPay = owes && can('payment.take');
-  const canOut = can('frontdesk.check_out') && !offline && !busy && !lock && !needReason && !closedBy && settled;
+  const canOut = can('frontdesk.check_out') && !offline && !busy && !lock && !needReason && !customBad && !closedBy && settled;
 
   if (closedBy) return <Banner level="INFO" title={t('co.already')} action={<Link className="button" to={`/reservations/${res.id}`}>{t('common.back')}</Link>}>{t('co.alreadyText')}</Banner>;
   return (
@@ -99,6 +111,15 @@ export function CheckOut({ stay }: { stay: Stay }) {
             {credit && final && <StatusBadge tone="info" icon="info">{t('ws.credit', { amount: money(asAmount(Math.abs(finalMinor!), cur)) })}</StatusBadge>}
           </div>
           {pending.length > 0 && <Banner level="ACTION" title={t('co.pendingTitle', { amount: money(asAmount(pendingTotal, cur)) })}>{t('co.pendingText')}</Banner>}
+          {sp && (
+            <fieldset className="guestcard stack"><legend>{t('ss.guestTitle', { h: sp.hoursStayed })}</legend>
+              <p className="muted small">{t('ss.guestHelp')}</p>
+              {sp.options.map((o) => <label key={o.mode} className="check"><input type="radio" name="ss" checked={chosen === o.mode} onChange={() => setMode(o.mode as 'RULE' | 'FULL_NIGHT')} /> {o.mode === 'RULE' ? t('ss.rule', { p: o.percent, amount: money(o.charge) }) : t('ss.full', { amount: money(o.charge) })}</label>)}
+              {can('reservation.override_rate')
+                ? <><label className="check"><input type="radio" name="ss" checked={chosen === 'CUSTOM'} onChange={() => setMode('CUSTOM')} /> {t('ss.custom')}</label>
+                    {chosen === 'CUSTOM' && <div className="grid2"><label>{t('ss.customAmount')}<input inputMode="decimal" value={custom.amount} onChange={(e) => setCustom({ ...custom, amount: e.target.value })} dir="ltr" /></label><label>{t('ss.customWhy')}<input value={custom.why} onChange={(e) => setCustom({ ...custom, why: e.target.value })} /></label></div>}</>
+                : <p className="muted small"><Icon name="lock" size={14} /> {t('ss.needsManager')}</p>}
+            </fieldset>)}
           {early && <Field label={t('co.earlyReason')} required hint={t('co.earlyHint')}>{(p) => <input {...p} value={reason} onChange={(e) => setReason(e.target.value)} />}</Field>}
           {owes && !can('payment.take') && <Banner level="INFO" title={t('co.askCashier')}>{t('co.askCashierText')}</Banner>}
           {credit && (<Banner level="INFO" title={t('co.creditTitle', { amount: money(asAmount(Math.abs(finalMinor!), cur)) })}>
