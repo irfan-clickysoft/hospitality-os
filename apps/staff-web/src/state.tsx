@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const c = readCache();
         if (c) { setCsrf(c.me.csrfToken); setMe(c.me); setProperties(c.properties); setOfflineBoot(true); setStatus('in'); return; }
       }
-      setStatus('out');
+      setStatus(e instanceof ApiError && e.code === 'MFA_PENDING' ? 'mfa' : 'out');           // a page reloaded half way through signing in goes back to the code, not to the password
     });
     return onUnauthenticated(() => { writeCache(null); setMe(null); setStatus('out'); });
   }, [load]);
@@ -54,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (tenant: string, email: string, password: string) => {
     const r = await api<{ state: string; csrfToken: string }>('POST', '/v1/auth/login', { tenant, email, password });
     setCsrf(r.csrfToken);
+    if (r.state === 'PENDING_MFA') { setStatus('mfa'); return; }          // the server will not describe a session that has not given its second factor yet, so ask for the code now
     await load();
   }, [load]);
   const verifyMfa = useCallback(async (code: string) => { await api('POST', '/v1/auth/mfa/verify', { code }); await load(); }, [load]);
