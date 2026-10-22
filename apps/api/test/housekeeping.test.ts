@@ -232,8 +232,8 @@ describe('the board and the team', () => {
   });
 });
 
-describe('issues and lost & found', () => {
-  it('attendants report problems and found items; supervisors resolve and close them', async () => {
+describe('issues', () => {
+  it('attendants report problems; supervisors resolve them', async () => {
     const w = await sunset(); const a1 = await staff(w, 'housekeeper'); const sup = await staff(w, 'housekeeping_supervisor');
     const i = await ok(call('POST', hk(w, 'issues'), a1.h, { roomId: w.room['103'], category: 'AC', description: 'AC leaking water', priority: 2 }), 201);
     await ok(call('POST', hk(w, 'issues'), a1.h, { area: 'Corridor, first floor', category: 'ELECTRICAL', description: 'Light flickering' }), 201);
@@ -244,11 +244,6 @@ describe('issues and lost & found', () => {
     await ok(call('POST', hk(w, `issues/${i.id}/resolve`), sup.h, { note: 'Drain cleared' }));
     await code(call('POST', hk(w, `issues/${i.id}/resolve`), sup.h, {}), 409, 'NOT_OPEN');
     expect((await ok(call('GET', hk(w, 'issues'), sup.h))).items).toHaveLength(1);
-    const lf = await ok(call('POST', hk(w, 'lost-found'), a1.h, { roomId: w.room['101'], item: 'Black phone charger' }), 201);
-    expect((await ok(call('GET', hk(w, 'lost-found'), sup.h))).items[0]).toMatchObject({ item: 'Black phone charger', roomNumber: '101', status: 'FOUND' });
-    await code(call('POST', hk(w, `lost-found/${lf.id}/close`), a1.h, { status: 'RETURNED' }), 403, 'PERMISSION_DENIED');
-    await ok(call('POST', hk(w, `lost-found/${lf.id}/close`), sup.h, { status: 'RETURNED', note: 'Collected by guest' }));
-    expect((await ok(call('GET', hk(w, 'lost-found'), sup.h))).items).toEqual([]);
   });
 });
 

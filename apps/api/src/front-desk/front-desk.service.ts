@@ -2,7 +2,7 @@ import { ConflictException, ForbiddenException, HttpException, Inject, Injectabl
 import { sql, type Transaction } from 'kysely';
 import type { z } from 'zod';
 import type { DB } from '@hos/db';
-import { addDays, hoursBeforeArrival, nightsOf } from '@hos/domain-types';
+import { Money, addDays, hoursBeforeArrival, nightsOf } from '@hos/domain-types';
 import { ComplianceService } from '../compliance/compliance.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { CLOCK, type ClockLike } from '../common/clock.js';
@@ -18,7 +18,8 @@ import { RatesService } from '../rates/rates.service.js';
 import { ReservationsService } from '../reservations/reservations.service.js';
 import { nextStatus } from '../reservations/state-machine.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
-import { last4, maskId, normaliseIdNumber, type IdType } from './id-documents.js';
+import { idHash, last4, maskId, normaliseIdNumber, type IdType } from './id-documents.js';
+import { parseRule, percentFor, share } from './short-stay.js';
 import type * as S from './schemas.js';
 
 type Trx = Transaction<DB>;
@@ -49,17 +50,24 @@ export class FrontDeskService {
   }
 
   /** Validates the registration card and returns the canonical occupants. Foreign guests must be registered with a passport. */
-  private checkOccupants(occupants: Occupant[], line: { adults: number; children: number }, residency: 'RESIDENT' | 'NON_RESIDENT', bd: string): Array<Occupant & { canonical: string; primary: boolean }> {
+  private checkOccupants(occupants: Occupant[], line: { adults: number; children: number }, residency: 'RESIDENT' | 'NON_RESIDENT', bd: string): Array<Occupant & { canonical: string | null; primary: boolean }> {
     const primaries = occupants.filter((o) => o.isPrimary).length;
     if (primaries > 1) throw fail(422, 'ID_INVALID', 'Only one guest can be the primary guest');
-    const list = occupants.map((o, k) => ({ ...o, canonical: normaliseIdNumber(o.idType, o.idNumber), primary: primaries === 0 ? k === 0 : o.isPrimary }));
+    const list = occupants.map((o, k) => {
+      let canonical: string | null = null;
+      if (o.idType && o.idNumber) {
+        try { canonical = normaliseIdNumber(o.idType, o.idNumber); } catch (e) { throw fail(422, 'ID_INVALID', `${o.fullName}: ${(e as { response?: { message?: string } }).response?.message ?? 'the ID number is not valid'}`); }
+      }
+      return { ...o, canonical, primary: primaries === 0 ? k === 0 : o.isPrimary };
+    });
     const adults = list.filter((o) => o.ageGroup === 'ADULT').length;
     if (adults < 1) throw fail(422, 'ID_INVALID', 'At least one adult must be registered');
     if (adults > line.adults || list.length > line.adults + line.children) throw fail(422, 'OCCUPANCY_EXCEEDED', `This room is booked for ${line.adults} adult(s) and ${line.children} child(ren). Change the booking first to add more guests.`);
     const seen = new Set<string>();
-    for (const o of list) { const k = `${o.idType}:${o.canonical}`; if (seen.has(k)) throw fail(422, 'ID_INVALID', 'The same identity document is entered twice'); seen.add(k); }
+    for (const o of list) { if (!o.canonical) continue; const k = `${o.idType}:${o.canonical}`; if (seen.has(k)) throw fail(422, 'ID_INVALID', 'The same identity document is entered twice'); seen.add(k); }
     const main = list.find((o) => o.primary)!;
     if (main.ageGroup !== 'ADULT') throw fail(422, 'ID_INVALID', 'The primary guest must be an adult');
+    if (!main.canonical) throw fail(422, 'ID_REQUIRED', 'The main guest\'s ID is needed. Other family members may share it.');
     if (residency === 'NON_RESIDENT' && main.idType !== 'PASSPORT') throw fail(422, 'PASSPORT_REQUIRED', 'Foreign guests are registered with their passport');
     if (residency === 'RESIDENT' && main.nationality && main.nationality !== 'PK') throw fail(422, 'RESIDENCY_MISMATCH', 'This booking is on the local (resident) rate but the primary guest is a foreign national. Re-book on the international rate.');
     for (const o of list) if (o.idExpiry && o.idType === 'PASSPORT' && o.idExpiry < bd) throw fail(422, 'ID_EXPIRED', `${o.fullName}'s passport has expired`);
@@ -111,7 +119,7 @@ export class FrontDeskService {
     const mainOcc = occupants.find((o) => o.primary)!;
     const cctx = { propertyId, stage: 'CHECK_IN' as const, nationality: mainOcc.nationality ?? guest.nationality ?? null, residency: res.residency as 'RESIDENT' | 'NON_RESIDENT', guests: occupants.length, nights: nightsOf(line.arrival, line.departure).length, businessDate: bd };
     const enforced = await this.compliance.enforce(trx, cctx, userId, id, i.complianceApproval);
-    this.compliance.assertDocuments(enforced.matches, mainOcc.idType);
+    this.compliance.assertDocuments(enforced.matches, mainOcc.idType!);
 
     const current = await this.liveAssignment(trx, lineId);
     const roomId = i.roomId ?? current?.room_id;
@@ -123,7 +131,7 @@ export class FrontDeskService {
     const tenantId = currentTenant().tenantId;
     for (const o of occupants) {
       await trx.insertInto('stay_guest').values({ tenant_id: tenantId, property_id: propertyId, reservation_room_id: lineId, full_name: o.fullName, is_primary: o.primary, age_group: o.ageGroup,
-        id_type: o.idType, id_number_sealed: this.box.seal(o.canonical, this.aad(lineId)), id_last4: last4(o.canonical), nationality: o.nationality ?? null, id_expiry: o.idExpiry ?? null, created_by: userId } as never).execute();
+        id_type: o.idType ?? null, id_number_sealed: o.canonical ? this.box.seal(o.canonical, this.aad(lineId)) : null, id_last4: o.canonical ? last4(o.canonical) : null, id_hash: o.canonical ? idHash(o.idType!, o.canonical) : null, nationality: o.nationality ?? null, id_expiry: o.idExpiry ?? null, created_by: userId } as never).execute();
     }
     const main = occupants.find((o) => o.primary)!;
     if (!guest.nationality && main.nationality) await trx.updateTable('guest').set({ nationality: main.nationality, version: sql`version + 1` as never }).where('id', '=', guest.id).execute();
@@ -163,6 +171,31 @@ export class FrontDeskService {
     });
   }
 
+  // ───────────── short stay ─────────────
+  /** A guest who checks in and leaves on the same business day, before the booked departure, has had a short stay rather than a night: what that costs under the property's rule. */
+  private async shortStay(trx: Trx, propertyId: string, line: { id: string; arrival: string; departure: string; status: string; checked_in_at: Date | string | null; checked_in_business_date: string | null }, bd: string) {
+    const p = await trx.selectFrom('property').select(['short_stay_rule', 'currency']).where('id', '=', propertyId).executeTakeFirstOrThrow();
+    const rule = parseRule(p.short_stay_rule);
+    const eligible = line.status === 'CHECKED_IN' && !!line.checked_in_at && line.checked_in_business_date === bd && bd === line.arrival && bd < line.departure;
+    if (!eligible) return { eligible: false as const, rule, currency: p.currency };
+    const night = await trx.selectFrom('stay_night').select(['room_minor', 'extras_minor', 'discount_minor', 'total_minor']).where('reservation_room_id', '=', line.id).where('business_date', '=', line.arrival).executeTakeFirst();
+    if (!night) return { eligible: false as const, rule, currency: p.currency };
+    const hours = Math.max(0, (this.clock.now() - new Date(line.checked_in_at!).getTime()) / 3_600_000);
+    return { eligible: true as const, rule, currency: p.currency, hours, night, total: BigInt(night.total_minor), percent: percentFor(rule, hours) };
+  }
+  async checkOutPreview(propertyId: string, id: string, lineId: string) {
+    return this.tdb.tx(async (trx) => {
+      const p = await this.res.prop(trx, propertyId);
+      const { lines } = await this.res.load(trx, propertyId, id);
+      const line = lines.find((l) => l.id === lineId);
+      if (!line) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room line not found on this reservation' });
+      const s = await this.shortStay(trx, propertyId, line as never, p.business_date);
+      if (!s.eligible) return { eligible: false, rule: s.rule };
+      return { eligible: true, rule: s.rule, hoursStayed: Math.round(s.hours * 10) / 10, night: fmt(s.total, s.currency), default: s.rule ? 'RULE' : 'FULL_NIGHT',
+        options: [...(s.rule ? [{ mode: 'RULE', percent: s.percent, charge: fmt(share(s.total, s.percent), s.currency) }] : []), { mode: 'FULL_NIGHT', percent: 100, charge: fmt(s.total, s.currency) }] };
+    });
+  }
+
   // ───────────── check-out ─────────────
   async checkOut(propertyId: string, id: string, lineId: string, userId: string, i: z.infer<typeof S.CheckOut>) {
     return this.tdb.tx(async (trx) => {
@@ -172,6 +205,7 @@ export class FrontDeskService {
       const line = lines.find((l) => l.id === lineId);
       if (!line) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room line not found on this reservation' });
       nextStatus(line.status, 'CHECK_OUT');
+      if (i.shortStay && !(await this.shortStay(trx, propertyId, line as never, bd)).eligible) throw fail(422, 'SHORT_STAY_NOT_ELIGIBLE', 'A short stay is a guest who checked in today and leaves today, before the booked departure');
       let newDeparture = line.departure, overstayNights = 0;
       if (bd < line.departure) {
         if (!i.reason) throw fail(422, 'REASON_REQUIRED', `This guest is booked until ${line.departure}. Give a reason for the early departure.`);
@@ -181,8 +215,22 @@ export class FrontDeskService {
 
       await this.res.transition(trx, propertyId, id, 'CHECK_OUT', { reason: i.reason ?? 'Checked out', lineIds: [lineId], userId });   // releases the whole booked range, so unused nights become sellable again
       const early = newDeparture < line.departure;
+      let shortInfo: { mode: string; percent: number; hours: number; charged: string; waived: string } | null = null;
       if (early) {
         await trx.deleteFrom('stay_night').where('reservation_room_id', '=', lineId).where('business_date', '>=', newDeparture).execute();
+        const ss = await this.shortStay(trx, propertyId, line as never, bd);
+        if (ss.eligible) {
+          const mode = i.shortStay?.mode ?? (ss.rule ? 'RULE' : 'FULL_NIGHT');
+          let target = mode === 'RULE' ? share(ss.total, ss.percent) : ss.total;
+          if (mode === 'CUSTOM') {
+            await this.res.requirePermission(userId, 'reservation.override_rate', propertyId);
+            target = Money.parse(i.shortStay!.amount!, ss.currency).minor;
+            if (target < 0n || target > ss.total) throw fail(422, 'VALIDATION_FAILED', 'The charge cannot be more than the night', { field: 'amount' });
+          }
+          const cut = ss.total - target;
+          if (cut > 0n) await trx.updateTable('stay_night').set({ discount_minor: (BigInt(ss.night.discount_minor) + cut).toString(), total_minor: target.toString(), source: 'SHORT_STAY' }).where('reservation_room_id', '=', lineId).where('business_date', '=', line.arrival).execute();
+          shortInfo = { mode, percent: mode === 'RULE' ? ss.percent : mode === 'FULL_NIGHT' ? 100 : Number((target * 10000n / (ss.total || 1n))) / 100, hours: Math.round(ss.hours * 10) / 10, charged: target.toString(), waived: cut.toString() };
+        }
         const sums = await sql<{ gross: string; disc: string; total: string }>`SELECT coalesce(sum(room_minor + extras_minor),0)::text AS gross, coalesce(sum(discount_minor),0)::text AS disc, coalesce(sum(total_minor),0)::text AS total FROM stay_night WHERE reservation_room_id = ${lineId}`.execute(trx);
         const s = sums.rows[0]!;
         await trx.updateTable('reservation_room').set({ departure: newDeparture, original_departure: line.departure, subtotal_minor: s.gross, discount_minor: s.disc, total_minor: s.total }).where('id', '=', lineId).execute();
@@ -211,9 +259,10 @@ export class FrontDeskService {
         await trx.updateTable('room_assignment').set({ end_reason: 'CHECK_OUT' }).where('id', '=', assignment.assignmentId).execute();
         await this.hk.onRoomVacated(trx, propertyId, assignment.room_id, lineId, 'CHECK_OUT', userId);
       }
-      await this.res.history(trx, propertyId, id, { lineId, action: 'CHECK_OUT_DETAILS', reason: i.reason, details: { room: assignment?.number ?? null, earlyDeparture: early, originalDeparture: early ? line.departure : null, overstayNights } });
-      await this.audit.record(trx, { action: 'frontdesk.check_out', resourceType: 'reservation', resourceId: id, propertyId, after: { room: assignment?.number ?? null, earlyDeparture: early, overstayNights }, note: i.reason });
-      return { ...(await this.res.detail(trx, propertyId, id)), checkOut: { earlyDeparture: early, originalDeparture: early ? line.departure : null, overstayNights, roomMarkedDirty: !!assignment, folio: { id: folio.id, balance: fmt(balance, folio.currency), closed: folioClosed, checkedOutWithBalance: settledWithBalance } } };
+      await this.res.history(trx, propertyId, id, { lineId, action: 'CHECK_OUT_DETAILS', reason: i.reason, details: { room: assignment?.number ?? null, earlyDeparture: early, originalDeparture: early ? line.departure : null, overstayNights, shortStay: shortInfo } });
+      await this.audit.record(trx, { action: 'frontdesk.check_out', resourceType: 'reservation', resourceId: id, propertyId, after: { room: assignment?.number ?? null, earlyDeparture: early, overstayNights, shortStay: shortInfo }, note: i.shortStay?.reason ?? i.reason });
+      if (shortInfo) await this.outbox.publish(trx, { aggregateType: 'reservation', aggregateId: id, eventType: 'ShortStayCharged', propertyId, businessDate: bd, payload: { reservationId: id, lineId, ...shortInfo } });
+      return { ...(await this.res.detail(trx, propertyId, id)), checkOut: { earlyDeparture: early, originalDeparture: early ? line.departure : null, overstayNights, shortStay: shortInfo ? { mode: shortInfo.mode, percent: shortInfo.percent, hoursStayed: shortInfo.hours, charged: fmt(shortInfo.charged, folio.currency), waived: fmt(shortInfo.waived, folio.currency) } : null, roomMarkedDirty: !!assignment, folio: { id: folio.id, balance: fmt(balance, folio.currency), closed: folioClosed, checkedOutWithBalance: settledWithBalance } } };
     });
   }
 
@@ -296,7 +345,7 @@ export class FrontDeskService {
       if (!lines.find((l) => l.id === lineId)) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room line not found on this reservation' });
       const rows = await trx.selectFrom('stay_guest').selectAll().where('reservation_room_id', '=', lineId).where('voided_at', 'is', null).orderBy('is_primary', 'desc').orderBy('created_at').execute();
       if (reveal) await this.audit.record(trx, { action: 'frontdesk.view_id', resourceType: 'reservation', resourceId: id, propertyId, note: `${rows.length} document(s) revealed` });
-      return { items: rows.map((r) => ({ id: r.id, fullName: r.full_name, isPrimary: r.is_primary, ageGroup: r.age_group, idType: r.id_type, idNumber: reveal ? this.box.open(r.id_number_sealed, this.aad(lineId)) : maskId(r.id_type as IdType, r.id_last4),
+      return { items: rows.map((r) => ({ id: r.id, fullName: r.full_name, isPrimary: r.is_primary, ageGroup: r.age_group, idType: r.id_type, idNumber: !r.id_type || !r.id_number_sealed ? null : reveal ? this.box.open(r.id_number_sealed, this.aad(lineId)) : maskId(r.id_type as IdType, r.id_last4!),
         nationality: r.nationality, idExpiry: r.id_expiry })) };
     });
   }

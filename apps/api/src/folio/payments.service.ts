@@ -59,6 +59,12 @@ export class PaymentsService {
       return { ...r.body, replayed: r.replayed };
     });
   }
+  /** Receipt numbers run per property and year and are never reused: RCT-BLVD-26-00012 (RFD- for refunds). */
+  private async nextReceiptNo(trx: Trx, propertyId: string, code: string, businessDate: string, prefix: 'RCT' | 'RFD') {
+    const seq = (await sql<{ v: string }>`INSERT INTO property_counter (tenant_id, property_id, name, value) VALUES (${currentTenant().tenantId}, ${propertyId}, ${`receipt-${prefix}-${businessDate.slice(0, 4)}`}, 1)
+      ON CONFLICT (tenant_id, property_id, name) DO UPDATE SET value = property_counter.value + 1 RETURNING value::text AS v`.execute(trx)).rows[0]!.v;
+    return `${prefix}-${code}-${businessDate.slice(2, 4)}-${seq.padStart(5, '0')}`;
+  }
   /** Takes a payment on any open bill by its id — the bill of a conference-room hire has no reservation. */
   async recordOnFolio(propertyId: string, folioId: string, userId: string, key: string, i: z.infer<typeof S.RecordPayment>) {
     const hash = hashRequest('POST', `/v1/properties/${propertyId}/folios/${folioId}/payments`, i);
@@ -82,7 +88,8 @@ export class PaymentsService {
     if (i.method === 'CASH' && !session) throw fail(409, 'NO_OPEN_SESSION', 'Open your cashier session before taking cash');
     const status = i.method === 'BANK_TRANSFER' ? 'PENDING_VERIFICATION' : 'CAPTURED';
     const accountId = await this.accounts.resolve(trx, propertyId, i.method, i.paymentAccountId, folio.currency);
-    const pay = await trx.insertInto('payment').values({ payment_account_id: accountId, tenant_id: currentTenant().tenantId, property_id: propertyId, folio_id: folio.id, kind: i.kind, method: i.method, status, amount_minor: amount.toString(),
+    const receiptNo = await this.nextReceiptNo(trx, propertyId, p.code, p.business_date, 'RCT');
+    const pay = await trx.insertInto('payment').values({ receipt_no: receiptNo, payment_account_id: accountId, tenant_id: currentTenant().tenantId, property_id: propertyId, folio_id: folio.id, kind: i.kind, method: i.method, status, amount_minor: amount.toString(),
       currency: folio.currency, reference: i.reference ?? null, card_last4: i.cardLast4 ?? null, approval_code: i.approvalCode ?? null, counterparty: i.counterparty ?? null, note: i.note ?? null,
       cashier_session_id: session?.id ?? null, business_date: p.business_date, created_by: userId } as never).returningAll().executeTakeFirstOrThrow();
     if (status === 'CAPTURED') await this.capture(trx, propertyId, pay, folio.currency, userId);
@@ -214,7 +221,7 @@ export class PaymentsService {
     if (method !== 'CASH' && !i.counterparty) throw fail(422, 'COUNTERPARTY_REQUIRED', 'Enter the beneficiary (bank account / wallet) the refund goes to');
     const status = method === 'CASH' ? 'CAPTURED' : 'PENDING_VERIFICATION';
     const accountId = await this.accounts.resolve(trx, propertyId, method, i.paymentAccountId, folio.currency);
-    const pay = await trx.insertInto('payment').values({ payment_account_id: accountId, tenant_id: currentTenant().tenantId, property_id: propertyId, folio_id: orig.folio_id, kind: 'REFUND', method, status, amount_minor: amount.toString(),
+    const pay = await trx.insertInto('payment').values({ receipt_no: await this.nextReceiptNo(trx, propertyId, (await this.folios.property(trx, propertyId)).code, p.business_date, 'RFD'), payment_account_id: accountId, tenant_id: currentTenant().tenantId, property_id: propertyId, folio_id: orig.folio_id, kind: 'REFUND', method, status, amount_minor: amount.toString(),
       currency: folio.currency, reference: i.reference ?? null, counterparty: i.counterparty ?? null, note: i.reason, refund_of_payment_id: paymentId, cashier_session_id: session?.id ?? null,
       business_date: p.business_date, created_by: userId } as never).returningAll().executeTakeFirstOrThrow();
     if (status === 'CAPTURED') await this.capture(trx, propertyId, pay, folio.currency, userId);

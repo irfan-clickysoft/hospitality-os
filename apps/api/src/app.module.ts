@@ -40,6 +40,10 @@ import { WorkdayController } from './workday/workday.controller.js';
 import { WorkdayService } from './workday/workday.service.js';
 import { GuestPortalController, GuestRequestsController } from './guest-portal/guest-portal.controller.js';
 import { GuestPortalService } from './guest-portal/guest-portal.service.js';
+import { LostFoundController } from './lost-found/lost-found.controller.js';
+import { LostFoundService } from './lost-found/lost-found.service.js';
+import { MessagesController } from './messages/messages.controller.js';
+import { MessagesService } from './messages/messages.service.js';
 import { MediaController } from './media/media.controller.js';
 import { MediaService } from './media/media.service.js';
 import { GateController } from './gate/gate.controller.js';
@@ -74,8 +78,8 @@ import { TenantMiddleware } from './tenancy/tenant.middleware.js';
 
 @Module({
   imports: [DbModule, CoreServicesModule, IdentityModule, AuthzModule, InventoryModule],
-  controllers: [HealthController, MediaController, GuestPortalController, GuestRequestsController, PropertySetupController, RatesController, GuestsController, ReservationsController, FrontDeskController, FolioController, HousekeepingController, NightAuditController, TaxController, InvoiceController, CompaniesController, ManagementController, OtaController, ReportsController, StaffController, FnbController, MenuController, SpacesController, WorkdayController, GateController, CashHandoverController, ChargeReviewController, ReadinessController, PaymentAccountsController, ComplianceController, MaintenanceController, ImportsController, AuditController],
-  providers: [TenantMiddleware, MediaService, GuestPortalService, PropertySetupService, RatesService, QuoteSigner, GuestsService, ReservationsService, FrontDeskService, FolioService, HousekeepingService, NightAuditService, TaxService, InvoiceService, CompaniesService, ArService, ManagementService, OtaService, ReportsService, StaffService, FnbService, MenuService, SpacesService, WorkdayService, GateService, CashHandoverService, ChargeReviewService, ReadinessService, PaymentAccountsService, ComplianceService, MaintenanceService, ImportsService, PaymentsService, CashierService, { provide: APP_FILTER, useClass: ProblemDetailsFilter }],
+  controllers: [HealthController, LostFoundController, MediaController, MessagesController, GuestPortalController, GuestRequestsController, PropertySetupController, RatesController, GuestsController, ReservationsController, FrontDeskController, FolioController, HousekeepingController, NightAuditController, TaxController, InvoiceController, CompaniesController, ManagementController, OtaController, ReportsController, StaffController, FnbController, MenuController, SpacesController, WorkdayController, GateController, CashHandoverController, ChargeReviewController, ReadinessController, PaymentAccountsController, ComplianceController, MaintenanceController, ImportsController, AuditController],
+  providers: [TenantMiddleware, LostFoundService, MediaService, MessagesService, GuestPortalService, PropertySetupService, RatesService, QuoteSigner, GuestsService, ReservationsService, FrontDeskService, FolioService, HousekeepingService, NightAuditService, TaxService, InvoiceService, CompaniesService, ArService, ManagementService, OtaService, ReportsService, StaffService, FnbService, MenuService, SpacesService, WorkdayService, GateService, CashHandoverService, ChargeReviewService, ReadinessService, PaymentAccountsService, ComplianceService, MaintenanceService, ImportsService, PaymentsService, CashierService, { provide: APP_FILTER, useClass: ProblemDetailsFilter }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void { consumer.apply(TenantMiddleware).forRoutes('*'); }

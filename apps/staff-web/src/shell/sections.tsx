@@ -52,6 +52,7 @@ export const SECTIONS: Section[] = [
     { id: 'rates', label: 'nav.rates', show: any('rate.manage'), Page: L(() => import('../desk/Rates.js'), 'Rates') },
     { id: 'tax', label: 'nav.tax', show: any('tax.configure', 'tax.approve'), Page: L(() => import('../desk/Tax.js'), 'Tax') },
     { id: 'accounts', label: 'nav.accounts', show: any('paymentaccount.view'), Page: L(() => import('../desk/Accounts.js'), 'Accounts') },
+    { id: 'messages', label: 'nav.messages', show: any('tenant.manage'), Page: L(() => import('../pages/MessageTemplates.js'), 'MessageTemplates') },
     { id: 'readiness', label: 'nav.readiness', show: any('management.view'), Page: L(() => import('../desk/Readiness.js'), 'Readiness') },
     { id: 'staff', label: 'nav.staff', show: any('user.manage'), Page: L(() => import('../desk/Staff.js'), 'Staff') },
     { id: 'import', label: 'nav.import', show: any('data.import'), Page: L(() => import('../desk/Import.js'), 'Import') },

@@ -96,6 +96,17 @@ await page.screenshot({ path: `${OUT}/25-rates.png` });
 await goTab(page, 'Accounts');
 await page.getByText('Faysal Bank — Farooq Saleh (Creek)').waitFor();
 check('bank accounts are recorded, personal ones flagged', await page.getByText('Bank Al Habib — Sunset BNB (company)').count() > 0);
+// the bank details form: every field the accountant needs, with the IBAN checked as you leave it
+await page.getByRole('button', { name: /New account|Add account|New payment account/i }).first().click().catch(() => undefined);
+const asheet = page.locator('.sheet').last();
+if (await asheet.getByLabel('IBAN').count()) {
+  await asheet.getByLabel('IBAN').fill('PK36SCBL0000001123456703'); await asheet.getByLabel('Branch code').focus();
+  check('a mistyped IBAN is flagged next to the field', (await asheet.locator('.field.has-error .error').count()) > 0);
+  await asheet.getByLabel('IBAN').fill('pk36scbl0000001123456702'); await asheet.getByLabel('Branch code').focus();
+  check('a correct IBAN is shown in groups of four', (await asheet.getByLabel('IBAN').inputValue()) === 'PK36 SCBL 0000 0011 2345 6702');
+  for (const l of ['Branch', 'Branch code', 'Branch address', 'Account number', 'SWIFT code', 'Remarks']) check(`the form asks for ${l}`, (await asheet.getByLabel(l, { exact: false }).count()) > 0);
+  await asheet.getByRole('button', { name: 'Cancel' }).click().catch(() => page.keyboard.press('Escape'));
+}
 await page.screenshot({ path: `${OUT}/27-accounts.png` });
 await goTab(page, 'Cashier');
 await page.getByText('Safe (cash waiting for head office)').waitFor();

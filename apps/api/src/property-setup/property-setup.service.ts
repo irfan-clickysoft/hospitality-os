@@ -32,7 +32,7 @@ export class PropertySetupService {
     return p;
   }
   private propDto(p: Awaited<ReturnType<PropertySetupService['prop']>>) {
-    return { id: p.id, code: p.code, name: p.name, legalEntityId: p.legal_entity_id, brandId: p.brand_id, timezone: p.timezone, currency: p.currency, businessDate: p.business_date, weekendDays: p.weekend_days, city: p.city, mapsUrl: p.maps_url, terms: p.terms_text, checkInTime: String(p.check_in_time).slice(0, 5), checkOutTime: String(p.check_out_time).slice(0, 5), status: p.status, version: p.version };
+    return { id: p.id, code: p.code, name: p.name, legalEntityId: p.legal_entity_id, brandId: p.brand_id, timezone: p.timezone, currency: p.currency, businessDate: p.business_date, weekendDays: p.weekend_days, city: p.city, mapsUrl: p.maps_url, terms: p.terms_text, shortStayRule: p.short_stay_rule ?? null, checkInTime: String(p.check_in_time).slice(0, 5), checkOutTime: String(p.check_out_time).slice(0, 5), status: p.status, version: p.version };
   }
 
   /** Properties the current user may view (property-scoped users see only theirs). */
@@ -80,6 +80,7 @@ export class PropertySetupService {
       if (i.brandId !== undefined) set.brand_id = i.brandId;
       if (i.terms !== undefined) set.terms_text = i.terms;
       if (i.city !== undefined) set.city = i.city;
+      if (i.shortStayRule !== undefined) set.short_stay_rule = i.shortStayRule === null ? null : JSON.stringify(i.shortStayRule);
       if (i.mapsUrl !== undefined) set.maps_url = i.mapsUrl;
       if (i.checkInTime !== undefined) set.check_in_time = i.checkInTime;
       if (i.checkOutTime !== undefined) set.check_out_time = i.checkOutTime;

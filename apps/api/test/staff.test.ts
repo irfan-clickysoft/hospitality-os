@@ -111,3 +111,39 @@ describe('looking after accounts', () => {
     const page = await ok(call('GET', '/v1/audit?limit=2', OM)); expect(page.items).toHaveLength(2);
   });
 });
+
+describe('several roles at once', () => {
+  it('a small hotel’s manager is given several roles in one go; roles already held are left alone; one that is too wide refuses the whole set; and they can be removed together', async () => {
+    const [p1, p2] = T.propertyIds;
+    const boss = await gm(p1);
+    const u = await ok(mk(`m${++n}@staff.test`), 201);
+    const body = (o: Record<string, unknown> = {}) => ({ roleKeys: ['front_desk_agent', 'cashier', 'housekeeping_supervisor'], scopeType: 'PROPERTY', scopeId: p1, ...o });
+    await code(call('POST', `/v1/users/${u.id}/roles/bulk`, boss.h, body({ roleKeys: [] })), 400, 'VALIDATION_FAILED');
+    const r = await ok(call('POST', `/v1/users/${u.id}/roles/bulk`, boss.h, body()), 201);
+    expect(r.given.map((x: any) => x.roleKey)).toEqual(['front_desk_agent', 'cashier', 'housekeeping_supervisor']); expect(r.already).toEqual([]);
+    const again = await ok(call('POST', `/v1/users/${u.id}/roles/bulk`, boss.h, body({ roleKeys: ['cashier', 'night_auditor'] })), 201);
+    expect(again.given.map((x: any) => x.roleKey)).toEqual(['night_auditor']); expect(again.already).toEqual(['cashier']);
+    // one role too wide: nothing is given, and the answer names it
+    const u2 = await ok(mk(`m${++n}@staff.test`), 201);
+    const bad = await code(call('POST', `/v1/users/${u2.id}/roles/bulk`, boss.h, body({ roleKeys: ['front_desk_agent', 'group_owner'] })), 403, 'INSUFFICIENT_AUTHORITY');
+    expect(bad.roleKey).toBe('group_owner');
+    expect((await ok(call('GET', '/v1/users', OM))).items.find((x: any) => x.id === u2.id).assignments).toEqual([]);
+    await code(call('POST', `/v1/users/${u2.id}/roles/bulk`, boss.h, body({ scopeId: p2 })), 403, 'INSUFFICIENT_AUTHORITY');          // another property
+    await code(call('POST', `/v1/users/${boss.id}/roles/bulk`, boss.h, body()), 403, 'SELF_ACTION');
+    // removing several together needs a reason and ends them all
+    const shown = (await ok(call('GET', '/v1/users', OM))).items.find((x: any) => x.id === u.id);
+    const ids = shown.assignments.filter((x: any) => ['cashier', 'night_auditor'].includes(x.roleKey)).map((x: any) => x.id);
+    await code(call('POST', `/v1/users/${u.id}/roles/remove`, boss.h, { assignmentIds: ids, reason: 'x' }), 400, 'VALIDATION_FAILED');
+    expect((await ok(call('POST', `/v1/users/${u.id}/roles/remove`, boss.h, { assignmentIds: ids, reason: 'No longer does the cash' }))).ended).toBe(2);
+    expect((await ok(call('GET', '/v1/users', OM))).items.find((x: any) => x.id === u.id).assignments.map((x: any) => x.roleKey).sort()).toEqual(['front_desk_agent', 'housekeeping_supervisor']);
+    const audit = await adminDb.selectFrom('audit_log').select('action').where('tenant_id', '=', T.tenantId).where('resource_id', '=', u.id).execute();
+    expect(audit.filter((a) => a.action === 'staff.role_assign')).toHaveLength(4); expect(audit.filter((a) => a.action === 'staff.role_revoke')).toHaveLength(2);
+  });
+
+  it('the roles list carries plain-language labels for what each permission allows and the small-hotel presets', async () => {
+    const r = await ok(call('GET', '/v1/roles', OM));
+    expect(r.permissionLabels['fnb.manage']).toBeTruthy();
+    expect(r.presets.find((p: any) => p.key === 'desk_and_cash').roles).toEqual(['front_desk_agent', 'cashier']);
+    expect(r.presets.every((p: any) => p.roles.length >= 2 && p.roles.every((k: string) => r.items.some((x: any) => x.key === k)))).toBe(true);
+  });
+});

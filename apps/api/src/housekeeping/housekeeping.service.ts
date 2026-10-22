@@ -402,30 +402,5 @@ export class HousekeepingService {
       return { id, status: 'RESOLVED' };
     });
   }
-  async addLostFound(propertyId: string, userId: string, i: z.infer<typeof S.LostFoundCreate>) {
-    return this.tdb.tx(async (trx) => {
-      await this.prop(trx, propertyId);
-      if (i.roomId && !(await trx.selectFrom('room').select('id').where('id', '=', i.roomId).where('property_id', '=', propertyId).executeTakeFirst())) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room not found' });
-      const row = await trx.insertInto('lost_found').values({ tenant_id: currentTenant().tenantId, property_id: propertyId, room_id: i.roomId ?? null, location: i.location ?? null, item: i.item, description: i.description ?? null, found_by: userId } as never).returning(['id', 'found_at']).executeTakeFirstOrThrow();
-      await this.audit.record(trx, { action: 'housekeeping.lost_found_add', resourceType: 'lost_found', resourceId: row.id, propertyId, after: { item: i.item } });
-      return { id: row.id, foundAt: row.found_at };
-    });
-  }
-  async lostFound(propertyId: string, status: 'FOUND' | 'RETURNED' | 'DISPOSED') {
-    return this.tdb.tx(async (trx) => {
-      await this.prop(trx, propertyId);
-      const rows = await trx.selectFrom('lost_found as l').leftJoin('room as r', 'r.id', 'l.room_id').leftJoin('staff_user as u', 'u.id', 'l.found_by')
-        .select(['l.id', 'r.number', 'l.location', 'l.item', 'l.description', 'l.status', 'u.full_name as finder', 'l.found_at', 'l.closed_at', 'l.closed_note']).where('l.property_id', '=', propertyId).where('l.status', '=', status).orderBy('l.found_at', 'desc').limit(200).execute();
-      return { items: rows.map((r) => ({ id: r.id, roomNumber: r.number, location: r.location, item: r.item, description: r.description, status: r.status, foundBy: r.finder, foundAt: r.found_at, closedAt: r.closed_at, closedNote: r.closed_note })) };
-    });
-  }
-  async closeLostFound(propertyId: string, id: string, userId: string, i: z.infer<typeof S.LostFoundClose>) {
-    return this.tdb.tx(async (trx) => {
-      const r = await trx.updateTable('lost_found').set({ status: i.status, closed_by: userId, closed_at: new Date(this.clock.now()), closed_note: i.note ?? null }).where('id', '=', id).where('property_id', '=', propertyId).where('status', '=', 'FOUND').returning('id').executeTakeFirst();
-      if (!r) throw new ConflictException({ code: 'NOT_OPEN', message: 'Item not found or already closed' });
-      await this.audit.record(trx, { action: 'housekeeping.lost_found_close', resourceType: 'lost_found', resourceId: id, propertyId, after: { status: i.status }, note: i.note ?? undefined });
-      return { id, status: i.status };
-    });
-  }
 }
 void ForbiddenException;

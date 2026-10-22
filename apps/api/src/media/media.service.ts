@@ -122,4 +122,23 @@ export class MediaService {
     return { fileName, kind, contentType: type, size: data.length };
   }
   async removePublic(fileName: string) { if (/^[0-9a-f]{32}\.(jpg|png|webp|mp4|webm)$/.test(fileName)) await rm(join(dir(), currentTenant().tenantId, fileName), { force: true }); }
+  /** A picture that only signed-in staff may fetch (an account's QR code): same checks as room pictures, but kept out of the public folder and the public route. */
+  async savePrivateImage(data: Buffer, maxBytes = 2 * 1024 * 1024): Promise<string> {
+    const ext = sniff(data);
+    if (!ext || TYPES[ext].kind !== 'IMAGE') throw new BadRequestException({ code: 'MEDIA_TYPE_UNSUPPORTED', message: 'Use a JPG, PNG or WebP picture' });
+    if (data.length > maxBytes) throw new PayloadTooLargeException({ code: 'MEDIA_TOO_LARGE', message: `The picture can be up to ${Math.round(maxBytes / 1024 / 1024)} MB` });
+    const fileName = `${randomBytes(16).toString('hex')}.${ext}`;
+    const folder = join(dir(), currentTenant().tenantId, 'private');
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, fileName), data, { flag: 'wx' });
+    return fileName;
+  }
+  async readPrivate(fileName: string) {
+    if (!/^[0-9a-f]{32}\.(jpg|png|webp)$/.test(fileName)) throw new NotFoundException();
+    const { readFile } = await import('node:fs/promises');
+    const data = await readFile(join(dir(), currentTenant().tenantId, 'private', fileName)).catch(() => null);
+    if (!data) throw new NotFoundException();
+    return { data, type: TYPES[fileName.split('.')[1] as Ext].type };
+  }
+  async removePrivate(fileName: string | null) { if (fileName && /^[0-9a-f]{32}\.(jpg|png|webp)$/.test(fileName)) await rm(join(dir(), currentTenant().tenantId, 'private', fileName), { force: true }); }
 }

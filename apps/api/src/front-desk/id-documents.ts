@@ -1,3 +1,4 @@
+import { createHmac, hkdfSync } from 'node:crypto';
 import { UnprocessableEntityException } from '@nestjs/common';
 
 export type IdType = 'CNIC' | 'NICOP' | 'PASSPORT' | 'DRIVING_LICENSE' | 'OTHER';
@@ -29,3 +30,17 @@ export function normaliseIdNumber(type: IdType, raw: string): string {
 
 export const last4 = (canonical: string): string => canonical.replace(/[^A-Za-z0-9]/g, '').slice(-4);
 export const maskId = (type: IdType, l4: string): string => (type === 'CNIC' || type === 'NICOP' ? `*****-*******-${l4.slice(-1)}` : `*****${l4}`);
+
+const indexKey = () => Buffer.from(hkdfSync('sha256', Buffer.from(process.env.APP_ENCRYPTION_KEY ?? '', 'base64'), Buffer.alloc(0), 'hos-id-index-v1', 32));
+const klass = (t: IdType) => (t === 'CNIC' || t === 'NICOP' ? 'NATIONAL' : t === 'PASSPORT' ? 'PASSPORT' : 'OTHER');
+/** A keyed hash of a document, so the desk can ask "who has this ID" without the number being stored readable. A CNIC and a NICOP number are the same kind of number. */
+export const idHash = (type: IdType, canonical: string): string => createHmac('sha256', indexKey()).update(`${klass(type)}:${canonical}`).digest('hex');
+
+/** Every document a typed search could mean, as hashes to look up: nothing is returned for text that cannot be an ID number. */
+export function idSearchHashes(raw: string): string[] {
+  const out: string[] = [];
+  for (const type of ['CNIC', 'PASSPORT', 'OTHER'] as const) {
+    try { out.push(idHash(type, normaliseIdNumber(type, raw))); } catch { /* not that kind of number */ }
+  }
+  return [...new Set(out)];
+}
