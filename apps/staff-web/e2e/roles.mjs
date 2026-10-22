@@ -39,6 +39,7 @@ check('the combined access is listed', (await sheet.getByText(/Together these ro
 check('it says a second person is still needed for some steps', (await sheet.getByText(/never skips a check/).count()) === 1);
 await sheet.getByRole('button', { name: new RegExp(`Give ${ticked} role`) }).click();
 await sheet.getByText(/role\(s\) given/).waitFor();
+await page.waitForFunction((n) => document.querySelectorAll('.sheet:last-of-type ul.plain li').length === n, ticked, { timeout: 10000 }).catch(() => undefined);
 check('all the roles are given in one go', (await sheet.locator('ul.plain li').count()) === ticked);
 
 // take two away together
