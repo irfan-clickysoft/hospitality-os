@@ -34,6 +34,12 @@ export class DocumentsController {
   async invoice(@Param('propertyId', uuid()) p: string, @Param('id', uuid()) id: string, @Res() reply: FastifyReply) { const n = nonce(); return page(reply, await this.svc.html(p, 'INVOICE', id, n), 200, n); }
   @Get('documents/order/:id') @RequirePermission('fnb.order', P)
   async order(@Param('propertyId', uuid()) p: string, @Param('id', uuid()) id: string, @Res() reply: FastifyReply) { const n = nonce(); return page(reply, await this.svc.html(p, 'ORDER', id, n), 200, n); }
+  @Get('companies/:companyId/statement-page') @RequirePermission('company.view', P)
+  async companyStatement(@Param('propertyId', uuid()) p: string, @Param('companyId', uuid()) id: string, @Res() reply: FastifyReply) { const n = nonce(); return page(reply, await this.svc.companyHtml(p, id, n), 200, n); }
+  @Post('companies/:companyId/statement-link') @RequirePermission('company.view', P) @HttpCode(200)
+  companyLink(@Param('propertyId', uuid()) p: string, @Param('companyId', uuid()) id: string, @Headers('origin') origin?: string) { return this.svc.companyLink(p, id, me(), origin); }
+  @Post('companies/:companyId/statement-link/revoke') @RequirePermission('company.view', P) @HttpCode(200)
+  companyRevoke(@Param('propertyId', uuid()) p: string, @Param('companyId', uuid()) id: string) { return this.svc.companyRevoke(p, id); }
   @Post('documents/links') @RequirePermission('folio.view', P) @HttpCode(200)
   link(@Param('propertyId', uuid()) p: string, @Body() b: unknown, @Headers('origin') origin?: string) { return this.svc.linkFor(p, parse(S.LinkBody, b), me(), origin); }
   @Post('documents/links/revoke') @RequirePermission('folio.view', P) @HttpCode(200)

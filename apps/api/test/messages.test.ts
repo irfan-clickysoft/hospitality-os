@@ -68,7 +68,7 @@ describe('guest messages', () => {
 describe('editing the wording', () => {
   it('the owner can change a message, it is used straight away, and can go back to the built-in one', async () => {
     const list = (await call('GET', '/v1/message-templates', OM)).json().items;
-    expect(list).toHaveLength(16); expect(list.find((x: any) => x.event === 'CHECK_IN' && x.channel === 'WHATSAPP')).toMatchObject({ custom: false });
+    expect(list).toHaveLength(18); expect(list.find((x: any) => x.event === 'CHECK_IN' && x.channel === 'WHATSAPP')).toMatchObject({ custom: false });
     const put = await call('PUT', '/v1/message-templates/CHECK_IN/WHATSAPP', OM, { body: 'Welcome {{guest_name}} to {{property_name}}! Stay: {{secure_link}}' });
     expect(put.statusCode, put.body).toBe(200); expect(put.json().custom).toBe(true);
     expect((await compose({ event: 'CHECK_IN' })).json().text).toMatch(/^Welcome Ali Raza to msgs P1, Karachi! Stay: https:\/\/pms\.example\/#\/b\//);

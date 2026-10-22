@@ -210,4 +210,23 @@ describe('bank-transfer slips', () => {
     await code(upload(u(w, `payments/${card.payment.id}/slip`), O, PNG), 422, 'NOT_A_TRANSFER');
     const clerk = await staff(w, 'housekeeper'); expect((await upload(u(w, `payments/${t.payment.id}/slip`), clerk.h, PNG)).statusCode).toBe(403);
   });
+
+  it('a company statement opens from a private link without signing in, always as it stands now; the message to the company carries the link; revoking closes it', async () => {
+    const w = await sunset();
+    const co = await ok(call('POST', '/v1/companies', OM, { name: `Statement Co ${++n} Ltd`, ntn: '7654321-0', creditLimit: '100000', termsDays: 30, contactName: 'Mr. Aslam', contactPhone: '0300 1234567', contactEmail: 'ap@stmt.test' }), 201);
+    const l = await ok(call('POST', u(w, `companies/${co.id}/statement-link`), O, {}));
+    expect(l.url).toContain('/v1/guest/doc/');
+    const open = await app.inject({ method: 'GET', url: l.url });
+    expect(open.statusCode).toBe(200); expect(open.body).toContain('STATEMENT OF ACCOUNT'); expect(open.body).toContain(co.name);
+    expect(open.headers['x-robots-tag']).toBe('noindex');
+    const again = await ok(call('POST', u(w, `companies/${co.id}/statement-link`), O, {})); expect(again.token).toBe(l.token);
+    const m = await ok(call('POST', u(w, `companies/${co.id}/message`), O, {}));
+    expect(m.text).toContain('Aslam'); expect(m.text).toContain(l.token); expect(m.phone).toBe('0300 1234567'); expect(m.email).toBe('ap@stmt.test');
+    const hk = await staff(w, 'housekeeper');
+    expect((await call('POST', u(w, `companies/${co.id}/statement-link`), hk.h, {})).statusCode).toBe(403);
+    await code(call('POST', u(w, 'companies/00000000-0000-4000-8000-000000000000/statement-link'), O, {}), 404, 'NOT_FOUND');
+    await code(call('POST', u(w, 'documents/links'), O, { kind: 'COMPANY_STATEMENT', refId: co.id }), 400, 'VALIDATION_FAILED');
+    await ok(call('POST', u(w, `companies/${co.id}/statement-link/revoke`), O, {}));
+    expect((await app.inject({ method: 'GET', url: l.url })).statusCode).toBe(404);
+  });
 });

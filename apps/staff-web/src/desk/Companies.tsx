@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
 import { useAction } from '../lib/action.js';
-import { money } from '../lib/format.js';
+import { money, whatsappNumber } from '../lib/format.js';
 import { useStepUp } from '../lib/stepup.js';
 import { useAuth, useLive } from '../state.js';
 import { Badge, Empty, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
@@ -102,7 +102,7 @@ function CompanySheet({ id, onChanged, onClose }: { id: string; onChanged: () =>
   const { can } = useAuth();
   const co = useLive<Company>(`/v1/companies/${id}`, 30_000);
   const items = useLive<{ items: Array<Billing & { confirmationNo: string | null; guest: string | null; invoices: string[] }> }>(`/v1/companies/${id}/items?open=true`, 30_000);
-  const [dialog, setDialog] = useState<'edit' | 'receipt' | 'status' | null>(null);
+  const [dialog, setDialog] = useState<'edit' | 'receipt' | 'status' | 'send' | null>(null);
   const c = co.data;
   const done = () => { co.reload(); items.reload(); onChanged(); setDialog(null); };
   return (
@@ -121,6 +121,7 @@ function CompanySheet({ id, onChanged, onClose }: { id: string; onChanged: () =>
         <div className="actions">
           {can('ar.receipt') && c.status !== 'ARCHIVED' && <button className="primary" onClick={() => setDialog('receipt')}>{t('ar.recordReceipt')}</button>}
           <a className="button" href={`/v1/companies/${c.id}/statement/print`} target="_blank" rel="noreferrer">{t('ar.statement')}</a>
+          {can('company.view') && <button onClick={() => setDialog('send')}>{t('cs.send')}</button>}
           {can('company.manage') && <button onClick={() => setDialog('edit')}>{t('common.edit')}</button>}
           {can('company.manage') && <button onClick={() => setDialog('status')}>{t('co.status')}</button>}
         </div>
@@ -131,6 +132,7 @@ function CompanySheet({ id, onChanged, onClose }: { id: string; onChanged: () =>
               <div className="row between"><span>{i.confirmationNo} · {i.guest}</span><strong>{money(i.open)}</strong></div>
               <div className="row between"><span className="muted">{i.billedOn} → {t('ar.due', { date: i.dueOn })}{i.invoices.length ? ` · ${i.invoices.join(', ')}` : ''}</span>{i.overdue && <Badge tone="dirty">{t('ar.overdue')}</Badge>}</div>
             </li>))}</ul>)}
+        {dialog === 'send' && <SendStatement company={c} onClose={() => setDialog(null)} />}
         {dialog === 'edit' && <CompanyForm company={c} onDone={done} onClose={() => setDialog(null)} />}
         {dialog === 'receipt' && <ReceiptSheet company={c} onDone={done} onClose={() => setDialog(null)} />}
         {dialog === 'status' && <StatusSheet company={c} onDone={done} onClose={() => setDialog(null)} />}
@@ -177,6 +179,34 @@ function StatusSheet({ company, onDone, onClose }: { company: Company; onDone: (
       {status !== 'ACTIVE' && <label>{t('common.reason')}<input value={reason} onChange={(e) => setReason(e.target.value)} /></label>}
       <ErrorLine code={problem?.code} detail={problem?.detail} />
       <div className="actions"><button className="primary" disabled={busy || (status !== 'ACTIVE' && reason.trim().length < 3)} onClick={go}>{t('common.save')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>
+    </Sheet>
+  );
+}
+
+/** The company's statement as a message with a private link, to send on WhatsApp or copy into an email. */
+function SendStatement({ company, onClose }: { company: Company; onClose: () => void }) {
+  const { t } = useT(); const { property } = useAuth();
+  const [m, setM] = useState<{ text: string; phone: string | null; email: string | null } | null>(null); const [text, setText] = useState(''); const [phone, setPhone] = useState(''); const [failed, setFailed] = useState(false);
+  const b = `/v1/properties/${property!.id}`;
+  useEffect(() => {
+    let dead = false;
+    api<{ text: string; phone: string | null; email: string | null }>('POST', `${b}/companies/${company.id}/message`).then((r) => { if (!dead) { setM(r); setText(r.text); setPhone(r.phone ?? ''); } }).catch(() => { if (!dead) setFailed(true); });
+    return () => { dead = true; };
+  }, [b, company.id]);
+  const wa = whatsappNumber(phone);
+  return (
+    <Sheet title={t('cs.send')} onClose={onClose}>
+      {failed ? <p className="warnbox small">{t('gm.failed')}</p> : !m ? <Spinner /> : (
+        <div className="stack">
+          <p className="muted small">{t('cs.note')}</p>
+          <label>{t('wa.message')}<textarea dir="ltr" rows={13} value={text} onChange={(e) => setText(e.target.value)} /></label>
+          {!m.phone && <label>{t('mw.theirPhone')}<input value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" inputMode="tel" /></label>}
+          {m.email && <p className="muted small" dir="ltr">{t('cs.email')} {m.email}</p>}
+          <div className="actions">
+            {wa ? <a className="primary button" href={`https://wa.me/${wa}?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">{t('wa.send')}</a> : <p className="warnbox small">{t('mw.noPhone')}</p>}
+            <button onClick={() => void navigator.clipboard?.writeText(text)}>{t('wa.copy')}</button>
+          </div>
+        </div>)}
     </Sheet>
   );
 }

@@ -4,6 +4,7 @@ import { Money } from '@hos/domain-types';
 import { AuditService } from '../audit/audit.service.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { GuestPortalService } from '../guest-portal/guest-portal.service.js';
+import { ArService } from '../companies/ar.service.js';
 import { DocumentsService } from '../documents/documents.service.js';
 import { TaxService } from '../tax/tax.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
@@ -20,7 +21,7 @@ const METHOD: Record<string, string> = { CASH: 'Cash', CARD_SLIP: 'Card', WALLET
 
 @Injectable()
 export class MessagesService {
-  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(GuestPortalService) private readonly portal: GuestPortalService, @Inject(TaxService) private readonly tax: TaxService, @Inject(DocumentsService) private readonly docs: DocumentsService) {}
+  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(GuestPortalService) private readonly portal: GuestPortalService, @Inject(TaxService) private readonly tax: TaxService, @Inject(DocumentsService) private readonly docs: DocumentsService, @Inject(ArService) private readonly ar: ArService) {}
 
   /** Every message the system sends, with the wording in use (the owner's, or the built-in one). */
   async list() {
@@ -139,5 +140,33 @@ export class MessagesService {
       work_due: w.due_date ? date(w.due_date) : null, requested_by: reporter?.full_name ?? null,
     };
     return { text: render(stored?.body ?? defaultTemplate('MAINTENANCE_ASSIGNED', 'WHATSAPP').body, vars), phone: vendor?.phone ?? tech?.phone ?? null, recipient: vars.recipient_name };
+  }
+
+  /** The message that sends a company its statement ("Bill to company"): the account for the last 90 days and a private link to view or print it. Goes to the company's contact. */
+  async composeCompany(propertyId: string, companyId: string, origin?: string) {
+    const actorId = currentTenant().actorId;
+    const probe = await this.ar.statement(companyId);
+    const to = probe.to; const from = new Date(new Date(`${to}T00:00:00Z`).getTime() - 90 * 86_400_000).toISOString().slice(0, 10);
+    const v = await this.ar.statement(companyId, from, to);
+    const d = await this.tdb.tx(async (trx) => {
+      const [p, actor, stored] = await Promise.all([
+        trx.selectFrom('property').select(['name', 'city']).where('id', '=', propertyId).executeTakeFirstOrThrow(),
+        actorId ? trx.selectFrom('staff_user').select('full_name').where('id', '=', actorId).executeTakeFirst() : undefined,
+        trx.selectFrom('message_template').selectAll().where('event', '=', 'COMPANY_STATEMENT').where('channel', '=', 'WHATSAPP').executeTakeFirst(),
+      ]);
+      const c = await trx.selectFrom('company').select(['contact_name', 'contact_phone', 'contact_email']).where('id', '=', companyId).executeTakeFirstOrThrow();
+      return { p, actor, stored, c };
+    });
+    const cur = v.closing.currency;
+    const minor = (a: { amount: string }) => Money.parse(a.amount, cur).minor;
+    const due = minor(v.closing as never);
+    const overdue = ['d1_30', 'd31_60', 'd61_90', 'd90plus'].reduce((t, k) => t + (v.aging.buckets[k as never] ? minor(v.aging.buckets[k as never] as never) : 0n), 0n);
+    const link = (await this.docs.companyLink(propertyId, companyId, actorId ?? null, origin)).url;
+    const vars: Record<string, string | null> = {
+      recipient_name: d.c.contact_name ?? v.company.name, company_name: v.company.name, property_name: d.p.city ? `${d.p.name}, ${d.p.city}` : d.p.name, manager_name: d.actor?.full_name ?? null, property_contact: null,
+      statement_period: `${date(v.from)} to ${date(v.to)}`, currency: cur, balance_due: due > 0n ? amt(due, cur) : null, overdue_amount: overdue > 0n ? amt(overdue, cur) : null,
+      payment_terms: `${v.company.termsDays} days`, document_link: link,
+    };
+    return { text: render(d.stored?.body ?? defaultTemplate('COMPANY_STATEMENT', 'WHATSAPP').body, vars), phone: d.c.contact_phone, email: d.c.contact_email, recipient: vars.recipient_name };
   }
 }

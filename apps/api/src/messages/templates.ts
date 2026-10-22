@@ -1,6 +1,6 @@
 /** The wording guests receive, and how a template is filled in. Pure functions: no database, easy to test. */
 
-export const EVENTS = ['RESERVATION_CONFIRMED', 'CHECK_IN', 'PAYMENT_RECEIVED', 'SERVICE_ORDER', 'CHECK_OUT', 'REFUND', 'DOCUMENT', 'MAINTENANCE_ASSIGNED'] as const;
+export const EVENTS = ['RESERVATION_CONFIRMED', 'CHECK_IN', 'PAYMENT_RECEIVED', 'SERVICE_ORDER', 'CHECK_OUT', 'REFUND', 'DOCUMENT', 'MAINTENANCE_ASSIGNED', 'COMPANY_STATEMENT'] as const;
 export type MessageEvent = (typeof EVENTS)[number];
 export const CHANNELS = ['WHATSAPP', 'EMAIL'] as const;
 export type Channel = (typeof CHANNELS)[number];
@@ -17,16 +17,30 @@ export const VARIABLES: Record<MessageEvent, readonly string[]> = {
   CHECK_OUT: [...COMMON, ...MONEY, 'check_out_date_time', 'document_link'],
   REFUND: [...COMMON, ...MONEY, 'payment_method', 'payment_date', 'receipt_number', 'document_link', 'room_number', 'payment_description', 'paid_by'],
   DOCUMENT: [...COMMON, ...MONEY, 'document_title', 'reference_number', 'transaction_date', 'description', 'document_link'],
+  COMPANY_STATEMENT: ['recipient_name', 'company_name', 'property_name', 'manager_name', 'property_contact', 'statement_period', 'balance_due', 'overdue_amount', 'payment_terms', 'document_link', 'currency'],
   MAINTENANCE_ASSIGNED: ['recipient_name', 'property_name', 'manager_name', 'work_order_number', 'work_title', 'work_details', 'work_room', 'work_priority', 'work_kind', 'work_due', 'requested_by'],
 };
 
 export const TITLES: Record<MessageEvent, string> = {
   RESERVATION_CONFIRMED: 'Reservation confirmed', CHECK_IN: 'Check-in completed', PAYMENT_RECEIVED: 'Payment received', SERVICE_ORDER: 'Additional service ordered',
-  CHECK_OUT: 'Check-out completed', REFUND: 'Refund or adjustment', DOCUMENT: 'Any other document', MAINTENANCE_ASSIGNED: 'Job sent to a technician or contractor',
+  CHECK_OUT: 'Check-out completed', REFUND: 'Refund or adjustment', DOCUMENT: 'Any other document', MAINTENANCE_ASSIGNED: 'Job sent to a technician or contractor', COMPANY_STATEMENT: 'Statement sent to a company (Bill to company)',
 };
 
 const SIGN = '\nWarm regards,\n{{manager_name}}\n{{property_name}}';
 const WHATSAPP: Record<MessageEvent, string> = {
+  COMPANY_STATEMENT: `Dear {{recipient_name}},
+
+Please find the statement of account of {{company_name}} with {{property_name}}.
+
+Period: {{statement_period}}
+Amount due: {{currency}} {{balance_due}}
+Of which overdue: {{currency}} {{overdue_amount}}
+Payment terms: {{payment_terms}}
+
+View or print the statement online (no paper needed): {{document_link}}
+
+If anything does not match your records, please reply to this message or contact us at {{property_contact}}.
+${SIGN}`,
   MAINTENANCE_ASSIGNED: `Hello {{recipient_name}},
 
 A {{work_priority}} {{work_kind}} job needs your attention at {{property_name}}.
@@ -144,6 +158,7 @@ ${SIGN}
 
 /** Email uses the same wording, with a subject. */
 const SUBJECTS: Record<MessageEvent, string> = {
+  COMPANY_STATEMENT: 'Statement of account — {{company_name}} — {{property_name}}',
   RESERVATION_CONFIRMED: 'Your reservation at {{property_name}} is confirmed ({{booking_reference}})', CHECK_IN: 'Welcome to {{property_name}}', PAYMENT_RECEIVED: 'Payment receipt {{receipt_number}} — {{property_name}}',
   SERVICE_ORDER: 'Your order {{order_number}} — {{property_name}}', CHECK_OUT: 'Thank you for staying at {{property_name}}', REFUND: 'Your refund {{receipt_number}} — {{property_name}}', DOCUMENT: '{{document_title}} {{reference_number}} — {{property_name}}', MAINTENANCE_ASSIGNED: '{{work_priority}} job {{work_order_number}} — {{property_name}}',
 };

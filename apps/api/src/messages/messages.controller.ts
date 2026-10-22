@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Inject, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
 import { BadRequestException } from '@nestjs/common';
 import { RequirePermission } from '../authz/decorators.js';
 import { parse } from '../common/validate.js';
@@ -29,4 +29,8 @@ export class MessagesController {
   /** Tells a technician or contractor about a job. */
   @Post('properties/:propertyId/work-orders/:workOrderId/message') @RequirePermission('maintenance.view', P) @HttpCode(200)
   workOrder(@Param('propertyId', new ParseUUIDPipe()) p: string, @Param('workOrderId', new ParseUUIDPipe()) w: string) { return this.svc.composeWorkOrder(p, w); }
+
+  /** Sends a company its statement with a private link. */
+  @Post('properties/:propertyId/companies/:companyId/message') @RequirePermission('company.view', P) @HttpCode(200)
+  company(@Param('propertyId', new ParseUUIDPipe()) p: string, @Param('companyId', new ParseUUIDPipe()) c: string, @Headers('origin') origin?: string) { return this.svc.composeCompany(p, c, origin); }
 }
