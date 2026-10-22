@@ -163,3 +163,6 @@ a:not([class]) { color: var(--info-fg); }
 .gb-foot { text-align: center; } .print-only { display: none; }
 .okbox { background: var(--ok-bg, #e6f4ea); border-radius: 8px; padding: 8px 12px; margin: 0; font-weight: 600; }
 @media print { .noprint { display: none !important; } .print-only { display: block; } .gb { max-width: none; padding: 0; } .gb-media video { display: none; } .gb-room, .gb-block, .gb-ticket { break-inside: avoid; } body { background: #fff; color: #000; } }
+
+.mt-list { display: grid; gap: 4px; align-content: start; } .mt-list .pick.on { outline: 2px solid var(--focus, currentColor); }
+.split { display: grid; grid-template-columns: minmax(220px, 280px) 1fr; gap: 16px; } @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }

@@ -144,8 +144,8 @@ export class FolioService {
       };
     });
   }
-  paymentView(x: { id: string; kind: string; method: string; status: string; amount_minor: string; reference: string | null; card_last4: string | null; approval_code: string | null; counterparty: string | null; note: string | null; business_date: string; created_by: string; created_at: Date; verified_by: string | null; refund_of_payment_id: string | null; void_reason: string | null; cashier_session_id: string | null }, cur: string) {
-    return { id: x.id, kind: x.kind, method: x.method, status: x.status, amount: fmt(x.amount_minor, cur), reference: x.reference, cardLast4: x.card_last4, approvalCode: x.approval_code, counterparty: x.counterparty,
+  paymentView(x: { receipt_no?: string | null; id: string; kind: string; method: string; status: string; amount_minor: string; reference: string | null; card_last4: string | null; approval_code: string | null; counterparty: string | null; note: string | null; business_date: string; created_by: string; created_at: Date; verified_by: string | null; refund_of_payment_id: string | null; void_reason: string | null; cashier_session_id: string | null }, cur: string) {
+    return { id: x.id, receiptNo: x.receipt_no ?? null, kind: x.kind, method: x.method, status: x.status, amount: fmt(x.amount_minor, cur), reference: x.reference, cardLast4: x.card_last4, approvalCode: x.approval_code, counterparty: x.counterparty,
       note: x.note, businessDate: x.business_date, createdBy: x.created_by, createdAt: x.created_at, verifiedBy: x.verified_by, refundOf: x.refund_of_payment_id, voidReason: x.void_reason, cashierSessionId: x.cashier_session_id };
   }
 

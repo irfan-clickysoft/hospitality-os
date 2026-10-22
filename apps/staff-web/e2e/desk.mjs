@@ -82,6 +82,8 @@ await page.getByRole('button', { name: 'Take payment' }).first().click();
 const pay = page.getByRole('dialog', { name: 'Take payment' });
 await pay.getByLabel('Amount').fill(price);
 await pay.getByRole('button', { name: 'Take payment' }).click();
+await pay.getByText(/Payment recorded · RCT-/).waitFor();           // the receipt message is offered right after the payment
+await pay.getByRole('button', { name: 'Close' }).last().click();
 await pay.waitFor({ state: 'detached' });
 await page.getByText('Received').first().waitFor();
 check('payment appears on the bill', await page.getByText('Received').count() > 0);
