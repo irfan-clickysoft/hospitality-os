@@ -140,5 +140,26 @@ export class MediaService {
     if (!data) throw new NotFoundException();
     return { data, type: TYPES[fileName.split('.')[1] as Ext].type };
   }
-  async removePrivate(fileName: string | null) { if (fileName && /^[0-9a-f]{32}\.(jpg|png|webp)$/.test(fileName)) await rm(join(dir(), currentTenant().tenantId, 'private', fileName), { force: true }); }
+
+  /** A bill or other private paper: a PDF, JPG, PNG or WebP of up to 10 MB, kept under a name nobody can guess in a folder the public route never serves. Opened only through a route that checks who is asking. */
+  async storePrivate(data: Buffer): Promise<{ fileName: string; contentType: string; size: number }> {
+    const pdf = data.length > 5 && data.toString('latin1', 0, 5) === '%PDF-';
+    const ext = pdf ? 'pdf' : sniff(data);
+    if (!ext || ext === 'mp4' || ext === 'webm') throw new BadRequestException({ code: 'MEDIA_TYPE_UNSUPPORTED', message: 'Use a PDF, or a JPG, PNG or WebP picture of the bill' });
+    if (data.length > 10 * 1024 * 1024) throw new PayloadTooLargeException({ code: 'MEDIA_TOO_LARGE', message: 'A bill can be up to 10 MB' });
+    const fileName = `${randomBytes(16).toString('hex')}.${ext}`;
+    const folder = join(dir(), currentTenant().tenantId, 'private');
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, fileName), data, { flag: 'wx' });
+    return { fileName, contentType: ext === 'pdf' ? 'application/pdf' : TYPES[ext].type, size: data.length };
+  }
+  async openPrivate(fileName: string) {
+    if (!/^[0-9a-f]{32}\.(pdf|jpg|png|webp)$/.test(fileName)) throw new NotFoundException();
+    const path = join(dir(), currentTenant().tenantId, 'private', fileName);
+    const st = await stat(path).catch(() => null);
+    if (!st?.isFile()) throw new NotFoundException();
+    const ext = fileName.split('.')[1]!;
+    return { size: st.size, type: ext === 'pdf' ? 'application/pdf' : TYPES[ext as Ext].type, stream: () => createReadStream(path) };
+  }
+  async removePrivate(fileName: string | null) { if (fileName && /^[0-9a-f]{32}\.(pdf|jpg|png|webp)$/.test(fileName)) await rm(join(dir(), currentTenant().tenantId, 'private', fileName), { force: true }); }
 }

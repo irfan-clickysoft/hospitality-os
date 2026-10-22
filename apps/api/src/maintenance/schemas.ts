@@ -34,3 +34,23 @@ export const Reopen = z.object({ reason: note });
 export const Cancel = z.object({ reason: note });
 export const AddNote = z.object({ note });
 export const ListQuery = z.object({ status: z.enum(['REQUESTED', 'OPEN', 'ACTIVE', 'DONE', 'ALL']).default('ACTIVE'), kind: z.enum(KINDS).optional(), vendorId: uuid.optional(), assignedTo: uuid.optional(), category: z.enum(CATEGORIES).optional(), mine: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'), roomId: uuid.optional(), limit: z.coerce.number().int().min(1).max(200).default(100) });
+
+export const BillCreate = z.object({ vendorId: uuid.nullish(), payee: z.string().trim().min(2).max(120).nullish(), billNo: z.string().trim().min(1).max(60), billDate: businessDate, dueDate: businessDate.nullish(), amount: money, note: z.string().trim().max(300).nullish() });
+export const BillApprove = z.object({ note: z.string().trim().max(300).nullish() });
+export const BillReject = z.object({ reason: note });
+export const BillPay = z.object({ method: z.enum(['CASH', 'BANK_TRANSFER', 'CHEQUE', 'OTHER']), ref: z.string().trim().max(80).nullish() });
+export const BillQuery = z.object({ status: z.enum(['OPEN', 'RECEIVED', 'APPROVED', 'REJECTED', 'PAID', 'ALL']).default('OPEN'), vendorId: uuid.optional(), limit: z.coerce.number().int().min(1).max(300).default(150) });
+export const MediaCaption = z.object({ caption: z.string().trim().max(160).nullable() });
+
+const schedule = z.object({
+  title: z.string().trim().min(3).max(160), description: z.string().trim().max(2000).nullish(), category: z.enum(CATEGORIES), priority: z.number().int().min(1).max(4).default(3),
+  roomIds: z.array(uuid).max(200).default([]), area: z.string().trim().max(80).nullish(),
+  everyN: z.number().int().min(1).max(365), unit: z.enum(['DAY', 'WEEK', 'MONTH', 'YEAR']), firstDue: businessDate, leadDays: z.number().int().min(0).max(60).default(7),
+  assignedTo: uuid.nullish(), vendorId: uuid.nullish(), estimatedCost: money.nullish(),
+});
+export const ScheduleCreate = schedule.refine((v) => !(v.assignedTo && v.vendorId), { message: 'Choose a technician or a contractor, not both', path: ['assignedTo'] });
+export const ScheduleUpdate = z.object({
+  title: schedule.shape.title.optional(), description: schedule.shape.description, priority: schedule.shape.priority.optional(), area: schedule.shape.area,
+  everyN: schedule.shape.everyN.optional(), unit: schedule.shape.unit.optional(), nextDue: businessDate.optional(), leadDays: schedule.shape.leadDays.optional(),
+  assignedTo: uuid.nullable().optional(), vendorId: uuid.nullable().optional(), estimatedCost: money.nullable().optional(), active: z.boolean().optional(),
+});

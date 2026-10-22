@@ -11,6 +11,7 @@ import { HousekeepingService } from '../housekeeping/housekeeping.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { PropertySetupService } from '../property-setup/property-setup.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
+import { MaintenanceExtrasService } from './maintenance-extras.service.js';
 import type * as S from './schemas.js';
 
 const fail = (status: number, code: string, message: string, extra: object = {}) => new HttpException({ code, message, ...extra }, status);
@@ -27,6 +28,7 @@ export class MaintenanceService {
     @Inject(HousekeepingService) private readonly hk: HousekeepingService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(MaintenanceExtrasService) private readonly extras: MaintenanceExtrasService,
     @Inject(CLOCK) private readonly clock: ClockLike,
   ) {}
 
@@ -238,11 +240,11 @@ export class MaintenanceService {
       return { items, counts: Object.fromEntries(counts.rows.map((c) => [c.status, c.n])) };
     });
   }
-  async get(propertyId: string, id: string) {
+  async get(propertyId: string, id: string, userId: string) {
     return this.tdb.tx(async (trx) => {
       const p = await this.prop(trx, propertyId); const r = await this.row(trx, propertyId, id);
       const ev = await trx.selectFrom('work_order_event as e').leftJoin('staff_user as u', 'u.id', 'e.actor_id').select(['e.action', 'e.from_status', 'e.to_status', 'e.note', 'e.amount_minor', 'e.at', 'u.full_name']).where('e.work_order_id', '=', id).orderBy('e.at').execute();
-      return { ...(await this.view(trx, r, p.business_date)), events: ev.map((e) => ({ action: e.action, from: e.from_status, to: e.to_status, note: e.note, amount: e.amount_minor ? fmt(e.amount_minor) : null, at: e.at, by: e.full_name })) };
+      return { ...(await this.view(trx, r, p.business_date)), media: await this.extras.mediaOf(trx, id), bills: await this.extras.billsOf(trx, propertyId, id, userId, p.currency, r.estimated_cost_minor), scheduleId: r.schedule_id ?? null, events: ev.map((e) => ({ action: e.action, from: e.from_status, to: e.to_status, note: e.note, amount: e.amount_minor ? fmt(e.amount_minor) : null, at: e.at, by: e.full_name })) };
     });
   }
   async technicians(propertyId: string) {
