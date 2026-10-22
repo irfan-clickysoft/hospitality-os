@@ -139,13 +139,10 @@ await page.getByText(/to do · .* to look at/).waitFor();
 check('setup check lists what is missing', await page.getByText('Approved tax rate in force for this property').count() > 0 && await page.getByText('To do', { exact: true }).count() > 0);
 await page.screenshot({ path: `${OUT}/23-setup-check.png` });
 
-// 3. kitchen: the menu tab for a manager
+// 3. the kitchen's queue opens for a manager (the menu itself is set up under Administration; see menu.mjs)
 await goTab(page, 'Kitchen');
-await page.getByRole('button', { name: 'Menu', exact: true }).click();
-await page.getByLabel('Section').fill('Mains'); await page.getByLabel('Name', { exact: true }).fill('Karahi'); await page.getByLabel('Price').fill('1800');
-await page.getByRole('button', { name: 'Add to menu' }).click();
-await page.getByText('Mains · Karahi').waitFor();
-check('menu item added', true);
+await page.getByRole('button', { name: 'New order' }).waitFor();
+check('kitchen queue opens', true);
 
 // 4. on a phone the navigation is a bottom bar with the four main places and a More menu for the rest
 {
