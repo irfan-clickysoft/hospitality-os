@@ -4,6 +4,7 @@ import { sql } from 'kysely';
 import type { z } from 'zod';
 import { Money } from '@hos/domain-types';
 import { AuditService } from '../audit/audit.service.js';
+import { ArService } from '../companies/ar.service.js';
 import { fmt, type Trx } from '../companies/companies.service.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { PaymentsService } from '../folio/payments.service.js';
@@ -28,7 +29,7 @@ export class DocumentsService {
   constructor(
     @Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(MediaService) private readonly media: MediaService,
     @Inject(OutboxService) private readonly outbox: OutboxService, @Inject(PaymentsService) private readonly payments: PaymentsService,
-    @Inject(InvoiceService) private readonly invoices: InvoiceService,
+    @Inject(InvoiceService) private readonly invoices: InvoiceService, @Inject(ArService) private readonly ar: ArService,
   ) {}
 
   // ───────────── the look ─────────────
@@ -142,12 +143,64 @@ export class DocumentsService {
     return runWithTenant({ tenantId: toUuid(token.slice(0, 32)) }, () => this.tdb.tx(async (trx) => {
       const l = await trx.selectFrom('document_link').selectAll().where('token', '=', token).where('revoked_at', 'is', null).executeTakeFirst();
       if (!l || (l.expires_at && new Date(l.expires_at) < new Date())) return null;
+      if (l.kind === 'COMPANY_STATEMENT') {
+        const cdoc = await this.companyDoc(l.ref_id).catch(() => null);
+        if (!cdoc) return null;
+        await trx.updateTable('document_link').set({ views: sql`views + 1`, last_viewed_at: sql`now()` } as never).where('id', '=', l.id).execute();
+        return renderDocument(await this.brand(trx, l.property_id), cdoc, nonce);
+      }
       const inv = l.kind === 'INVOICE' ? await this.invoices.get(l.property_id, l.ref_id).catch(() => null) : null;
       const doc = l.kind === 'INVOICE' ? null : await this.build(trx, l.property_id, l.kind, l.ref_id).catch(() => null);
       if (!doc && !inv) return null;
       await trx.updateTable('document_link').set({ views: sql`views + 1`, last_viewed_at: sql`now()` } as never).where('id', '=', l.id).execute();
       return inv ? renderInvoiceHtml(inv as never) : renderDocument(await this.brand(trx, l.property_id), doc!, nonce);
     }));
+  }
+
+  // ───────────── a company's account statement ─────────────
+  /** The company's account for the last 90 days, with ageing: what is shown when someone opens the company's private link. */
+  private async companyDoc(companyId: string): Promise<Doc> {
+    const probe = await this.ar.statement(companyId);                      // with no dates it ends on the property's current business date
+    const to = probe.to; const from = new Date(new Date(`${to}T00:00:00Z`).getTime() - 90 * 86_400_000).toISOString().slice(0, 10);
+    const v = await this.ar.statement(companyId, from, to);
+    const a = (x: { amount: string; currency: string }) => fmtAmt(x);
+    const kind: Record<string, string> = { BILLED: 'Billed', CANCELLED: 'Cancelled', RECEIPT: 'Received', WITHHELD: 'Tax withheld' };
+    const buckets: Array<[string, string]> = [['current', 'Not yet due'], ['d1_30', '1–30 days overdue'], ['d31_60', '31–60 days overdue'], ['d61_90', '61–90 days overdue'], ['d90plus', 'Over 90 days overdue']];
+    const aged = buckets.filter(([k]) => v.aging.buckets[k as never] && (v.aging.buckets[k as never] as { amount: string }).amount !== '0.00').map(([k, l]) => `${l}: ${a(v.aging.buckets[k as never] as never)}`);
+    const closing = BigInt(String(v.closing.amount).replace(/[^0-9-]/g, '') || '0');
+    return {
+      title: 'STATEMENT OF ACCOUNT', number: null, status: closing === 0n ? { text: 'SETTLED', tone: 'ok' } : closing > 0n ? { text: 'BALANCE DUE', tone: 'warn' } : { text: 'CREDIT BALANCE', tone: 'ok' },
+      meta: [['Company', v.company.name], ['NTN', v.company.ntn], ['STRN', v.company.strn], ['Address', v.company.address], ['Period', `${day(v.from)} → ${day(v.to)}`], ['Payment terms', `Net ${v.company.termsDays} days`]],
+      table: { head: ['Date', 'Details', 'Billed', 'Received', 'Balance'], rows: [['', 'Balance brought forward', '', '', a(v.opening as never)], ...v.lines.map((l) => [day(l.date), [kind[l.kind] ?? l.kind, l.ref, l.text].filter(Boolean).join(' · '), l.debit.amount === '0.00' ? '' : a(l.debit as never), l.credit.amount === '0.00' ? '' : a(l.credit as never), a(l.balance as never)])], right: [2, 3, 4] },
+      totals: [['Billed in the period', a(v.billed as never)], ['Received in the period', a(v.received as never)], ['Balance due', a(v.closing as never), true]],
+      notes: aged.length ? [`Ageing — ${aged.join(' · ')}`] : undefined,
+    };
+  }
+  /** The private link to a company's statement. One live link per company; the page always shows the account as it stands. */
+  async companyLink(propertyId: string, companyId: string, userId: string | null, origin?: string) {
+    const tenantId = currentTenant().tenantId;
+    await this.tdb.tx(async (trx) => { if (!(await trx.selectFrom('company').select('id').where('id', '=', companyId).executeTakeFirst())) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Company not found' }); });
+    return this.tdb.tx(async (trx) => {
+      let l = await trx.selectFrom('document_link').select(['token']).where('kind', '=', 'COMPANY_STATEMENT').where('ref_id', '=', companyId).where('revoked_at', 'is', null).executeTakeFirst();
+      if (!l) {
+        const token = `${tenantId.replace(/-/g, '')}-${randomBytes(16).toString('hex')}`;
+        l = await trx.insertInto('document_link').values({ tenant_id: tenantId, property_id: propertyId, kind: 'COMPANY_STATEMENT', ref_id: companyId, token, created_by: userId } as never).returning('token').executeTakeFirstOrThrow();
+        await this.audit.record(trx, { action: 'document.link_create', resourceType: 'company_statement', resourceId: companyId, propertyId });
+      }
+      return { token: l.token, url: `${(origin ?? process.env.PUBLIC_BASE_URL ?? '').replace(/\/$/, '')}/v1/guest/doc/${l.token}` };
+    });
+  }
+  async companyRevoke(propertyId: string, companyId: string) {
+    return this.tdb.tx(async (trx) => {
+      await trx.updateTable('document_link').set({ revoked_at: sql`now()` } as never).where('kind', '=', 'COMPANY_STATEMENT').where('ref_id', '=', companyId).where('revoked_at', 'is', null).execute();
+      await this.audit.record(trx, { action: 'document.link_revoke', resourceType: 'company_statement', resourceId: companyId, propertyId });
+      return { revoked: true };
+    });
+  }
+  /** For staff, drawn now. */
+  async companyHtml(propertyId: string, companyId: string, nonce: string) {
+    const doc = await this.companyDoc(companyId);
+    return this.tdb.tx(async (trx) => renderDocument(await this.brand(trx, propertyId), doc, nonce));
   }
 
   // ───────────── bank-transfer slips ─────────────
