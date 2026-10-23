@@ -7,6 +7,7 @@ import { useStepUp } from '../lib/stepup.js';
 import { useLive } from '../state.js';
 import { Banner, Field, StatusBadge } from '../ui/ds.js';
 import { ErrorLine } from '../ui/kit.js';
+import { EmailLog } from './EmailLog.js';
 
 interface Item { event: string; channel: 'WHATSAPP' | 'EMAIL'; title: string; subject: string | null; body: string; custom: boolean; variables: string[]; defaultBody: string; defaultSubject: string | null }
 
@@ -29,6 +30,7 @@ export function MessageTemplates() {
           <Editor key={`${cur.event}/${cur.channel}/${cur.custom}`} item={cur} onChanged={list.reload} />
         </div>
       )}
+      <EmailLog />
     </section>
   );
 }

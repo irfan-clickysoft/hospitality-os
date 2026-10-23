@@ -112,6 +112,17 @@ Guest messages and company statements can be sent by email from the staff app. I
 4. Restart the API only: `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d api` (use your `-p hos-pms -f deploy/docker-compose.shared.yml` form on a shared server).
 5. Check: open a booking → a guest message → **Write an email**, send it to your own address. If the button is missing, email is still off (`MAIL_FROM` or `SES_REGION` empty). If sending fails, **Reports → email log** is not built yet; ask for `GET /v1/properties/<id>/email/recent`, which shows the reason SES gave.
 
+### Bounces and spam complaints
+
+So that a wrong address is not tried again and the staff can see what became of each email:
+
+1. In SNS (same region) create a **Standard topic**, e.g. `hos-mail`. Copy its ARN into `SES_SNS_TOPIC_ARN` in `deploy/.env`, and restart the API.
+2. In SES → Verified identities → your domain/address → **Notifications** → set **Bounce**, **Complaint** and (optional) **Delivery** feedback to that topic.
+3. In SNS, on the topic, **Create subscription**: protocol **HTTPS**, endpoint `https://<your site>/v1/hooks/ses`. The API confirms the subscription by itself; the status turns **Confirmed** within a few seconds. (The site must be reachable from the internet over HTTPS.)
+4. Staff see the result under Administration → Guest messages → **Emails sent**: Delivered, Bounced or Marked as spam. A permanent bounce or a complaint puts the address on a "not emailed any more" list; a manager can allow it again there.
+
+Only messages signed by Amazon for exactly that topic are believed; anything else gets a 403.
+
 ## Updating it
 
 ```bash
