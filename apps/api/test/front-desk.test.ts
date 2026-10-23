@@ -317,6 +317,29 @@ describe('the document matrix at check-in', () => {
     const hk = await addUser(T.tenantId, `hk${++n}@fd.test`); await assignRole(T.tenantId, hk, 'housekeeper', 'PROPERTY', w.pid); await code(call('GET', url, as(T.tenantId, hk, { mfa: true })), 403, 'PERMISSION_DENIED');
     await code(call('GET', `${url}&to=2026-10-01`, OM), 400, 'VALIDATION_FAILED');
   });
+
+  it('lists who still has to be entered, lays a person out ready to copy behind view-ID and a second factor, and tracks who entered them', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const docs = seen('FOREIGN_PASSPORT', 'PASSPORT_BIO_COPY', 'VISA_BASIS', 'ENTRY_STAMP');
+    const foreign = { passportIssuePlace: 'London', visaType: 'eVisa (tourist)', stayExpiry: '2026-12-10', entryDate: '2026-11-03', entryPort: 'Karachi airport', localAddress: 'Sunset BnB Boulevard, Karachi', nextDestination: 'Lahore', froInstruction: false, formCRef: 'C-1', residentialPermitRef: 'RP-2', remarks: 'none' };
+    expect((await walk(w, { adults: 1, occupants: [foreignAdult({ documents: docs, foreign, idNumber: 'GB7000777' })], guest: { fullName: 'Eye Tester', phone: '+44 7700 900777', nationality: 'GB' } })).statusCode).toBe(201);
+    const list = `/v1/properties/${w.pid}/registration/hotel-eye`;
+    const l = await ok(call('GET', list, O));
+    expect(l.pending).toBe(1); const g = l.items[0]; expect(g.entered).toBeNull(); expect(JSON.stringify(l)).not.toContain('GB7000777');
+    await code(call('GET', `${list}/${g.id}`, O), 403, 'MFA_REQUIRED');
+    const d = await ok(call('GET', `${list}/${g.id}`, OM));
+    const val = (k: string) => d.fields.find((f: any) => f.key === k)?.value;
+    expect(val('idNumber')).toBe('GB7000777'); expect(val('entryPort')).toBe('Karachi airport'); expect(val('phone')).toBe('+44 7700 900777');
+    const fd = await addUser(T.tenantId, `fd${++n}@fd.test`); await assignRole(T.tenantId, fd, 'front_desk_agent', 'PROPERTY', w.pid);
+    await code(call('GET', `${list}/${g.id}`, as(T.tenantId, fd, { mfa: true })), 403, 'PERMISSION_DENIED');          // the desk sees the list and marks, but full numbers need view-ID
+    await ok(call('POST', `${list}/${g.id}/entered`, as(T.tenantId, fd), { ref: 'HE-2026-889' }));
+    await code(call('POST', `${list}/${g.id}/entered`, O, {}), 409, 'ALREADY_ENTERED');
+    expect((await ok(call('GET', list, O))).pending).toBe(0);
+    const done = await ok(call('GET', `${list}?state=done`, O)); expect(done.items[0].entered.ref).toBe('HE-2026-889'); expect(done.items[0].entered.by).toBeTruthy();
+    await ok(call('POST', `${list}/${g.id}/undo`, O, {})); expect((await ok(call('GET', list, O))).pending).toBe(1);
+    const hk = await addUser(T.tenantId, `hk${++n}@fd.test`); await assignRole(T.tenantId, hk, 'housekeeper', 'PROPERTY', w.pid);
+    await code(call('GET', list, as(T.tenantId, hk)), 403, 'PERMISSION_DENIED');
+  });
 });
 
 describe('walk-in without every ID', () => {

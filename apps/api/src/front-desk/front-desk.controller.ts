@@ -11,6 +11,9 @@ import { businessDate } from '../property-setup/schemas.js';
 
 const Period = z.object({ from: businessDate, to: businessDate }).refine((v) => v.from <= v.to, { message: 'The start is after the end', path: ['to'] });
 
+const HotelEyeQuery = z.object({ state: z.enum(['pending', 'done', 'all']).default('pending'), from: businessDate.optional(), to: businessDate.optional() })
+const HotelEyeMark = z.object({ ref: z.string().trim().max(60).optional() }).strict();
+
 const P = { scope: (req: any) => ({ propertyId: req.params.propertyId }) };
 const uuid = () => new ParseUUIDPipe();
 const me = () => currentTenant().actorId!;
@@ -55,4 +58,14 @@ export class FrontDeskController {
   /** The foreign-guest register for the FRO / Hotel Eye: full passport numbers, so a view-ID permission and a fresh second factor are needed. */
   @Get('registration/foreign-register') @RequirePermission('frontdesk.view_id', P)
   foreignRegister(@Param('propertyId', uuid()) pid: string, @Query() q: unknown) { const x = parse(Period, q); return this.svc.foreignRegister(pid, me(), x.from, x.to); }
+
+  /** Hotel Eye is typed in by hand on the portal: this keeps the list of who still has to be entered, and lays each person's details out ready to copy. */
+  @Get('registration/hotel-eye') @RequirePermission('frontdesk.check_in', P)
+  hotelEye(@Param('propertyId', uuid()) pid: string, @Query() q: unknown) { return this.svc.hotelEyeList(pid, parse(HotelEyeQuery, q)); }
+  @Get('registration/hotel-eye/:guestId') @RequirePermission('frontdesk.view_id', P)
+  hotelEyeDetail(@Param('propertyId', uuid()) pid: string, @Param('guestId', uuid()) g: string) { return this.svc.hotelEyeDetail(pid, me(), g); }
+  @Post('registration/hotel-eye/:guestId/entered') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
+  hotelEyeEntered(@Param('propertyId', uuid()) pid: string, @Param('guestId', uuid()) g: string, @Body() b: unknown) { return this.svc.hotelEyeMark(pid, me(), g, true, parse(HotelEyeMark, b).ref ?? null); }
+  @Post('registration/hotel-eye/:guestId/undo') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
+  hotelEyeUndo(@Param('propertyId', uuid()) pid: string, @Param('guestId', uuid()) g: string) { return this.svc.hotelEyeMark(pid, me(), g, false, null); }
 }
