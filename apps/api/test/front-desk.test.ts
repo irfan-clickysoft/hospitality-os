@@ -100,7 +100,10 @@ describe('check-in', () => {
     expect(shown.items[0].idNumber).toBe('35202-9999999-1');
     expect(await adminDb.selectFrom('audit_log').select('id').where('tenant_id', '=', T.tenantId).where('action', '=', 'frontdesk.view_id').where('resource_id', '=', b.id).execute()).toHaveLength(1);
     const fd = await addUser(T.tenantId, `fd${++n}@fd.test`); await assignRole(T.tenantId, fd, 'front_desk_agent', 'PROPERTY', w.pid);
-    await code(call('GET', url(w, b.id, b.line, 'guests') + '?reveal=true', as(T.tenantId, fd, { mfa: true })), 403, 'PERMISSION_DENIED');   // front desk sees masked numbers only
+    await code(call('GET', url(w, b.id, b.line, 'guests') + '?reveal=true', as(T.tenantId, fd)), 403, 'MFA_REQUIRED');                        // front desk may see full numbers, but only with a fresh second factor
+    expect((await ok(call('GET', url(w, b.id, b.line, 'guests') + '?reveal=true', as(T.tenantId, fd, { mfa: true })))).items[0].idNumber).toBe('35202-9999999-1');
+    const ro = await addUser(T.tenantId, `ro${++n}@fd.test`); await assignRole(T.tenantId, ro, 'read_only', 'PROPERTY', w.pid);
+    await code(call('GET', url(w, b.id, b.line, 'guests') + '?reveal=true', as(T.tenantId, ro, { mfa: true })), 403, 'PERMISSION_DENIED');   // roles without view-ID see masked numbers only
   });
 
   it('refuses early arrival, expired stays, missing room, bad documents, wrong residency and too many guests', async () => {
@@ -331,7 +334,8 @@ describe('the document matrix at check-in', () => {
     const val = (k: string) => d.fields.find((f: any) => f.key === k)?.value;
     expect(val('idNumber')).toBe('GB7000777'); expect(val('entryPort')).toBe('Karachi airport'); expect(val('phone')).toBe('+44 7700 900777');
     const fd = await addUser(T.tenantId, `fd${++n}@fd.test`); await assignRole(T.tenantId, fd, 'front_desk_agent', 'PROPERTY', w.pid);
-    await code(call('GET', `${list}/${g.id}`, as(T.tenantId, fd, { mfa: true })), 403, 'PERMISSION_DENIED');          // the desk sees the list and marks, but full numbers need view-ID
+    await code(call('GET', `${list}/${g.id}`, as(T.tenantId, fd)), 403, 'MFA_REQUIRED');                               // the desk may open a person, but only with a fresh second factor
+    expect((await ok(call('GET', `${list}/${g.id}`, as(T.tenantId, fd, { mfa: true })))).fields.find((f: any) => f.key === 'idNumber').value).toBe('GB7000777');
     await ok(call('POST', `${list}/${g.id}/entered`, as(T.tenantId, fd), { ref: 'HE-2026-889' }));
     await code(call('POST', `${list}/${g.id}/entered`, O, {}), 409, 'ALREADY_ENTERED');
     expect((await ok(call('GET', list, O))).pending).toBe(0);
