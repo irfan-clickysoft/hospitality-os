@@ -27,6 +27,7 @@ export function ReservationsList() {
   const view = VIEWS.find((v) => v === route.query.get('view')) ?? 'upcoming';
   const q = route.query.get('q') ?? '';
   const [dlg, setDlg] = useState<'new' | 'walkin' | null>(null);
+  useEffect(() => { const n = route.query.get('new'); if (n === '1' || n === 'walkin') { setDlg(n === 'walkin' ? 'walkin' : 'new'); setQuery({ new: null }); } }, [route.query, setQuery]);
   const searching = q.trim().length >= 2;
   const list = useLive<{ items: ListItem[]; nextCursor?: string | null }>(`${base}/reservations?${searching ? `q=${encodeURIComponent(q.trim())}` : query(view, bd)}&limit=100`, 30_000);
   const key = `${view}|${q.trim()}`;
