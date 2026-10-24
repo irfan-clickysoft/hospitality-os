@@ -17,7 +17,7 @@ const Gate = lazy(() => import('../desk/Gate.js').then((m) => ({ default: m.Gate
 const Maintenance = lazy(() => import('../desk/Maintenance.js').then((m) => ({ default: m.Maintenance })));
 
 export interface Blocker { code: string; level: Level; amount?: Amount }
-interface Arrival { reservationId: string; lineId: string; confirmationNo: string; status: string; guest: { name: string; vip: boolean }; roomType: { code: string; name: string }; adults: number; children: number; room: { id: string; number: string; hkStatus: string } | null; specialRequests: string | null; blockers: Blocker[]; nights: number }
+interface Arrival { expectedArrival: string | null; reservationId: string; lineId: string; confirmationNo: string; status: string; guest: { name: string; vip: boolean }; roomType: { code: string; name: string }; adults: number; children: number; room: { id: string; number: string; hkStatus: string } | null; specialRequests: string | null; blockers: Blocker[]; nights: number }
 interface Departure { reservationId: string; lineId: string; confirmationNo: string; status: string; guest: { name: string; vip: boolean }; roomType: { code: string }; room: string | null; departure: string; balance: Amount; blockers: Blocker[] }
 interface TodayData { businessDate: string; summary: { arrivalsPending: number; arrivalsDone: number; departuresPending: number; departuresDone: number; inHouse: number; noShowCandidates: number; arrivalsWithProblems: number; departuresWithProblems: number }; arrivals: Arrival[]; departures: Departure[] }
 
@@ -30,6 +30,14 @@ function BlockerBadges({ blockers }: { blockers: Blocker[] }) {
   return <>{blockers.map((b) => <LevelBadge key={b.code} level={b.level}>{b.code === 'BALANCE_DUE' || b.code === 'OVERPAID' ? t(`bl.${b.code}` as Key, { amount: b.amount ? money(b.amount) : '' }) : t(`bl.${b.code}` as Key)}</LevelBadge>)}</>;
 }
 
+/** Arrivals by the hour they expect to come (earliest first); guests who gave no time come last. */
+function hourGroups(rows: Arrival[]): Array<[string, Arrival[]]> {
+  const by = new Map<string, Arrival[]>();
+  for (const a of [...rows].sort((x, y) => (x.expectedArrival ?? '99:99').localeCompare(y.expectedArrival ?? '99:99') || x.guest.name.localeCompare(y.guest.name))) {
+    const h = a.expectedArrival ? a.expectedArrival.slice(0, 2) : ''; by.set(h, [...(by.get(h) ?? []), a]);
+  }
+  return [...by.entries()];
+}
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
 function QueueRow({ to, name, vip, sub, status, blockers, next, done, room }: { to: string; name: string; vip: boolean; sub: string; status: string; blockers: Blocker[]; next: string; done: boolean; room?: string | null }) {
   const { t } = useT();
@@ -96,6 +104,7 @@ function DeskToday() {
   const view = (['arrivals', 'departures', 'inhouse'] as const).find((v) => v === route.query.get('view')) ?? 'arrivals';
   const inhouse = useLive<{ items: ListItem[] }>(view === 'inhouse' ? `${base}/reservations?view=in-house&limit=100` : null, 20_000);
   const q = route.query.get('q') ?? '';
+  const order = route.query.get('order') === 'time' ? 'time' : 'priority';
   const d = today.data; const s = d?.summary;
 
   const arrivals = useMemo(() => (d?.arrivals ?? []).filter((a) => !q || `${a.guest.name} ${a.confirmationNo} ${a.room?.number ?? ''}`.toLowerCase().includes(q.toLowerCase()))
@@ -111,6 +120,11 @@ function DeskToday() {
   };
   const nextOut = (x: Departure): string => (x.blockers.some((b) => b.code === 'BALANCE_DUE') ? t('q.settle') : can('frontdesk.check_out') ? t('q.checkOut') : t('q.open'));
   const stale = today.offline;
+  const arrivalRow = (a: Arrival) => (
+    
+            <QueueRow key={a.lineId} to={`/reservations/${a.reservationId}`} name={a.guest.name} vip={a.guest.vip} done={a.status === 'CHECKED_IN'} status={a.status} blockers={a.blockers} next={nextFor(a)} room={a.room?.number}
+      sub={`${a.expectedArrival ? `${t('eta.at', { time: a.expectedArrival })} · ` : ''}${a.confirmationNo} · ${a.roomType.name} · ${a.room ? `${t('d.room')} ${a.room.number}` : t('d.noRoom')} · ${t('d.nights', { n: a.nights })}`} />
+  );
 
   return (
     <section aria-labelledby="h-today">
@@ -144,10 +158,19 @@ function DeskToday() {
           </div>
           <input type="search" value={q} onChange={(e) => setQuery({ q: e.target.value || null })} placeholder={t('today.filter')} aria-label={t('today.filter')} className="filter" />
         </div>
-        {view === 'arrivals' && (arrivals.length === 0 ? <Empty text={q ? t('d.nothing') : t('today.noArrivals')} /> : (
-          <Grouped rows={arrivals} group={(a) => (a.status === 'CHECKED_IN' ? 'done' : worst(a.blockers) < 2 ? 'attention' : 'ready')} render={(a) => (
-            <QueueRow key={a.lineId} to={`/reservations/${a.reservationId}`} name={a.guest.name} vip={a.guest.vip} done={a.status === 'CHECKED_IN'} status={a.status} blockers={a.blockers} next={nextFor(a)} room={a.room?.number}
-              sub={`${a.confirmationNo} · ${a.roomType.name} · ${a.room ? `${t('d.room')} ${a.room.number}` : t('d.noRoom')} · ${t('d.nights', { n: a.nights })}`} />)} />))}
+        {view === 'arrivals' && (arrivals.length === 0 ? <Empty text={q ? t('d.nothing') : t('today.noArrivals')} /> : (<>
+          <div className="seg" role="group" aria-label={t('today.order')}>
+            <button type="button" className={order === 'priority' ? 'on' : ''} aria-pressed={order === 'priority'} onClick={() => setQuery({ order: null })}>{t('today.order.priority')}</button>
+            <button type="button" className={order === 'time' ? 'on' : ''} aria-pressed={order === 'time'} onClick={() => setQuery({ order: 'time' })}>{t('today.order.time')}</button>
+          </div>
+          {order === 'priority' ? (
+            <Grouped rows={arrivals} group={(a) => (a.status === 'CHECKED_IN' ? 'done' : worst(a.blockers) < 2 ? 'attention' : 'ready')} render={arrivalRow} />
+          ) : (
+            <ol className="timeline-day" aria-label={t('today.order.time')}>{hourGroups(arrivals).map(([hour, rows]) => (
+              <li key={hour} className="tl-slot"><span className="tl-hour">{hour === '' ? t('today.noTime') : `${hour}:00`}</span>
+                <ul className="plain queue">{rows.map(arrivalRow)}</ul></li>))}</ol>
+          )}
+        </>))}
         {view === 'departures' && (departures.length === 0 ? <Empty text={q ? t('d.nothing') : t('today.noDepartures')} /> : (
           <Grouped rows={departures} group={(x) => (x.status === 'CHECKED_OUT' ? 'done' : worst(x.blockers) < 2 ? 'attention' : 'ready')} render={(x) => (
             <QueueRow key={x.lineId} to={`/reservations/${x.reservationId}${x.status === 'CHECKED_IN' ? '/check-out' : ''}`} name={x.guest.name} vip={x.guest.vip} done={x.status === 'CHECKED_OUT'} status={x.status} blockers={x.blockers} next={nextOut(x)} room={x.room}
