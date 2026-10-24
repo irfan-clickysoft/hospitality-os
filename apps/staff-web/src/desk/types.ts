@@ -12,7 +12,7 @@ export interface ReservationDetail {
   id: string; confirmationNo: string; status: string; source: string; channel: string; externalRef: string | null; companyId: string | null; residency: string; version: number;
   guest: { id: string; fullName: string; phone: string | null; email: string | null; nationality: string | null; vip: boolean };
   guarantee: { type: string; atRisk: boolean; deadline: string | null; depositRequired: Amount; depositPaid: Amount };
-  optionExpiresAt: string | null; penalty: { amount: Amount; reason: string | null; waived: boolean }; notes: { internal: string | null; guest: string | null; specialRequests: string | null }; totalExTax: Amount; lines: Line[];
+  optionExpiresAt: string | null; penalty: { amount: Amount; reason: string | null; waived: boolean }; notes: { internal: string | null; guest: string | null; specialRequests: string | null }; expectedArrival?: string | null; totalExTax: Amount; lines: Line[];
   history: Array<{ at: string; action: string; from: string | null; to: string | null; reason: string | null }>;
 }
 export interface Posting { id: string; type: string; txnCode: string; description: string | null; amount: Amount; businessDate: string; reversed: boolean; paymentId: string | null; sourceType: string }

@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { businessDate, uuid } from '../property-setup/schemas.js';
 import { CreateGuest } from '../guests/schemas.js';
 
+/** A time of day, 24-hour, as in the property's own clock. */
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use a time like 14:30');
 export const SOURCES = ['WALK_IN', 'PHONE', 'WHATSAPP', 'WEBSITE', 'OTA_BOOKING_COM', 'OTA_OTHER', 'CORPORATE', 'TRAVEL_AGENT', 'CRS', 'OTHER'] as const;
 const text = (n: number) => z.string().max(n).nullish();
 
@@ -20,10 +22,10 @@ export const CreateReservation = z.object({
   }).strict().refine((h) => [h.minutes, h.days, h.untilDate].filter((x) => x !== undefined).length === 1, 'Give the hold as half-hours, days, or a date — one of them').optional(),
   /** A manager's approval (with a reason) for a booking that a compliance rule holds for approval. */
   complianceApproval: z.object({ reason: z.string().trim().min(3).max(300) }).optional(),
-  notesInternal: text(2000), notesGuest: text(2000), specialRequests: text(2000),
+  notesInternal: text(2000), notesGuest: text(2000), specialRequests: text(2000), expectedArrival: hhmm.optional(),
 }).refine((v) => (v.guestId ? 1 : 0) + (v.guest ? 1 : 0) === 1, { message: 'provide either guestId or guest' });
 
-export const UpdateReservation = z.object({ notesInternal: text(2000), notesGuest: text(2000), specialRequests: text(2000), externalRef: text(80), marketSegment: text(40), version: z.number().int() });
+export const UpdateReservation = z.object({ expectedArrival: z.union([hhmm, z.literal(''), z.null()]).optional(), notesInternal: text(2000), notesGuest: text(2000), specialRequests: text(2000), externalRef: text(80), marketSegment: text(40), version: z.number().int() });
 export const ModifyLine = z.object({
   arrival: businessDate.optional(), departure: businessDate.optional(), roomTypeId: uuid.optional(),
   adults: z.number().int().min(1).max(20).optional(), children: z.number().int().min(0).max(20).optional(), extraBeds: z.number().int().min(0).max(5).optional(),

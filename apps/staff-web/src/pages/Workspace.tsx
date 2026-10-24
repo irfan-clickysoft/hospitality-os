@@ -99,10 +99,10 @@ function Notes({ r, onSaved }: { r: ReservationDetail; onSaved: () => void }) {
   const { property, can } = useAuth();
   const work = useWork();
   const editable = can('reservation.modify');
-  const [vals, setVals] = useState({ specialRequests: r.notes.specialRequests ?? '', notesGuest: r.notes.guest ?? '', notesInternal: r.notes.internal ?? '' });
+  const [vals, setVals] = useState({ expectedArrival: r.expectedArrival ?? '', specialRequests: r.notes.specialRequests ?? '', notesGuest: r.notes.guest ?? '', notesInternal: r.notes.internal ?? '' });
   const [save, setSave] = useState<SaveStatus>({ kind: 'idle' });
   const version = useRef(r.version); const dirty = useRef(false); const timer = useRef<number>(); const latest = useRef(vals); latest.current = vals;
-  useEffect(() => { if (!dirty.current) { version.current = r.version; setVals({ specialRequests: r.notes.specialRequests ?? '', notesGuest: r.notes.guest ?? '', notesInternal: r.notes.internal ?? '' }); } }, [r]);
+  useEffect(() => { if (!dirty.current) { version.current = r.version; setVals({ expectedArrival: r.expectedArrival ?? '', specialRequests: r.notes.specialRequests ?? '', notesGuest: r.notes.guest ?? '', notesInternal: r.notes.internal ?? '' }); } }, [r]);
   const flush = async () => {
     if (!work.online) { setSave({ kind: 'offline' }); return; }
     setSave({ kind: 'saving' });
@@ -127,6 +127,9 @@ function Notes({ r, onSaved }: { r: ReservationDetail; onSaved: () => void }) {
       <div className="block-head"><h2 id="h-notes">{t('ws.notes')}</h2>{editable && <SaveState s={save} onRetry={() => void flush()} />}</div>
       {save.kind === 'conflict' && (
         <Banner level="BLOCKER" title={t('save.conflictTitle')} action={<span className="actions"><button onClick={() => { dirty.current = false; setSave({ kind: 'idle' }); onSaved(); }}>{t('save.useTheirs')}</button><button className="primary" onClick={() => void keepMine()}>{t('save.keepMine')}</button></span>}>{t('save.conflictText')}</Banner>)}
+      <div className="field"><label htmlFor="n-eta">{t('eta.label')}</label>
+        {editable ? <input id="n-eta" type="time" value={vals.expectedArrival} onChange={(e) => edit('expectedArrival', e.target.value)} dir="ltr" className="eta-input" /> : <p id="n-eta" className="readonly">{vals.expectedArrival || <span className="muted">{t('common.none')}</span>}</p>}
+      </div>
       {rows.map(([k, label]) => (
         <div className="field" key={k}><label htmlFor={`n-${k}`}>{t(label)}</label>
           {editable ? <textarea id={`n-${k}`} value={vals[k]} maxLength={2000} onChange={(e) => edit(k, e.target.value)} /> : <p id={`n-${k}`} className="readonly">{vals[k] || <span className="muted">{t('common.none')}</span>}</p>}

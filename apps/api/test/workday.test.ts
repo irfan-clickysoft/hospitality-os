@@ -78,6 +78,23 @@ describe('today queue', () => {
     expect(row(b.id).blockers.some((x: any) => x.code === 'NO_ROOM')).toBe(true);
   });
 
+  it('keeps the time a guest expects to arrive: set at booking or later, shown on Today, cleared with an empty value, one time of day only', async () => {
+    const w = await sunset(); const a = await book(w, { arrival: OPEN, departure: '2026-11-03' }); const b = await book(w, { arrival: OPEN, departure: '2026-11-03' });
+    const res = `/v1/properties/${w.pid}/reservations`;
+    let t = await ok(today(w)); expect(t.arrivals.every((x: any) => x.expectedArrival === null)).toBe(true);
+    const v = (await ok(call('GET', `${res}/${a.id}`, O))).version;
+    const upd = await ok(call('PATCH', `${res}/${a.id}`, O, { expectedArrival: '15:30', version: v }));
+    expect(upd.expectedArrival).toBe('15:30');
+    t = await ok(today(w)); expect(t.arrivals.find((x: any) => x.reservationId === a.id).expectedArrival).toBe('15:30'); expect(t.arrivals.find((x: any) => x.reservationId === b.id).expectedArrival).toBeNull();
+    await code(call('PATCH', `${res}/${a.id}`, O, { expectedArrival: '25:00', version: upd.version }), 400, 'VALIDATION_FAILED');
+    await code(call('PATCH', `${res}/${a.id}`, O, { expectedArrival: 'evening', version: upd.version }), 400, 'VALIDATION_FAILED');
+    const cleared = await ok(call('PATCH', `${res}/${a.id}`, O, { expectedArrival: '', version: upd.version })); expect(cleared.expectedArrival).toBeNull();
+    const q = (await call('POST', `/v1/properties/${w.pid}/quotes`, O, { arrival: OPEN, departure: '2026-11-03', adults: 2, children: 0, residency: 'RESIDENT' })).json();
+    const g = await ok(call('POST', '/v1/guests', O, { fullName: `Eta ${++n}`, phone: `0300${String(5000000 + n).slice(-7)}`, nationality: 'PK' }), 201);
+    const made = await ok(call('POST', res, O, { guestId: g.id, source: 'PHONE', expectedArrival: '21:45', lines: [{ quoteToken: q.options[0].quoteToken }] }, { 'idempotency-key': `eta-${++n}-${Date.now()}` }), 201);
+    expect(made.expectedArrival).toBe('21:45');
+  });
+
   it('shows what a departing guest still owes', async () => {
     const w = await sunset(); const b = await book(w, { arrival: OPEN, departure: '2026-11-03' });
     await ok(checkIn(w, b, '101'));
