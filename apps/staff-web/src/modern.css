@@ -309,3 +309,5 @@ html[data-contrast="high"] a, html[data-contrast="high"] button.link { text-deco
 html[data-contrast="high"] :focus-visible { outline: 4px solid var(--focus); outline-offset: 3px; }
 html[data-contrast="high"] .navitem.on { border: 2px solid var(--brand); }
 @media (prefers-contrast: more) { :root:not([data-contrast]) { --line-strong: #1b2430; --muted: #26303a; } }
+
+.grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
