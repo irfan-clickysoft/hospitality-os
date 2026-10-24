@@ -13,11 +13,11 @@ export const DepositIn = z.discriminatedUnion('kind', [
 const line = z.object({
   roomTypeId: uuid, ratePlanId: uuid.nullish(), rooms: z.number().int().min(1).max(60), arrival: businessDate, departure: businessDate,
   adults: z.number().int().min(1).max(20).default(2), children: z.number().int().min(0).max(20).default(0), extraBeds: z.number().int().min(0).max(5).default(0),
-  discount: DiscountIn.default({ kind: 'NONE' }), note: z.string().trim().max(300).nullish(),
+  discount: DiscountIn.default({ kind: 'NONE' }), note: z.string().trim().max(300).nullish(), roomNumbers: z.string().trim().max(200).nullish(),
 }).refine((l) => l.departure > l.arrival, { message: 'departure must be after arrival', path: ['departure'] });
 const phone = z.string().trim().max(40).regex(/^[+\d][\d\s\-()+]{5,39}$/, 'a phone number');
 export const QuotationBody = z.object({
-  customerName: z.string().trim().min(2).max(120), companyId: uuid.nullish(), guestId: uuid.nullish(),
+  customerName: z.string().trim().min(2).max(120), address: z.string().trim().max(300).nullish(), customerRef: z.string().trim().max(60).nullish(), balanceDueDays: z.number().int().min(0).max(365).nullish(), companyId: uuid.nullish(), guestId: uuid.nullish(),
   contactName: z.string().trim().max(120).nullish(), phone: phone.nullish(), email: z.string().trim().email().max(254).nullish(),
   residency: z.enum(['RESIDENT', 'NON_RESIDENT']).default('RESIDENT'), title: z.string().trim().max(160).nullish(), validUntil: businessDate,
   discount: DiscountIn.default({ kind: 'NONE' }), discountReason: z.string().trim().max(200).nullish(), deposit: DepositIn.default({ kind: 'NONE' }),

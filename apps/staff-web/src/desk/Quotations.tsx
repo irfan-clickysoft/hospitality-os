@@ -13,10 +13,10 @@ interface Disc { kind: 'NONE' | 'PCT' | 'AMOUNT'; value?: string | null }
 interface PLine { lineId: string | null; roomTypeName: string; planName: string; rooms: number; arrival: string; departure: string; nights: number; bands: Array<{ from: string; to: string; nights: number; rate: string; label: string }>; gross: string; discount: string; net: string; tax: string; total: string; warning: string | null }
 interface Pricing { currency: string; lines: PLine[]; gross: string; discount: string; net: string; tax: string; total: string; deposit: { kind: string; amount: string } }
 interface Item { id: string; number: string; status: string; expired: boolean; customerName: string; validUntil: string; total: string | null; currency: string | null; rooms: number; arrival: string | null; departure: string | null; answered: boolean; views: number }
-interface Detail { id: string; number: string; status: string; expired: boolean; customerName: string; companyId: string | null; guestId: string | null; contactName: string | null; phone: string | null; email: string | null; residency: 'RESIDENT' | 'NON_RESIDENT'; title: string | null; validUntil: string;
+interface Detail { id: string; number: string; status: string; expired: boolean; customerName: string; address: string | null; customerRef: string | null; balanceDueDays: number | null; companyId: string | null; guestId: string | null; contactName: string | null; phone: string | null; email: string | null; residency: 'RESIDENT' | 'NON_RESIDENT'; title: string | null; validUntil: string;
   discount: { kind: string; value?: string | null; minor?: string | null }; discountReason: string | null; deposit: { kind: string; value?: string | null; minor?: string | null }; specialRequests: string | null; amenities: string[]; terms: string | null; notesInternal: string | null; pricing: Pricing | null; version: number;
   sentAt: string | null; views: number; response: { at: string; name: string | null; note: string | null; seen: boolean } | null; convertedAt: string | null; reservationIds: string[];
-  lines: Array<{ id: string; roomTypeId: string; ratePlanId: string | null; rooms: number; arrival: string; departure: string; adults: number; children: number; extraBeds: number; discount: Disc; note: string | null }> }
+  lines: Array<{ id: string; roomTypeId: string; ratePlanId: string | null; rooms: number; arrival: string; departure: string; adults: number; children: number; extraBeds: number; roomNumbers: string | null; discount: Disc; note: string | null }> }
 interface RoomType { id: string; code: string; name: string; status: string }
 interface Room { id: string; roomTypeId: string; status: string }
 
@@ -31,11 +31,11 @@ export function Quotations() {
   const base = `/v1/properties/${property!.id}/quotations`;
   const [status, setStatus] = useState<(typeof STATUSES)[number]>('OPEN'); const [q, setQ] = useState('');
   const list = useLive<{ items: Item[]; counts: Record<string, number> }>(`${base}?status=${status}${q.trim().length >= 2 ? `&q=${encodeURIComponent(q.trim())}` : ''}`, 20_000);
-  const [open, setOpen] = useState<string | null>(null); const [edit, setEdit] = useState<Detail | 'new' | null>(null);
+  const [open, setOpen] = useState<string | null>(null); const [edit, setEdit] = useState<Detail | 'new' | null>(null); const [wording, setWording] = useState(false);
   const canWrite = can('reservation.create');
   return (
     <section className="stack">
-      <div className="page-head"><h2>{t('qt.title')}</h2>{canWrite && <button className="primary" onClick={() => setEdit('new')}>{t('qt.new')}</button>}</div>
+      <div className="page-head"><h2>{t('qt.title')}</h2><div className="head-actions">{can('property.manage') && <button onClick={() => setWording(true)}>{t('qt.wording')}</button>}{canWrite && <button className="primary" onClick={() => setEdit('new')}>{t('qt.new')}</button>}</div></div>
       <p className="muted small">{t('qt.intro')}</p>
       <div className="toolbar">
         <div className="chips" role="group" aria-label={t('qt.title')}>{STATUSES.map((s) => <Chip key={s} active={status === s} onClick={() => setStatus(s)}>{t(`qt.f.${s}` as Key)}{s !== 'OPEN' && s !== 'ALL' && list.data?.counts[s] ? ` (${list.data.counts[s]})` : ''}</Chip>)}</div>
@@ -49,6 +49,7 @@ export function Quotations() {
             <span className="q-badges">{x.answered && <Badge tone="warn">{t('qt.answered')}</Badge>}<Badge tone={x.expired ? 'dirty' : TONE[x.status] ?? 'neutral'}>{x.expired ? t('qt.s.EXPIRED') : t(`qt.s.${x.status}` as Key)}</Badge></span>
             {x.total && x.currency && <span className="room-pill">{minorMoney(x.total, x.currency)}</span>}
           </button></li>))}</ul>)}
+      {wording && <QuotationWording base={base} onClose={() => setWording(false)} />}
       {open && <QuotationView id={open} base={base} onClose={() => { setOpen(null); list.reload(); }} onEdit={(d) => { setOpen(null); setEdit(d); }} />}
       {edit && <QuotationEditor base={base} initial={edit === 'new' ? null : edit} onClose={() => setEdit(null)} onSaved={(id) => { setEdit(null); list.reload(); setOpen(id); }} />}
     </section>
@@ -56,7 +57,7 @@ export function Quotations() {
 }
 
 // ───────────────────────── the editor ─────────────────────────
-interface LineForm { roomTypeId: string; rooms: number; arrival: string; departure: string; adults: number; children: number; extraBeds: number; dKind: 'NONE' | 'PCT' | 'AMOUNT'; dValue: string; note: string }
+interface LineForm { roomNumbers: string; roomTypeId: string; rooms: number; arrival: string; departure: string; adults: number; children: number; extraBeds: number; dKind: 'NONE' | 'PCT' | 'AMOUNT'; dValue: string; note: string }
 const disc = (kind: string, v: string): Disc => (kind === 'NONE' || !v.trim() ? { kind: 'NONE' } : { kind: kind as 'PCT' | 'AMOUNT', value: v.trim() });
 
 function QuotationEditor({ base, initial, onClose, onSaved }: { base: string; initial: Detail | null; onClose: () => void; onSaved: (id: string) => void }) {
@@ -66,20 +67,20 @@ function QuotationEditor({ base, initial, onClose, onSaved }: { base: string; in
   const companies = useLive<{ items: Array<{ id: string; name: string; status: string }> }>(can('company.view') ? '/v1/companies' : null, 300_000);
   const tList = (types.data?.items ?? []).filter((x) => x.status === 'ACTIVE');
   const [f, setF] = useState(() => initial ? {
-    customerName: initial.customerName, companyId: initial.companyId ?? '', contactName: initial.contactName ?? '', phone: initial.phone ?? '', email: initial.email ?? '', residency: initial.residency, title: initial.title ?? '', validUntil: initial.validUntil,
+    customerName: initial.customerName, address: initial.address ?? '', customerRef: initial.customerRef ?? '', balanceDays: initial.balanceDueDays === null ? '' : String(initial.balanceDueDays), companyId: initial.companyId ?? '', contactName: initial.contactName ?? '', phone: initial.phone ?? '', email: initial.email ?? '', residency: initial.residency, title: initial.title ?? '', validUntil: initial.validUntil,
     dKind: (initial.discount.kind as 'NONE' | 'PCT' | 'AMOUNT'), dValue: initial.discount.kind === 'PCT' ? String(initial.discount.value ?? '') : initial.discount.kind === 'AMOUNT' ? String(Number(initial.discount.minor ?? 0) / 100) : '', dReason: initial.discountReason ?? '',
     pKind: (initial.deposit.kind as 'NONE' | 'PCT' | 'AMOUNT'), pValue: initial.deposit.kind === 'PCT' ? String(initial.deposit.value ?? '') : initial.deposit.kind === 'AMOUNT' ? String(Number(initial.deposit.minor ?? 0) / 100) : '',
     requests: initial.specialRequests ?? '', amenities: initial.amenities, terms: initial.terms ?? '', notes: initial.notesInternal ?? '' } : {
-    customerName: '', companyId: '', contactName: '', phone: '', email: '', residency: 'RESIDENT' as const, title: '', validUntil: addDays(bd, 7), dKind: 'NONE' as 'NONE' | 'PCT' | 'AMOUNT', dValue: '', dReason: '', pKind: 'PCT' as 'NONE' | 'PCT' | 'AMOUNT', pValue: '30', requests: '', amenities: [] as string[], terms: '', notes: '' });
-  const [lines, setLines] = useState<LineForm[]>(() => initial ? initial.lines.map((l) => ({ roomTypeId: l.roomTypeId, rooms: l.rooms, arrival: l.arrival, departure: l.departure, adults: l.adults, children: l.children, extraBeds: l.extraBeds, dKind: l.discount.kind as 'NONE' | 'PCT' | 'AMOUNT', dValue: String(l.discount.value ?? ''), note: l.note ?? '' }))
-    : [{ roomTypeId: '', rooms: 1, arrival: addDays(bd, 1), departure: addDays(bd, 4), adults: 2, children: 0, extraBeds: 0, dKind: 'NONE', dValue: '', note: '' }]);
+    customerName: '', address: '', customerRef: '', balanceDays: '30', companyId: '', contactName: '', phone: '', email: '', residency: 'RESIDENT' as const, title: '', validUntil: addDays(bd, 7), dKind: 'NONE' as 'NONE' | 'PCT' | 'AMOUNT', dValue: '', dReason: '', pKind: 'PCT' as 'NONE' | 'PCT' | 'AMOUNT', pValue: '30', requests: '', amenities: [] as string[], terms: '', notes: '' });
+  const [lines, setLines] = useState<LineForm[]>(() => initial ? initial.lines.map((l) => ({ roomNumbers: l.roomNumbers ?? '', roomTypeId: l.roomTypeId, rooms: l.rooms, arrival: l.arrival, departure: l.departure, adults: l.adults, children: l.children, extraBeds: l.extraBeds, dKind: l.discount.kind as 'NONE' | 'PCT' | 'AMOUNT', dValue: String(l.discount.value ?? ''), note: l.note ?? '' }))
+    : [{ roomNumbers: '', roomTypeId: '', rooms: 1, arrival: addDays(bd, 1), departure: addDays(bd, 4), adults: 2, children: 0, extraBeds: 0, dKind: 'NONE', dValue: '', note: '' }]);
   const [idea, setIdea] = useState(''); const [priced, setPriced] = useState<Pricing | null>(initial?.pricing ?? null); const [pricing, setPricing] = useState(false); const [priceErr, setPriceErr] = useState<string | null>(null);
   useEffect(() => { if (tList.length && lines.some((l) => !l.roomTypeId)) setLines((ls) => ls.map((l) => (l.roomTypeId ? l : { ...l, roomTypeId: tList[0]!.id }))); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [types.data]);
   const setCo = (id: string) => { const c = companies.data?.items.find((x) => x.id === id); setF((x) => ({ ...x, companyId: id, customerName: id && !x.customerName ? c?.name ?? '' : x.customerName, pKind: id ? 'NONE' : x.pKind === 'NONE' ? 'PCT' : x.pKind, pValue: id ? '' : x.pValue || '30' })); };
   const body = useMemo(() => ({
-    customerName: f.customerName.trim(), companyId: f.companyId || null, contactName: f.contactName.trim() || null, phone: f.phone.trim() || null, email: f.email.trim() || null, residency: f.residency, title: f.title.trim() || null, validUntil: f.validUntil,
+    customerName: f.customerName.trim(), address: f.address.trim() || null, customerRef: f.customerRef.trim() || null, balanceDueDays: f.balanceDays.trim() === '' ? null : Math.min(365, Math.max(0, Math.floor(Number(f.balanceDays)) || 0)), companyId: f.companyId || null, contactName: f.contactName.trim() || null, phone: f.phone.trim() || null, email: f.email.trim() || null, residency: f.residency, title: f.title.trim() || null, validUntil: f.validUntil,
     discount: disc(f.dKind, f.dValue), discountReason: f.dReason.trim() || null, deposit: disc(f.pKind, f.pValue), specialRequests: f.requests.trim() || null, amenities: f.amenities, terms: f.terms.trim() || null, notesInternal: f.notes.trim() || null,
-    lines: lines.filter((l) => l.roomTypeId).map((l) => ({ roomTypeId: l.roomTypeId, rooms: l.rooms, arrival: l.arrival, departure: l.departure, adults: l.adults, children: l.children, extraBeds: l.extraBeds, discount: disc(l.dKind, l.dValue), note: l.note.trim() || null })) }), [f, lines]);
+    lines: lines.filter((l) => l.roomTypeId).map((l) => ({ roomNumbers: l.roomNumbers.trim() || null, roomTypeId: l.roomTypeId, rooms: l.rooms, arrival: l.arrival, departure: l.departure, adults: l.adults, children: l.children, extraBeds: l.extraBeds, discount: disc(l.dKind, l.dValue), note: l.note.trim() || null })) }), [f, lines]);
   const ready = body.customerName.length >= 2 && body.lines.length > 0 && body.lines.every((l) => l.departure > l.arrival && l.rooms >= 1);
   // the figures follow what is on the screen
   const sig = JSON.stringify(body);
@@ -111,6 +112,8 @@ function QuotationEditor({ base, initial, onClose, onSaved }: { base: string; in
               <label>{t('qt.contact')}<input value={f.contactName} onChange={(e) => setF({ ...f, contactName: e.target.value })} maxLength={120} /></label>
               <label>{t('bk.phone')}<input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} dir="ltr" inputMode="tel" /></label>
               <label>{t('qt.email')}<input type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} dir="ltr" /></label>
+              <label className="span2">{t('qt.address')}<input value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} maxLength={300} /></label>
+              <label>{t('qt.customerRef')}<input value={f.customerRef} onChange={(e) => setF({ ...f, customerRef: e.target.value })} maxLength={60} dir="ltr" /></label>
               <label>{t('qt.residency')}<select value={f.residency} onChange={(e) => setF({ ...f, residency: e.target.value as 'RESIDENT' | 'NON_RESIDENT' })}><option value="RESIDENT">{t('qt.resident')}</option><option value="NON_RESIDENT">{t('qt.foreign')}</option></select></label>
             </div>
             <label>{t('qt.heading')}<input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} maxLength={160} placeholder={t('qt.headingHint')} /></label>
@@ -131,10 +134,11 @@ function QuotationEditor({ base, initial, onClose, onSaved }: { base: string; in
                   <label>{t('qt.lineDiscount')}<select value={l.dKind} onChange={(e) => setLine(k, { dKind: e.target.value as LineForm['dKind'] })}><option value="NONE">{t('qt.noDiscount')}</option><option value="PCT">{t('qt.pct')}</option><option value="AMOUNT">{t('qt.amount')}</option></select></label>
                   {l.dKind !== 'NONE' && <label>{l.dKind === 'PCT' ? t('qt.pctValue') : t('qt.amountForLine')}<input value={l.dValue} onChange={(e) => setLine(k, { dValue: e.target.value })} dir="ltr" inputMode="decimal" /></label>}
                 </div>
+                <label>{t('qt.roomNumbers')}<input value={l.roomNumbers} onChange={(e) => setLine(k, { roomNumbers: e.target.value })} maxLength={200} placeholder={t('qt.roomNumbersHint')} dir="ltr" /></label>
                 <label>{t('qt.lineNote')}<input value={l.note} onChange={(e) => setLine(k, { note: e.target.value })} maxLength={300} /></label>
                 {lines.length > 1 && <button className="link" onClick={() => setLines((ls) => ls.filter((_, i) => i !== k))}>{t('qt.removeLine')}</button>}
               </div>))}
-            <div className="actions"><button onClick={() => setLines((ls) => [...ls, { ...ls[ls.length - 1]!, rooms: 1, dKind: 'NONE', dValue: '', note: '' }])}>{t('qt.addLine')}</button><button onClick={wholeHouse} disabled={!rooms.data}>{t('qt.wholeHouse')}</button></div>
+            <div className="actions"><button onClick={() => setLines((ls) => [...ls, { ...ls[ls.length - 1]!, rooms: 1, roomNumbers: '', dKind: 'NONE', dValue: '', note: '' }])}>{t('qt.addLine')}</button><button onClick={wholeHouse} disabled={!rooms.data}>{t('qt.wholeHouse')}</button></div>
           </fieldset>
           <fieldset className="guestcard"><legend>{t('qt.discountAdvance')}</legend>
             <div className="grid2">
@@ -145,6 +149,7 @@ function QuotationEditor({ base, initial, onClose, onSaved }: { base: string; in
               {f.pKind !== 'NONE' && <label>{f.pKind === 'PCT' ? t('qt.pctValue') : t('qt.amountValue')}<input value={f.pValue} onChange={(e) => setF({ ...f, pValue: e.target.value })} dir="ltr" inputMode="decimal" /></label>}
             </div>
             {f.companyId && <p className="muted small">{t('qt.corpNoAdvance')}</p>}
+            {f.pKind !== 'NONE' && <label>{t('qt.balanceDays')}<input type="number" min={0} max={365} value={f.balanceDays} onChange={(e) => setF({ ...f, balanceDays: e.target.value })} dir="ltr" /></label>}
             <label>{t('qt.validUntil2')}<input type="date" min={bd} value={f.validUntil} onChange={(e) => setF({ ...f, validUntil: e.target.value })} dir="ltr" /></label>
           </fieldset>
           <fieldset className="guestcard"><legend>{t('qt.details')}</legend>
@@ -260,6 +265,52 @@ function SendQuotation({ q, base, onClose }: { q: Detail; base: string; onClose:
           <div className="actions">{wa ? <a className="primary button" href={`https://wa.me/${wa}?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">{t('wa.send')}</a> : <p className="warnbox small">{t('mw.noPhone')}</p>}<button onClick={() => void navigator.clipboard?.writeText(text)}>{t('wa.copy')}</button></div>
           <EmailSend compose={() => api<{ text: string; subject: string | null; email: string | null }>('POST', `${base}/${q.id}/message?channel=EMAIL`)} send={(v) => api('POST', `/v1/properties/${property!.id}/email/quotation/${q.id}`, v)} />
         </div>)}
+    </Sheet>
+  );
+}
+
+// ───────────────────────── the wording around the figures ─────────────────────────
+interface Settings { greeting: string; closing: string; signoff: string; contactPhone: string | null; contactEmail: string | null; website: string | null; locationNote: string | null; amenities: string[]; taxNote: string | null; advancePct: number; balanceDays: number | null; terms: Array<{ title: string; body: string }>; custom: boolean }
+
+/** What the customer's page says around the figures: greeting, closing, contacts, standard amenities and the numbered terms. Written once per property. */
+function QuotationWording({ base, onClose }: { base: string; onClose: () => void }) {
+  const { t } = useT(); const { busy, problem, run } = useAction();
+  const cur = useLive<Settings>(`${base}/settings`, 600_000);
+  const [f, setF] = useState<Settings | null>(null); const [saved, setSaved] = useState(false);
+  useEffect(() => { if (cur.data && !f) setF(cur.data); }, [cur.data, f]);
+  if (!f) return <Sheet title={t('qt.wording')} onClose={onClose} wide><Spinner /></Sheet>;
+  const set = (p: Partial<Settings>) => { setF({ ...f, ...p }); setSaved(false); };
+  const save = async () => { const { custom: _c, ...body } = f; void _c; const r = await run(() => api<Settings>('PUT', `${base}/settings`, { ...body, contactPhone: body.contactPhone || null, website: body.website || null, locationNote: body.locationNote || null, taxNote: body.taxNote || null })); if (r) { setF(r); setSaved(true); } };
+  const reset = async () => { if (!window.confirm(t('qt.wordingReset'))) return; const r = await run(() => api<Settings>('POST', `${base}/settings/reset`, {})); if (r) { setF(r); setSaved(true); } };
+  return (
+    <Sheet title={t('qt.wording')} onClose={onClose} wide>
+      <div className="stack">
+        <p className="muted small">{t('qt.wordingNote')}</p>
+        <label>{t('qt.greeting')}<textarea rows={3} value={f.greeting} onChange={(e) => set({ greeting: e.target.value })} maxLength={1000} /></label>
+        <label>{t('qt.closing')}<textarea rows={3} value={f.closing} onChange={(e) => set({ closing: e.target.value })} maxLength={1500} /></label>
+        <label>{t('qt.signoff')}<textarea rows={2} value={f.signoff} onChange={(e) => set({ signoff: e.target.value })} maxLength={300} /></label>
+        <div className="grid2">
+          <label>{t('qt.cPhone')}<input value={f.contactPhone ?? ''} onChange={(e) => set({ contactPhone: e.target.value })} dir="ltr" /></label>
+          <label>{t('qt.email')}<input type="email" value={f.contactEmail ?? ''} onChange={(e) => set({ contactEmail: e.target.value })} dir="ltr" /></label>
+          <label>{t('qt.website')}<input value={f.website ?? ''} onChange={(e) => set({ website: e.target.value })} dir="ltr" /></label>
+          <label>{t('qt.locationNote')}<input value={f.locationNote ?? ''} onChange={(e) => set({ locationNote: e.target.value })} maxLength={600} /></label>
+          <label>{t('qt.defAdvance')}<input type="number" min={0} max={100} value={f.advancePct} onChange={(e) => set({ advancePct: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })} dir="ltr" /></label>
+          <label>{t('qt.defBalance')}<input type="number" min={0} max={365} value={f.balanceDays ?? ''} onChange={(e) => set({ balanceDays: e.target.value === '' ? null : Math.min(365, Math.max(0, Math.floor(Number(e.target.value)) || 0)) })} dir="ltr" /></label>
+        </div>
+        <label>{t('qt.stdAmenities')}<textarea rows={3} value={f.amenities.join('\n')} onChange={(e) => set({ amenities: e.target.value.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 30) })} /></label>
+        <label>{t('qt.taxNote')}<input value={f.taxNote ?? ''} onChange={(e) => set({ taxNote: e.target.value })} maxLength={300} /></label>
+        <fieldset className="guestcard"><legend>{t('qt.termsList')}</legend>
+          {f.terms.map((x, k) => (
+            <div key={k} className="card inner stack">
+              <input value={x.title} onChange={(e) => set({ terms: f.terms.map((y, i) => (i === k ? { ...y, title: e.target.value } : y)) })} maxLength={120} aria-label={t('qt.termTitle')} />
+              <textarea rows={2} value={x.body} onChange={(e) => set({ terms: f.terms.map((y, i) => (i === k ? { ...y, body: e.target.value } : y)) })} maxLength={1200} aria-label={t('qt.termBody')} />
+              <button className="link" onClick={() => set({ terms: f.terms.filter((_, i) => i !== k) })}>{t('qt.removeLine')}</button>
+            </div>))}
+          <button onClick={() => set({ terms: [...f.terms, { title: '', body: '' }] })} disabled={f.terms.length >= 30}>{t('qt.addTerm')}</button>
+        </fieldset>
+        <ErrorLine code={problem?.code} detail={problem?.detail} />
+        <div className="actions"><button className="primary" disabled={busy || f.terms.some((x) => !x.title.trim() || !x.body.trim())} onClick={save}>{t('common.save')}</button>{f.custom && <button disabled={busy} onClick={reset}>{t('qt.useBuiltIn')}</button>}{saved && <span className="ok small" role="status">✓ {t('qt.savedWording')}</span>}</div>
+      </div>
     </Sheet>
   );
 }
