@@ -30,17 +30,31 @@ function BlockerBadges({ blockers }: { blockers: Blocker[] }) {
   return <>{blockers.map((b) => <LevelBadge key={b.code} level={b.level}>{b.code === 'BALANCE_DUE' || b.code === 'OVERPAID' ? t(`bl.${b.code}` as Key, { amount: b.amount ? money(b.amount) : '' }) : t(`bl.${b.code}` as Key)}</LevelBadge>)}</>;
 }
 
-function QueueRow({ to, name, vip, sub, status, blockers, next, done }: { to: string; name: string; vip: boolean; sub: string; status: string; blockers: Blocker[]; next: string; done: boolean }) {
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
+function QueueRow({ to, name, vip, sub, status, blockers, next, done, room }: { to: string; name: string; vip: boolean; sub: string; status: string; blockers: Blocker[]; next: string; done: boolean; room?: string | null }) {
   const { t } = useT();
   return (
     <li>
       <Link to={to} className={`qrow${done ? ' done' : ''}`}>
+        <span className={`avatar${vip ? ' vip-av' : ''}`} aria-hidden="true">{initials(name) || '·'}</span>
         <span className="q-main"><strong>{name}{vip && <span className="vip" aria-label={t('q.vip')}> ★</span>}</strong><span className="muted small">{sub}</span></span>
         <span className="q-badges"><ResStatus status={status} /><BlockerBadges blockers={blockers} /></span>
+        {room && <span className="room-pill" aria-hidden="true">{room}</span>}
         <span className="q-next">{!done && <span>{next}</span>}<Icon name="chevron" size={18} /></span>
       </Link>
     </li>
   );
+}
+
+/** Rows that need a person first, then the ones that are simply ready, then what is already done: so the top of the list is always the next thing to do. */
+function Grouped<T>({ rows, group, render }: { rows: T[]; group: (r: T) => 'attention' | 'ready' | 'done'; render: (r: T) => React.ReactNode }) {
+  const { t } = useT();
+  const parts = (['attention', 'ready', 'done'] as const).map((g) => ({ g, items: rows.filter((r) => group(r) === g) })).filter((x) => x.items.length > 0);
+  return <>{parts.map(({ g, items }) => (
+    <div key={g} className="qgroup">
+      {parts.length > 1 && <h3 className={`qgroup-h ${g}`}>{t(`today.g.${g}` as Key)} <span className="qgroup-n">{items.length}</span></h3>}
+      <ul className="plain queue">{items.map(render)}</ul>
+    </div>))}</>;
 }
 
 const MANAGER_KINDS = new Set(['PAYMENT_TO_VERIFY', 'COMPLIANCE_TASKS', 'CHARGE_REVIEWS', 'WORK_ORDER_URGENT', 'NO_SHOW_CANDIDATES', 'GUEST_FLAGGED']);
@@ -59,9 +73,22 @@ function ManagerQueue() {
   );
 }
 
+function StatCard({ on, onClick, icon, tone, n, label, done, total, flag }: { on: boolean; onClick: () => void; icon: 'key' | 'swap' | 'rooms'; tone: 'arrive' | 'leave' | 'stay'; n: number; label: string; done?: number; total?: number; flag?: number }) {
+  const { t } = useT();
+  const pct = total && total > 0 ? Math.round(((done ?? 0) / total) * 100) : null;
+  return (
+    <button className={`kpi stat-card tone-${tone}${on ? ' on' : ''}`} aria-pressed={on} onClick={onClick}>
+      <span className="stat-ico" aria-hidden="true"><Icon name={icon} size={20} /></span>
+      <strong>{n}</strong><span className="stat-label">{label}</span>
+      {pct !== null && <span className="stat-prog"><span className="bar-track" aria-hidden="true"><span className="bar-fill" style={{ inlineSize: `${pct}%` }} /></span><span className="small muted">{t('today.progress', { done: done ?? 0, total: total ?? 0 })}</span></span>}
+      {!!flag && flag > 0 && <span className="kpi-flag"><Icon name="alert" size={14} /> {t('today.withProblems', { n: flag })}</span>}
+    </button>
+  );
+}
+
 function DeskToday() {
   const { t, locale } = useT();
-  const { property, can } = useAuth();
+  const { property, can, me } = useAuth(); const user = me!.user;
   const route = useRoute(); const setQuery = useSetQuery();
   const base = `/v1/properties/${property!.id}`;
   const today = useLive<TodayData>(`${base}/today`, 20_000, `today-${property!.id}`);
@@ -87,16 +114,26 @@ function DeskToday() {
 
   return (
     <section aria-labelledby="h-today">
-      <div className="page-head"><h1 id="h-today">{t('nav.today')}</h1>{d && <span className="muted">{t('today.queueFor', { date: shortDate(d.businessDate, locale) })}</span>}</div>
+      <header className="today-hero">
+        <div>
+          <div className="today-date"><h1 id="h-today">{t('nav.today')}</h1>{d && <span> · {shortDate(d.businessDate, locale)}</span>}</div>
+          <p className="today-hello">{t(`today.hello.${new Date().getHours() < 12 ? 'm' : new Date().getHours() < 18 ? 'a' : 'e'}` as Key, { name: user.fullName.split(' ')[0] ?? '' })}</p>
+        </div>
+        {(can('reservation.create') || can('frontdesk.check_in')) && (
+          <div className="head-actions">
+            {can('frontdesk.check_in') && can('reservation.create') && <Link className="button" to="/reservations?tab=bookings&new=walkin">{t('wi.title')}</Link>}
+            {can('reservation.create') && <Link className="button primary" to="/reservations?tab=bookings&new=1">{t('bk.new')}</Link>}
+          </div>)}
+      </header>
       {stale && <Banner level="ACTION" title={t('state.staleTitle')}>{t('state.staleText')}</Banner>}
       {today.error && !d && <Banner level="BLOCKER" title={t('state.errorTitle')} action={<button onClick={today.reload}>{t('common.retry')}</button>}>{t(`err.${today.error.code}` as Key) === `err.${today.error.code}` ? t('err.generic') : t(`err.${today.error.code}` as Key)}</Banner>}
       {inbox.data && inbox.data.summary.blockers > 0 && can('management.view') && <Banner level="BLOCKER" title={t('today.mgrBlockers', { n: inbox.data.summary.blockers })} action={<Link className="button" to="/inbox">{t('shell.openInbox')}</Link>} />}
       {can('management.view') && <ManagerQueue />}
       {!d ? <Skeleton rows={5} /> : (<>
-        <div className="kpis" role="group" aria-label={t('today.summary')}>
-          <button className={`kpi${view === 'arrivals' ? ' on' : ''}`} aria-pressed={view === 'arrivals'} onClick={() => setQuery({ view: 'arrivals' })}><strong>{s!.arrivalsPending}</strong><span>{t('today.toArrive')}</span>{s!.arrivalsWithProblems > 0 && <span className="kpi-flag"><Icon name="alert" size={14} />{t('today.withProblems', { n: s!.arrivalsWithProblems })}</span>}</button>
-          <button className={`kpi${view === 'departures' ? ' on' : ''}`} aria-pressed={view === 'departures'} onClick={() => setQuery({ view: 'departures' })}><strong>{s!.departuresPending}</strong><span>{t('today.toLeave')}</span>{s!.departuresWithProblems > 0 && <span className="kpi-flag"><Icon name="alert" size={14} />{t('today.withProblems', { n: s!.departuresWithProblems })}</span>}</button>
-          <button className={`kpi${view === 'inhouse' ? ' on' : ''}`} aria-pressed={view === 'inhouse'} onClick={() => setQuery({ view: 'inhouse' })}><strong>{s!.inHouse}</strong><span>{t('today.inHouse')}</span></button>
+        <div className="kpis stat-cards" role="group" aria-label={t('today.summary')}>
+          <StatCard on={view === 'arrivals'} onClick={() => setQuery({ view: 'arrivals' })} icon="key" tone="arrive" n={s!.arrivalsPending} label={t('today.toArrive')} done={s!.arrivalsDone} total={s!.arrivalsDone + s!.arrivalsPending} flag={s!.arrivalsWithProblems} />
+          <StatCard on={view === 'departures'} onClick={() => setQuery({ view: 'departures' })} icon="swap" tone="leave" n={s!.departuresPending} label={t('today.toLeave')} done={s!.departuresDone} total={s!.departuresDone + s!.departuresPending} flag={s!.departuresWithProblems} />
+          <StatCard on={view === 'inhouse'} onClick={() => setQuery({ view: 'inhouse' })} icon="rooms" tone="stay" n={s!.inHouse} label={t('today.inHouse')} />
           {s!.noShowCandidates > 0 && <Link to="/reservations?tab=bookings&view=arrivals" className="kpi static warn"><strong>{s!.noShowCandidates}</strong><span>{t('today.noShowsShort')}</span></Link>}
         </div>
         <div className="toolbar">
@@ -108,18 +145,18 @@ function DeskToday() {
           <input type="search" value={q} onChange={(e) => setQuery({ q: e.target.value || null })} placeholder={t('today.filter')} aria-label={t('today.filter')} className="filter" />
         </div>
         {view === 'arrivals' && (arrivals.length === 0 ? <Empty text={q ? t('d.nothing') : t('today.noArrivals')} /> : (
-          <ul className="plain queue" aria-label={t('today.v.arrivals')}>{arrivals.map((a) => (
-            <QueueRow key={a.lineId} to={`/reservations/${a.reservationId}`} name={a.guest.name} vip={a.guest.vip} done={a.status === 'CHECKED_IN'} status={a.status} blockers={a.blockers} next={nextFor(a)}
-              sub={`${a.confirmationNo} · ${a.roomType.name} · ${a.room ? `${t('d.room')} ${a.room.number}` : t('d.noRoom')} · ${t('d.nights', { n: a.nights })}`} />))}</ul>))}
+          <Grouped rows={arrivals} group={(a) => (a.status === 'CHECKED_IN' ? 'done' : worst(a.blockers) < 2 ? 'attention' : 'ready')} render={(a) => (
+            <QueueRow key={a.lineId} to={`/reservations/${a.reservationId}`} name={a.guest.name} vip={a.guest.vip} done={a.status === 'CHECKED_IN'} status={a.status} blockers={a.blockers} next={nextFor(a)} room={a.room?.number}
+              sub={`${a.confirmationNo} · ${a.roomType.name} · ${a.room ? `${t('d.room')} ${a.room.number}` : t('d.noRoom')} · ${t('d.nights', { n: a.nights })}`} />)} />))}
         {view === 'departures' && (departures.length === 0 ? <Empty text={q ? t('d.nothing') : t('today.noDepartures')} /> : (
-          <ul className="plain queue" aria-label={t('today.v.departures')}>{departures.map((x) => (
-            <QueueRow key={x.lineId} to={`/reservations/${x.reservationId}${x.status === 'CHECKED_IN' ? '/check-out' : ''}`} name={x.guest.name} vip={x.guest.vip} done={x.status === 'CHECKED_OUT'} status={x.status} blockers={x.blockers} next={nextOut(x)}
-              sub={`${x.confirmationNo} · ${x.room ? `${t('d.room')} ${x.room}` : t('d.noRoom')} · ${t('today.leaves', { date: shortDate(x.departure, locale) })}`} />))}</ul>))}
+          <Grouped rows={departures} group={(x) => (x.status === 'CHECKED_OUT' ? 'done' : worst(x.blockers) < 2 ? 'attention' : 'ready')} render={(x) => (
+            <QueueRow key={x.lineId} to={`/reservations/${x.reservationId}${x.status === 'CHECKED_IN' ? '/check-out' : ''}`} name={x.guest.name} vip={x.guest.vip} done={x.status === 'CHECKED_OUT'} status={x.status} blockers={x.blockers} next={nextOut(x)} room={x.room}
+              sub={`${x.confirmationNo} · ${x.room ? `${t('d.room')} ${x.room}` : t('d.noRoom')} · ${t('today.leaves', { date: shortDate(x.departure, locale) })}`} />)} />))}
         {view === 'inhouse' && (!inhouse.data ? <Skeleton rows={3} /> : (() => {
           const rows = inhouse.data.items.filter((i) => !q || `${i.guest.fullName} ${i.confirmationNo} ${i.assignedRoom ?? ''}`.toLowerCase().includes(q.toLowerCase()));
           return rows.length === 0 ? <Empty text={t('d.nothing')} /> : (
             <ul className="plain queue" aria-label={t('today.v.in-house')}>{rows.map((i) => (
-              <QueueRow key={i.lineId} to={`/reservations/${i.reservationId}`} name={i.guest.fullName} vip={i.guest.vip} done={false} status={i.status} blockers={[]} next={t('q.open')}
+              <QueueRow key={i.lineId} to={`/reservations/${i.reservationId}`} name={i.guest.fullName} vip={i.guest.vip} done={false} status={i.status} blockers={[]} next={t('q.open')} room={i.assignedRoom}
                 sub={`${i.confirmationNo} · ${i.assignedRoom ? `${t('d.room')} ${i.assignedRoom}` : t('d.noRoom')} · ${t('today.leaves', { date: shortDate(i.departure, locale) })}`} />))}</ul>);
         })())}
         {(can('reservation.create') || can('frontdesk.check_in')) && <p className="muted small tip">{t('today.tip')}</p>}

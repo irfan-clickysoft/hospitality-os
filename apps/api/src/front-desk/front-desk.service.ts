@@ -391,6 +391,63 @@ export class FrontDeskService {
     });
   }
 
+  // ───────────── Hotel Eye (entered by hand on the police portal) ─────────────
+  /** Everyone who stayed recently or is here now, with whether they have been entered on Hotel Eye. IDs are masked. */
+  async hotelEyeList(propertyId: string, qIn: { state: 'pending' | 'done' | 'all'; from?: string; to?: string }) {
+    return this.tdb.tx(async (trx) => {
+      const bd = (await this.res.prop(trx, propertyId)).business_date;
+      const q = { state: qIn.state, to: qIn.to ?? bd, from: qIn.from ?? new Date(new Date(`${bd}T00:00:00Z`).getTime() - 3 * 86_400_000).toISOString().slice(0, 10) };
+      const rows = await sql<{ id: string; line: string; reservation: string; conf: string; arrival: string; departure: string; room: string | null; name: string; type: string | null; nat: string | null; id_type: string | null; last4: string | null; age: string; at: string | null; by: string | null; ref: string | null }>`
+        SELECT s.id, l.id AS line, r.id AS reservation, r.confirmation_no AS conf, l.arrival::text AS arrival, l.departure::text AS departure, rm.number AS room, s.full_name AS name, s.guest_type AS type, s.nationality AS nat,
+               s.id_type, s.id_last4 AS last4, s.age_group AS age, s.he_entered_at::text AS at, u.full_name AS by, s.he_ref AS ref
+        FROM stay_guest s JOIN reservation_room l ON l.tenant_id = s.tenant_id AND l.id = s.reservation_room_id JOIN reservation r ON r.tenant_id = l.tenant_id AND r.id = l.reservation_id
+        LEFT JOIN room_assignment a ON a.assignment_ref = l.id AND a.status IN ('IN_HOUSE','DEPARTED') LEFT JOIN room rm ON rm.id = a.room_id LEFT JOIN staff_user u ON u.id = s.he_entered_by
+        WHERE s.tenant_id = ${currentTenant().tenantId} AND l.property_id = ${propertyId} AND s.voided_at IS NULL AND l.status IN ('CHECKED_IN','CHECKED_OUT') AND l.departure >= ${q.from}::date AND l.arrival <= ${q.to}::date
+          ${q.state === 'pending' ? sql`AND s.he_entered_at IS NULL` : q.state === 'done' ? sql`AND s.he_entered_at IS NOT NULL` : sql``}
+        ORDER BY l.arrival, r.confirmation_no, s.is_primary DESC, s.created_at LIMIT 500`.execute(trx);
+      const open = await sql<{ n: string }>`SELECT count(*)::text AS n FROM stay_guest s JOIN reservation_room l ON l.tenant_id = s.tenant_id AND l.id = s.reservation_room_id
+        WHERE s.tenant_id = ${currentTenant().tenantId} AND l.property_id = ${propertyId} AND s.voided_at IS NULL AND l.status IN ('CHECKED_IN','CHECKED_OUT') AND l.departure >= ${q.from}::date AND l.arrival <= ${q.to}::date AND s.he_entered_at IS NULL`.execute(trx);
+      return { pending: Number(open.rows[0]!.n), items: rows.rows.map((r) => ({ id: r.id, lineId: r.line, reservationId: r.reservation, confirmationNo: r.conf, room: r.room, arrival: r.arrival, departure: r.departure, name: r.name, ageGroup: r.age, guestType: r.type, nationality: r.nat,
+        idType: r.id_type, idLast4: r.last4, entered: r.at ? { at: r.at, by: r.by, ref: r.ref } : null })) };
+    });
+  }
+
+  /** One person's details laid out the way they are typed into the portal: each value separately, ready to copy. Shows the full document number, so it needs the view-ID permission and a fresh second factor, and is recorded. */
+  async hotelEyeDetail(propertyId: string, userId: string, guestId: string) {
+    await this.res.requirePermission(userId, 'frontdesk.view_id', propertyId); await this.res.requireFreshMfa();
+    return this.tdb.tx(async (trx) => {
+      const p = await this.res.prop(trx, propertyId);
+      const rows = await sql<{ line: string; reservation: string; conf: string; arrival: string; departure: string; room: string | null; name: string; type: string | null; nat: string | null; id_type: string | null; sealed: string | null; expiry: string | null; age: string; foreign: Record<string, unknown> | null; phone: string | null; at: string | null; ref: string | null }>`
+        SELECT l.id AS line, r.id AS reservation, r.confirmation_no AS conf, l.arrival::text AS arrival, l.departure::text AS departure, rm.number AS room, s.full_name AS name, s.guest_type AS type, s.nationality AS nat, s.id_type, s.id_number_sealed AS sealed,
+               s.id_expiry::text AS expiry, s.age_group AS age, s.foreign_details AS foreign, g.phone, s.he_entered_at::text AS at, s.he_ref AS ref
+        FROM stay_guest s JOIN reservation_room l ON l.tenant_id = s.tenant_id AND l.id = s.reservation_room_id JOIN reservation r ON r.tenant_id = l.tenant_id AND r.id = l.reservation_id JOIN guest g ON g.id = r.guest_id
+        LEFT JOIN room_assignment a ON a.assignment_ref = l.id AND a.status IN ('IN_HOUSE','DEPARTED') LEFT JOIN room rm ON rm.id = a.room_id
+        WHERE s.tenant_id = ${currentTenant().tenantId} AND l.property_id = ${propertyId} AND s.id = ${guestId} AND s.voided_at IS NULL`.execute(trx);
+      const r = rows.rows[0];
+      if (!r) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Guest not found' });
+      await this.audit.record(trx, { action: 'frontdesk.view_id', resourceType: 'stay_guest', resourceId: guestId, propertyId, note: 'opened for Hotel Eye entry' });
+      const fd = (k: string) => { const v = r.foreign?.[k]; return v === undefined || v === null ? null : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v); };
+      const fields: Array<{ key: string; value: string | null }> = [
+        { key: 'name', value: r.name }, { key: 'guestType', value: r.type }, { key: 'ageGroup', value: r.age }, { key: 'nationality', value: r.nat }, { key: 'idType', value: r.id_type },
+        { key: 'idNumber', value: r.sealed ? this.box.open(r.sealed, this.aad(r.line)) : null }, { key: 'idExpiry', value: r.expiry },
+        { key: 'arrival', value: r.arrival }, { key: 'departure', value: r.departure }, { key: 'room', value: r.room }, { key: 'phone', value: r.phone }, { key: 'property', value: p.code },
+        ...['passportIssuePlace', 'visaType', 'stayExpiry', 'entryDate', 'entryPort', 'localAddress', 'nextDestination', 'formCRef', 'residentialPermitRef', 'remarks'].map((k) => ({ key: k, value: fd(k) })),
+      ];
+      return { id: guestId, confirmationNo: r.conf, fields: fields.filter((f) => f.value), entered: r.at ? { at: r.at, ref: r.ref } : null };
+    });
+  }
+
+  async hotelEyeMark(propertyId: string, userId: string, guestId: string, entered: boolean, ref: string | null) {
+    return this.tdb.tx(async (trx) => {
+      const s = await trx.selectFrom('stay_guest').select(['id', 'he_entered_at']).where('id', '=', guestId).where('property_id', '=', propertyId).where('voided_at', 'is', null).forUpdate().executeTakeFirst();
+      if (!s) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Guest not found' });
+      if (entered && s.he_entered_at) throw new ConflictException({ code: 'ALREADY_ENTERED', message: 'This person is already marked as entered on Hotel Eye' });
+      await trx.updateTable('stay_guest').set(entered ? { he_entered_at: sql`now()`, he_entered_by: userId, he_ref: ref } : { he_entered_at: null, he_entered_by: null, he_ref: null } as never).where('id', '=', guestId).execute();
+      await this.audit.record(trx, { action: entered ? 'hoteleye.entered' : 'hoteleye.undone', resourceType: 'stay_guest', resourceId: guestId, propertyId, after: entered ? { ref } : undefined });
+      return { id: guestId, entered };
+    });
+  }
+
   /** How complete the stored card is, by the matrix as it stands now. */
   private async registrationOf(trx: Trx, propertyId: string, reservationId: string, rows: Array<{ full_name: string; age_group: string; id_type: string | null; nationality: string | null; id_expiry: string | null; guest_type: string | null; documents: unknown; foreign_details: unknown; guardian_id: string | null; id: string }>) {
     const p = await trx.selectFrom('property').select('nicop_alone_ok').where('id', '=', propertyId).executeTakeFirstOrThrow();

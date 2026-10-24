@@ -46,6 +46,7 @@ export class MailService {
       if (!p) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Property not found' });
       if (i.purpose === 'GUEST') { if (!(await trx.selectFrom('reservation').select('id').where('id', '=', i.refId).where('property_id', '=', propertyId).executeTakeFirst())) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Booking not found' }); }
       else if (!(await trx.selectFrom('company').select('id').where('id', '=', i.refId).executeTakeFirst())) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Company not found' });
+      if (await trx.selectFrom('email_suppression').select('address').where('address', '=', i.to).executeTakeFirst()) throw fail(409, 'EMAIL_SUPPRESSED', 'This address bounced or was reported as spam before, so the system will not email it again. Check the address with the person, or ask a manager to allow it.');
       const recent = await sql<{ n: string }>`SELECT count(*)::text AS n FROM email_message WHERE tenant_id = ${tenantId} AND created_at > now() - interval '1 hour'`.execute(trx);
       if (Number(recent.rows[0]!.n) >= HOURLY_LIMIT) throw fail(429, 'EMAIL_LIMIT', 'Too many emails were sent in the last hour. Try again later.');
       const m = await trx.insertInto('email_message').values({ tenant_id: tenantId, property_id: propertyId, purpose: i.purpose, ref_id: i.refId, to_address: i.to, subject: i.subject, body: i.text, created_by: userId } as never).returning(['id']).executeTakeFirstOrThrow();
@@ -65,7 +66,19 @@ export class MailService {
   }
 
   async recent(propertyId: string, limit: number) {
-    return this.tdb.tx(async (trx) => ({ items: (await trx.selectFrom('email_message').select(['id', 'purpose', 'to_address', 'subject', 'status', 'error', 'created_at', 'sent_at']).where('property_id', '=', propertyId).orderBy('created_at', 'desc').limit(limit).execute())
-      .map((m) => ({ id: m.id, purpose: m.purpose, to: m.to_address, subject: m.subject, status: m.status, error: m.error, createdAt: m.created_at, sentAt: m.sent_at })) }));
+    return this.tdb.tx(async (trx) => ({ items: (await trx.selectFrom('email_message').select(['id', 'purpose', 'to_address', 'subject', 'status', 'error', 'feedback', 'created_at', 'sent_at']).where('property_id', '=', propertyId).orderBy('created_at', 'desc').limit(limit).execute())
+      .map((m) => ({ id: m.id, purpose: m.purpose, to: m.to_address, subject: m.subject, status: m.status, error: m.error ?? m.feedback, createdAt: m.created_at, sentAt: m.sent_at })) }));
+  }
+
+  async suppressions() {
+    return this.tdb.tx(async (trx) => ({ items: (await trx.selectFrom('email_suppression').selectAll().orderBy('created_at', 'desc').limit(200).execute()).map((x) => ({ address: x.address, reason: x.reason, detail: x.detail, since: x.created_at })) }));
+  }
+  /** A manager says the address is right after all (the mailbox was full, or it was fixed). */
+  async allow(propertyId: string, address: string) {
+    return this.tdb.tx(async (trx) => {
+      await trx.deleteFrom('email_suppression').where('address', '=', address.trim().toLowerCase()).execute();
+      await this.audit.record(trx, { action: 'email.allow', resourceType: 'email_suppression', resourceId: address.trim().toLowerCase(), propertyId });
+      return { allowed: true };
+    });
   }
 }

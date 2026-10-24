@@ -43,7 +43,14 @@ async function book(w: W, o: { arrival?: string; departure?: string; hold?: numb
   return { id: r.id as string, line: r.lines[0].id as string };
 }
 
+import { execFileSync } from 'node:child_process';
+import { createSign } from 'node:crypto';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { MailService } from '../src/mail/mail.service.js';
+import { MailFeedbackService } from '../src/mail/feedback.service.js';
+import { stringToSign } from '../src/mail/sns.js';
 const sent: Array<Record<string, any>> = [];
 let mail: MailService;
 beforeAll(() => {
@@ -76,5 +83,66 @@ describe('email sending', () => {
     delete process.env.MAIL_FROM;
     await code(call('POST', u(w, 'email/guest'), O, { reservationId: b.id, to: 'a@b.test', subject: 'Hi', text: 'Hello there guest' }), 503, 'EMAIL_NOT_CONFIGURED');
     expect((await ok(call('GET', u(w, 'email/status'), O))).configured).toBe(false);
+  });
+});
+
+const TOPIC = 'arn:aws:sns:ap-south-1:123456789012:hos-mail';
+describe('what became of each email', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sns-'));
+  execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dir, 'k.pem'), '-out', join(dir, 'c.pem'), '-days', '2', '-subj', '/CN=sns.test'], { stdio: 'ignore' });
+  const cert = readFileSync(join(dir, 'c.pem'), 'utf8'), key = readFileSync(join(dir, 'k.pem'), 'utf8');
+  const URL_ = 'https://sns.ap-south-1.amazonaws.com/SimpleNotificationService-x.pem';
+  const signed = (m: Record<string, any>, over: Record<string, any> = {}) => {
+    const base = { Type: 'Notification', MessageId: `m${++n}`, TopicArn: TOPIC, Timestamp: new Date().toISOString(), SignatureVersion: '2', SigningCertURL: URL_, ...m, ...over };
+    const sg = createSign('RSA-SHA256'); sg.update(stringToSign(base as never)); return { ...base, Signature: sg.sign(key, 'base64') };
+  };
+  const hook = (m: unknown) => app.inject({ method: 'POST', url: '/v1/hooks/ses', headers: { 'content-type': 'text/plain; charset=UTF-8' }, payload: JSON.stringify(m) });
+  const note = (body: object) => signed({ Message: JSON.stringify(body) });
+  let fb: MailFeedbackService; const confirmed: string[] = [];
+  beforeAll(() => { fb = app.get(MailFeedbackService); fb.certs = async () => cert; fb.confirm = async (u) => { confirmed.push(u); }; process.env.SES_SNS_TOPIC_ARN = TOPIC; process.env.MAIL_FROM = 'accounts@hotel.test'; });
+
+  it('believes only Amazon-signed messages for our own topic; a bounce marks the email, stops the address, and a manager can allow it again', async () => {
+    const w = await sunset(); const b = await book(w);
+    const one = async (to: string) => { const r = await ok(call('POST', u(w, 'email/guest'), O, { reservationId: b.id, to, subject: 'Hello', text: 'Hello there guest, welcome' })); return (await adminDb.selectFrom('email_message').select('provider_id').where('id', '=', r.id).executeTakeFirstOrThrow()).provider_id as string; };
+
+    const d = await one('ok@guest.test');
+    expect((await hook(note({ notificationType: 'Delivery', mail: { messageId: d }, delivery: { recipients: ['ok@guest.test'] } }))).statusCode).toBe(200);
+    expect((await ok(call('GET', u(w, 'email/recent'), O))).items[0].status).toBe('DELIVERED');
+
+    const id = await one('gone@guest.test');
+    const forged = note({ notificationType: 'Bounce', mail: { messageId: id }, bounce: { bounceType: 'Permanent', bouncedRecipients: [{ emailAddress: 'gone@guest.test' }] } });
+    expect((await hook({ ...forged, Message: forged.Message.replace('gone', 'other') })).statusCode).toBe(403);       // changed after signing
+    expect((await hook({ ...forged, TopicArn: 'arn:aws:sns:ap-south-1:999999999999:other' })).statusCode).toBe(403);
+    expect((await hook({ ...forged, SigningCertURL: 'https://evil.example.com/cert.pem' })).statusCode).toBe(403);
+    expect((await ok(call('GET', u(w, 'email/recent'), O))).items[0].status).toBe('SENT');
+    expect((await hook(forged)).statusCode).toBe(200);
+    const row = (await ok(call('GET', u(w, 'email/recent'), O))).items[0]; expect(row.status).toBe('BOUNCED'); expect(row.error).toContain('Permanent');
+    await code(call('POST', u(w, 'email/guest'), O, { reservationId: b.id, to: 'Gone@Guest.test', subject: 'Again', text: 'Hello there guest, again' }), 409, 'EMAIL_SUPPRESSED');
+    expect((await ok(call('GET', u(w, 'email/suppressed'), O))).items.map((x: any) => x.address)).toContain('gone@guest.test');
+    const hk = await staff(w, 'housekeeper'); expect((await call('DELETE', u(w, 'email/suppressed/gone@guest.test'), hk.h)).statusCode).toBe(403);
+    await ok(call('DELETE', u(w, 'email/suppressed/gone@guest.test'), O));
+    await one('gone@guest.test');
+
+    const soft = await one('full@guest.test');
+    await hook(note({ notificationType: 'Bounce', mail: { messageId: soft }, bounce: { bounceType: 'Transient', bounceSubType: 'MailboxFull', bouncedRecipients: [{ emailAddress: 'full@guest.test' }] } }));
+    expect((await ok(call('GET', u(w, 'email/recent'), O))).items[0]).toMatchObject({ status: 'SENT' });
+    await one('full@guest.test');
+
+    const spam = await one('angry@guest.test');
+    await hook(note({ eventType: 'Complaint', mail: { messageId: spam }, complaint: { complainedRecipients: [{ emailAddress: 'angry@guest.test' }], complaintFeedbackType: 'abuse' } }));
+    expect((await ok(call('GET', u(w, 'email/recent'), O))).items[0].status).toBe('COMPLAINED');
+    await code(call('POST', u(w, 'email/guest'), O, { reservationId: b.id, to: 'angry@guest.test', subject: 'x', text: 'Hello there guest, again' }), 409, 'EMAIL_SUPPRESSED');
+    await hook(note({ notificationType: 'Delivery', mail: { messageId: spam }, delivery: {} }));
+    expect((await ok(call('GET', u(w, 'email/recent'), O))).items[0].status).toBe('COMPLAINED');          // a later delivery does not undo a complaint
+  });
+
+  it('confirms the subscription only for our topic and an Amazon address, and does nothing when the topic is not set', async () => {
+    const sub = signed({ Type: 'SubscriptionConfirmation', Message: 'confirm', Token: 't', SubscribeURL: 'https://sns.ap-south-1.amazonaws.com/?Action=ConfirmSubscription&Token=t' });
+    expect((await hook(sub)).statusCode).toBe(200); expect(confirmed).toHaveLength(1);
+    const evil = signed({ Type: 'SubscriptionConfirmation', Message: 'confirm', Token: 't', SubscribeURL: 'https://evil.example.com/?x=1' });
+    expect((await hook(evil)).statusCode).toBe(200); expect(confirmed).toHaveLength(1);
+    delete process.env.SES_SNS_TOPIC_ARN;
+    expect((await hook(sub)).statusCode).toBe(403);
+    process.env.SES_SNS_TOPIC_ARN = TOPIC;
   });
 });

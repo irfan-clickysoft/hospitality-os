@@ -100,7 +100,10 @@ describe('check-in', () => {
     expect(shown.items[0].idNumber).toBe('35202-9999999-1');
     expect(await adminDb.selectFrom('audit_log').select('id').where('tenant_id', '=', T.tenantId).where('action', '=', 'frontdesk.view_id').where('resource_id', '=', b.id).execute()).toHaveLength(1);
     const fd = await addUser(T.tenantId, `fd${++n}@fd.test`); await assignRole(T.tenantId, fd, 'front_desk_agent', 'PROPERTY', w.pid);
-    await code(call('GET', url(w, b.id, b.line, 'guests') + '?reveal=true', as(T.tenantId, fd, { mfa: true })), 403, 'PERMISSION_DENIED');   // front desk sees masked numbers only
+    await code(call('GET', url(w, b.id, b.line, 'guests') + '?reveal=true', as(T.tenantId, fd)), 403, 'MFA_REQUIRED');                        // front desk may see full numbers, but only with a fresh second factor
+    expect((await ok(call('GET', url(w, b.id, b.line, 'guests') + '?reveal=true', as(T.tenantId, fd, { mfa: true })))).items[0].idNumber).toBe('35202-9999999-1');
+    const ro = await addUser(T.tenantId, `ro${++n}@fd.test`); await assignRole(T.tenantId, ro, 'read_only', 'PROPERTY', w.pid);
+    await code(call('GET', url(w, b.id, b.line, 'guests') + '?reveal=true', as(T.tenantId, ro, { mfa: true })), 403, 'PERMISSION_DENIED');   // roles without view-ID see masked numbers only
   });
 
   it('refuses early arrival, expired stays, missing room, bad documents, wrong residency and too many guests', async () => {
@@ -316,6 +319,30 @@ describe('the document matrix at check-in', () => {
     expect(x.csv).toContain('GB7000555'); expect(x.csv).toContain('Karachi airport'); expect(x.csv).toContain('Yes'); expect(x.csv).not.toContain('35202');
     const hk = await addUser(T.tenantId, `hk${++n}@fd.test`); await assignRole(T.tenantId, hk, 'housekeeper', 'PROPERTY', w.pid); await code(call('GET', url, as(T.tenantId, hk, { mfa: true })), 403, 'PERMISSION_DENIED');
     await code(call('GET', `${url}&to=2026-10-01`, OM), 400, 'VALIDATION_FAILED');
+  });
+
+  it('lists who still has to be entered, lays a person out ready to copy behind view-ID and a second factor, and tracks who entered them', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const docs = seen('FOREIGN_PASSPORT', 'PASSPORT_BIO_COPY', 'VISA_BASIS', 'ENTRY_STAMP');
+    const foreign = { passportIssuePlace: 'London', visaType: 'eVisa (tourist)', stayExpiry: '2026-12-10', entryDate: '2026-11-03', entryPort: 'Karachi airport', localAddress: 'Sunset BnB Boulevard, Karachi', nextDestination: 'Lahore', froInstruction: false, formCRef: 'C-1', residentialPermitRef: 'RP-2', remarks: 'none' };
+    expect((await walk(w, { adults: 1, occupants: [foreignAdult({ documents: docs, foreign, idNumber: 'GB7000777' })], guest: { fullName: 'Eye Tester', phone: '+44 7700 900777', nationality: 'GB' } })).statusCode).toBe(201);
+    const list = `/v1/properties/${w.pid}/registration/hotel-eye`;
+    const l = await ok(call('GET', list, O));
+    expect(l.pending).toBe(1); const g = l.items[0]; expect(g.entered).toBeNull(); expect(JSON.stringify(l)).not.toContain('GB7000777');
+    await code(call('GET', `${list}/${g.id}`, O), 403, 'MFA_REQUIRED');
+    const d = await ok(call('GET', `${list}/${g.id}`, OM));
+    const val = (k: string) => d.fields.find((f: any) => f.key === k)?.value;
+    expect(val('idNumber')).toBe('GB7000777'); expect(val('entryPort')).toBe('Karachi airport'); expect(val('phone')).toBe('+44 7700 900777');
+    const fd = await addUser(T.tenantId, `fd${++n}@fd.test`); await assignRole(T.tenantId, fd, 'front_desk_agent', 'PROPERTY', w.pid);
+    await code(call('GET', `${list}/${g.id}`, as(T.tenantId, fd)), 403, 'MFA_REQUIRED');                               // the desk may open a person, but only with a fresh second factor
+    expect((await ok(call('GET', `${list}/${g.id}`, as(T.tenantId, fd, { mfa: true })))).fields.find((f: any) => f.key === 'idNumber').value).toBe('GB7000777');
+    await ok(call('POST', `${list}/${g.id}/entered`, as(T.tenantId, fd), { ref: 'HE-2026-889' }));
+    await code(call('POST', `${list}/${g.id}/entered`, O, {}), 409, 'ALREADY_ENTERED');
+    expect((await ok(call('GET', list, O))).pending).toBe(0);
+    const done = await ok(call('GET', `${list}?state=done`, O)); expect(done.items[0].entered.ref).toBe('HE-2026-889'); expect(done.items[0].entered.by).toBeTruthy();
+    await ok(call('POST', `${list}/${g.id}/undo`, O, {})); expect((await ok(call('GET', list, O))).pending).toBe(1);
+    const hk = await addUser(T.tenantId, `hk${++n}@fd.test`); await assignRole(T.tenantId, hk, 'housekeeper', 'PROPERTY', w.pid);
+    await code(call('GET', list, as(T.tenantId, hk)), 403, 'PERMISSION_DENIED');
   });
 });
 
