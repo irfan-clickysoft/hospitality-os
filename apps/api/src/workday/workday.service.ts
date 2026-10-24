@@ -26,9 +26,9 @@ export class WorkdayService {
   async today(propertyId: string) {
     return this.tdb.tx(async (trx) => {
       const p = await this.folios.property(trx, propertyId); const bd = p.business_date; const t = currentTenant().tenantId; const cur = p.currency;
-      const arr = await sql<{ reservation_id: string; line_id: string; confirmation_no: string; status: string; guest: string; vip: boolean; do_not_rent: boolean; residency: string; source: string; at_risk: boolean; special: string | null;
+      const arr = await sql<{ reservation_id: string; line_id: string; confirmation_no: string; status: string; guest: string; vip: boolean; do_not_rent: boolean; residency: string; source: string; at_risk: boolean; special: string | null; eta: string | null;
         type_code: string; type_name: string; arrival: string; departure: string; adults: number; children: number; room_id: string | null; room_no: string | null; hk: string | null; blocked: boolean; deposit_paid: string; deposit_required: string }>`
-        SELECT r.id AS reservation_id, l.id AS line_id, r.confirmation_no, l.status, g.full_name AS guest, g.vip, g.do_not_rent, r.residency, r.source, r.at_risk, r.special_requests AS special,
+        SELECT r.id AS reservation_id, l.id AS line_id, r.confirmation_no, l.status, g.full_name AS guest, g.vip, g.do_not_rent, r.residency, r.source, r.at_risk, r.special_requests AS special, to_char(r.expected_arrival, 'HH24:MI') AS eta,
           rt.code AS type_code, rt.name AS type_name, l.arrival::text, l.departure::text, l.adults, l.children, rm.id AS room_id, rm.number AS room_no, rm.hk_status AS hk,
           (rm.id IS NOT NULL AND EXISTS (SELECT 1 FROM room_block b WHERE b.tenant_id = rm.tenant_id AND b.room_id = rm.id AND b.cancelled_at IS NULL AND b.start_date <= ${bd}::date AND b.end_date > ${bd}::date)) AS blocked,
           r.deposit_paid_minor::text AS deposit_paid, r.deposit_required_minor::text AS deposit_required
@@ -58,7 +58,7 @@ export class WorkdayService {
         }
         blockers.sort((x, y) => RANK[x.level] - RANK[y.level]);
         return { reservationId: a.reservation_id, lineId: a.line_id, confirmationNo: a.confirmation_no, status: a.status, guest: { name: a.guest, vip: a.vip }, roomType: { code: a.type_code, name: a.type_name }, adults: a.adults, children: a.children,
-          room: a.room_id ? { id: a.room_id, number: a.room_no!, hkStatus: a.hk! } : null, specialRequests: a.special, source: a.source, blockers, depositPaid: fmt(a.deposit_paid, cur), nights: Math.round((Date.parse(a.departure) - Date.parse(a.arrival)) / 86_400_000) };
+          room: a.room_id ? { id: a.room_id, number: a.room_no!, hkStatus: a.hk! } : null, specialRequests: a.special, expectedArrival: a.eta, source: a.source, blockers, depositPaid: fmt(a.deposit_paid, cur), nights: Math.round((Date.parse(a.departure) - Date.parse(a.arrival)) / 86_400_000) };
       });
       const departures = dep.rows.map((d) => {
         const blockers: Blocker[] = []; const bal = BigInt(d.balance ?? '0');

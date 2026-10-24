@@ -28,7 +28,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   const [step, setStep] = useState<'search' | 'options' | 'guest' | 'confirm' | 'done'>('search');
   const [arrival, setArrival] = useState(initial.arrival); const [nights, setNights] = useState(1); const [adults, setAdults] = useState(2); const [children, setChildren] = useState(0);
   const companies = useLive<{ items: Array<{ id: string; name: string; status: string }> }>(can('company.view') ? '/v1/companies' : null, 300_000);
-  const [companyId, setCompanyId] = useState('');
+  const [companyId, setCompanyId] = useState(''); const [eta, setEta] = useState('');
   const [foreign, setForeign] = useState(false); const [source, setSource] = useState<(typeof SOURCES)[number]>('PHONE');
   const [options, setOptions] = useState<Option[]>([]); const [chosen, setChosen] = useState<Option | null>(null);
   const [q, setQ] = useState(''); const [hits, setHits] = useState<GuestHit[]>([]); const [guest, setGuest] = useState<GuestHit | null>(null);
@@ -68,7 +68,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
 
   const book = async (g: { guestId?: string; guest?: Record<string, unknown> }, approval?: string) => {
     lastBook[1]({ g });
-    const body = { ...g, source, lines: [{ quoteToken: chosen!.quoteToken }], ...(hold ? { hold: holdKind === 'half' ? { minutes: holdHalf * 30 } : holdKind === 'days' ? { days: holdDays } : { untilDate: holdUntil } } : {}), ...(notes.trim() ? { notesInternal: notes.trim() } : {}), ...(ext.trim() ? { externalRef: ext.trim() } : {}), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
+    const body = { ...g, source, lines: [{ quoteToken: chosen!.quoteToken }], ...(hold ? { hold: holdKind === 'half' ? { minutes: holdHalf * 30 } : holdKind === 'days' ? { days: holdDays } : { untilDate: holdUntil } } : {}), ...(notes.trim() ? { notesInternal: notes.trim() } : {}), ...(ext.trim() ? { externalRef: ext.trim() } : {}), ...(eta ? { expectedArrival: eta } : {}), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
     const call = () => api<NonNullable<typeof result>>('POST', `${base}/reservations`, body, { 'idempotency-key': key });
     const r = await run(() => (approval ? withStepUp(call) : call()));
     if (r) { setResult(r); setStep('done'); }
@@ -137,6 +137,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
           </div>
         )}
         {hold && <p className="muted small">{t('bk.holdNote')}</p>}
+        <label>{t('eta.label')} ({t('common.optional')})<input type="time" value={eta} onChange={(e) => setEta(e.target.value)} dir="ltr" /></label>
         <label>{t('bk.extRef')} ({t('common.optional')})<input value={ext} onChange={(e) => setExt(e.target.value)} dir="ltr" /></label>
         <label>{t('common.note')} ({t('common.optional')})<input value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
         <ErrorLine code={problem?.code === 'DUPLICATE_GUEST' ? undefined : problem?.code} detail={problem?.detail} />

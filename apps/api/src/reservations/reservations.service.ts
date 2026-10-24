@@ -177,7 +177,7 @@ export class ReservationsService {
       external_ref: i.externalRef ?? null, company_id: first.companyId ?? null, residency: first.residency as 'RESIDENT' | 'NON_RESIDENT', currency: p.currency, option_expires_at: optionExpiresAt,
       guarantee_type: guaranteeType, at_risk: needsGuarantee, guarantee_deadline: needsGuarantee && deadlineHours ? new Date(now + deadlineHours * 3_600_000) : null,
       deposit_required_minor: needsGuarantee || first.companyId ? depositTotal.toString() : '0', notes_internal: i.notesInternal ?? null, notes_guest: i.notesGuest ?? null,
-      special_requests: i.specialRequests ?? null, created_by: userId,
+      special_requests: i.specialRequests ?? null, expected_arrival: i.expectedArrival ?? null, created_by: userId,
     } as never).returningAll().executeTakeFirstOrThrow();
 
     let lineNo = 0;
@@ -227,7 +227,7 @@ export class ReservationsService {
       residency: res.residency, guest: { id: guest.id, fullName: guest.full_name, phone: guest.phone, email: guest.email, nationality: guest.nationality, vip: guest.vip },
       guarantee: { type: res.guarantee_type, atRisk: res.at_risk, deadline: res.guarantee_deadline, depositRequired: fmt(res.deposit_required_minor, cur), depositPaid: fmt(res.deposit_paid_minor, cur), reconfirmedAt: res.reconfirmed_at },
       optionExpiresAt: res.option_expires_at, penalty: { amount: fmt(res.penalty_minor, cur), reason: res.penalty_reason, waived: res.penalty_waived },
-      notes: { internal: res.notes_internal, guest: res.notes_guest, specialRequests: res.special_requests }, totalExTax: fmt(total, cur), version: res.version, createdAt: res.created_at, cancelledAt: res.cancelled_at, cancelReason: res.cancel_reason,
+      notes: { internal: res.notes_internal, guest: res.notes_guest, specialRequests: res.special_requests }, expectedArrival: res.expected_arrival ? String(res.expected_arrival).slice(0, 5) : null, totalExTax: fmt(total, cur), version: res.version, createdAt: res.created_at, cancelledAt: res.cancelled_at, cancelReason: res.cancel_reason,
       lines: lines.map((l) => {
         const a = assigns.filter((x) => x.assignment_ref === l.id);
         const live = a.find((x) => x.status === 'ASSIGNED' || x.status === 'IN_HOUSE');
@@ -288,7 +288,7 @@ export class ReservationsService {
       const { res } = await this.load(trx, propertyId, id, true);
       const m: Record<string, unknown> = { version: sql`version + 1` };
       if (i.notesInternal !== undefined) m.notes_internal = i.notesInternal; if (i.notesGuest !== undefined) m.notes_guest = i.notesGuest;
-      if (i.specialRequests !== undefined) m.special_requests = i.specialRequests; if (i.externalRef !== undefined) m.external_ref = i.externalRef; if (i.marketSegment !== undefined) m.market_segment = i.marketSegment;
+      if (i.specialRequests !== undefined) m.special_requests = i.specialRequests; if (i.expectedArrival !== undefined) m.expected_arrival = i.expectedArrival || null; if (i.externalRef !== undefined) m.external_ref = i.externalRef; if (i.marketSegment !== undefined) m.market_segment = i.marketSegment;
       const after = await trx.updateTable('reservation').set(m as never).where('id', '=', id).where('version', '=', i.version).returning('id').executeTakeFirst();
       if (!after) throw stale();
       await this.history(trx, propertyId, id, { action: 'UPDATE_DETAILS', details: { fields: Object.keys(i).filter((k) => k !== 'version') } });
