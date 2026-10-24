@@ -125,12 +125,11 @@ export class DocumentsService {
     const tenantId = currentTenant().tenantId;
     return this.tdb.tx(async (trx) => {
       if (i.kind === 'INVOICE') await this.invoices.get(propertyId, i.refId); else await this.build(trx, propertyId, i.kind, i.refId);       // the document must exist, and belong to this property
-      let l = await trx.selectFrom('document_link').select(['token']).where('kind', '=', i.kind).where('ref_id', '=', i.refId).where('revoked_at', 'is', null).executeTakeFirst();
-      if (!l) {
-        const token = `${tenantId.replace(/-/g, '')}-${randomBytes(16).toString('hex')}`;
-        l = await trx.insertInto('document_link').values({ tenant_id: tenantId, property_id: propertyId, kind: i.kind, ref_id: i.refId, token, created_by: userId } as never).returning('token').executeTakeFirstOrThrow();
-        await this.audit.record(trx, { action: 'document.link_create', resourceType: i.kind.toLowerCase(), resourceId: i.refId, propertyId });
-      }
+      const had = await trx.selectFrom('document_link').select(['token']).where('kind', '=', i.kind).where('ref_id', '=', i.refId).where('revoked_at', 'is', null).executeTakeFirst();
+      if (!had) await trx.insertInto('document_link').values({ tenant_id: tenantId, property_id: propertyId, kind: i.kind, ref_id: i.refId, token: `${tenantId.replace(/-/g, '')}-${randomBytes(16).toString('hex')}`, created_by: userId } as never)
+        .onConflict((oc) => oc.columns(['tenant_id', 'kind', 'ref_id']).where('revoked_at', 'is', null).doNothing()).execute();
+      const l = (had ?? (await trx.selectFrom('document_link').select(['token']).where('kind', '=', i.kind).where('ref_id', '=', i.refId).where('revoked_at', 'is', null).executeTakeFirstOrThrow()));
+      if (!had) await this.audit.record(trx, { action: 'document.link_create', resourceType: i.kind.toLowerCase(), resourceId: i.refId, propertyId });
       return { token: l.token, url: `${(origin ?? process.env.PUBLIC_BASE_URL ?? '').replace(/\/$/, '')}/v1/guest/doc/${l.token}` };
     });
   }
@@ -143,6 +142,7 @@ export class DocumentsService {
     return runWithTenant({ tenantId: toUuid(token.slice(0, 32)) }, () => this.tdb.tx(async (trx) => {
       const l = await trx.selectFrom('document_link').selectAll().where('token', '=', token).where('revoked_at', 'is', null).executeTakeFirst();
       if (!l || (l.expires_at && new Date(l.expires_at) < new Date())) return null;
+      if (l.kind === 'QUOTATION') return null;                 // quotations have their own page and answer form
       if (l.kind === 'COMPANY_STATEMENT') {
         const cdoc = await this.companyDoc(l.ref_id).catch(() => null);
         if (!cdoc) return null;
@@ -181,12 +181,11 @@ export class DocumentsService {
     const tenantId = currentTenant().tenantId;
     await this.tdb.tx(async (trx) => { if (!(await trx.selectFrom('company').select('id').where('id', '=', companyId).executeTakeFirst())) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Company not found' }); });
     return this.tdb.tx(async (trx) => {
-      let l = await trx.selectFrom('document_link').select(['token']).where('kind', '=', 'COMPANY_STATEMENT').where('ref_id', '=', companyId).where('revoked_at', 'is', null).executeTakeFirst();
-      if (!l) {
-        const token = `${tenantId.replace(/-/g, '')}-${randomBytes(16).toString('hex')}`;
-        l = await trx.insertInto('document_link').values({ tenant_id: tenantId, property_id: propertyId, kind: 'COMPANY_STATEMENT', ref_id: companyId, token, created_by: userId } as never).returning('token').executeTakeFirstOrThrow();
-        await this.audit.record(trx, { action: 'document.link_create', resourceType: 'company_statement', resourceId: companyId, propertyId });
-      }
+      const had = await trx.selectFrom('document_link').select(['token']).where('kind', '=', 'COMPANY_STATEMENT').where('ref_id', '=', companyId).where('revoked_at', 'is', null).executeTakeFirst();
+      if (!had) await trx.insertInto('document_link').values({ tenant_id: tenantId, property_id: propertyId, kind: 'COMPANY_STATEMENT', ref_id: companyId, token: `${tenantId.replace(/-/g, '')}-${randomBytes(16).toString('hex')}`, created_by: userId } as never)
+        .onConflict((oc) => oc.columns(['tenant_id', 'kind', 'ref_id']).where('revoked_at', 'is', null).doNothing()).execute();
+      const l = (had ?? (await trx.selectFrom('document_link').select(['token']).where('kind', '=', 'COMPANY_STATEMENT').where('ref_id', '=', companyId).where('revoked_at', 'is', null).executeTakeFirstOrThrow()));
+      if (!had) await this.audit.record(trx, { action: 'document.link_create', resourceType: 'company_statement', resourceId: companyId, propertyId });
       return { token: l.token, url: `${(origin ?? process.env.PUBLIC_BASE_URL ?? '').replace(/\/$/, '')}/v1/guest/doc/${l.token}` };
     });
   }

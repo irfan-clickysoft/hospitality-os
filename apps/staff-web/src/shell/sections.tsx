@@ -20,6 +20,7 @@ export const SECTIONS: Section[] = [
     { id: 'cashier', label: 'nav.cashier', show: any('cashier.operate'), Page: L(() => import('../desk/Cashier.js'), 'Cashier') },
     { id: 'companies', label: 'nav.companies', show: any('company.view'), Page: L(() => import('../desk/Companies.js'), 'Companies') },
     { id: 'ota', label: 'nav.ota', show: any('ota.claim'), Page: L(() => import('../desk/OtaClaims.js'), 'OtaTab') },
+    { id: 'quotes', label: 'nav.quotes', show: any('reservation.view'), Page: L(() => import('../desk/Quotations.js'), 'Quotations') },
     { id: 'requests', label: 'nav.requests', show: any('reservation.view'), Page: L(() => import('../desk/GuestRequests.js'), 'GuestRequests') },
     { id: 'spaces', label: 'nav.spaces', show: any('space.view'), Page: L(() => import('../desk/Spaces.js'), 'Spaces') },
   ] },

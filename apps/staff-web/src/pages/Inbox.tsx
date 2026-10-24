@@ -7,7 +7,7 @@ import { Empty } from '../ui/kit.js';
 import { useInbox, type InboxItem } from '../shell/context.js';
 import { Link, useRoute, useSetQuery } from '../shell/router.js';
 
-const TARGET: Record<string, string> = { NO_SHOW_CANDIDATES: '/reservations?tab=bookings', COMPLIANCE_TASKS: '/tasks?tab=compliance', CHARGE_REVIEWS: '/tasks?tab=compliance', PAYMENT_TO_VERIFY: '/reservations?tab=cashier', WORK_ORDER_MINE: '/tasks?tab=maintenance', WORK_ORDER_URGENT: '/tasks?tab=maintenance' };
+const TARGET: Record<string, string> = { NO_SHOW_CANDIDATES: '/reservations?tab=bookings', COMPLIANCE_TASKS: '/tasks?tab=compliance', CHARGE_REVIEWS: '/tasks?tab=compliance', PAYMENT_TO_VERIFY: '/reservations?tab=cashier', QUOTATION_ACCEPTED: '/reservations?tab=quotes', QUOTATION_DECLINED: '/reservations?tab=quotes', WORK_ORDER_MINE: '/tasks?tab=maintenance', WORK_ORDER_URGENT: '/tasks?tab=maintenance' };
 export const inboxTarget = (i: InboxItem): string => (i.reservationId ? `/reservations/${i.reservationId}${i.kind === 'BALANCE_DUE' || i.kind === 'OVERDUE_DEPARTURE' ? '/check-out' : ''}` : TARGET[i.kind] ?? '/today');
 
 /** The shared inbox: everything that is waiting on someone, drawn from the records themselves, so an item disappears the moment its cause is fixed. */

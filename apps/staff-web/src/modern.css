@@ -246,3 +246,20 @@ a:not([class]), .crumbs a { color: var(--brand); text-underline-offset: 3px; } a
 .count, .navitem .count, .tab .count { background: #b3212a; color: #fff; }
 html:not([lang="ur"]) body { font-optical-sizing: auto; font-feature-settings: "cv11", "ss03"; }   /* single-storey a, rounder letterforms: friendlier on small screens */
 .stat-card strong, .kpi strong, .big, td.num, .bill td, .room-no, .tile-no { font-variant-numeric: tabular-nums; }
+
+/* ── arrivals by time ── */
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--tonal); border-radius: 12px; margin: 14px 0 4px; }
+.seg button { min-height: 34px; padding: 0 14px; border-radius: 9px; background: transparent; color: var(--muted); font-size: .88rem; } .seg button.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow-1), 0 0 0 1px var(--line); }
+.timeline-day { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 4px; }
+.tl-slot { display: grid; grid-template-columns: 64px 1fr; gap: 12px; position: relative; padding-bottom: 14px; }
+.tl-slot::before { content: ""; position: absolute; inset-block: 26px 0; inset-inline-start: 31px; inline-size: 2px; background: var(--line); border-radius: 1px; } .tl-slot:last-child::before { display: none; }
+.tl-hour { position: relative; z-index: 1; align-self: start; text-align: center; padding: 4px 0; border-radius: 10px; background: var(--tint); color: var(--brand); font-weight: 750; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.tl-slot > .queue { margin: 0; }
+.eta-input { max-inline-size: 180px; }
+@media (max-width: 599px) { .tl-slot { grid-template-columns: 52px 1fr; gap: 8px; } .tl-slot::before { inset-inline-start: 25px; } .tl-hour { font-size: .75rem; } }
+/* ── quotations ── */
+.sheet.wide { max-width: 1040px; } @media (min-width: 700px) { .sheet.wide { max-width: 1040px; } }
+.qe { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr); align-items: start; } @media (min-width: 900px) { .qe { grid-template-columns: minmax(0, 1fr) 340px; } .qe-side { position: sticky; top: 0; display: grid; gap: 12px; } }
+.qe-side .card { padding: 16px; } .pv-line { padding-bottom: 10px; border-bottom: 1px solid var(--line); } .pv-line ul { margin: 4px 0; } .ok { color: var(--ok-fg); } .card.ok { background: var(--ok-bg); }
+.span2 { grid-column: 1 / -1; } .card.inner.stack { gap: 10px; }
+.qe .chips { flex-wrap: wrap; overflow: visible; }
