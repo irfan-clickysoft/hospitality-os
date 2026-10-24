@@ -21,13 +21,13 @@ export const HkBadge = ({ status }: { status: string }) => { const { t } = useT(
 export const PriorityBadge = ({ p }: { p: number }) => { const { t } = useT(); return p <= 2 ? <Badge tone={p === 1 ? 'urgent' : 'high'}>{t(`priority.${p}` as Key)}</Badge> : null; };
 
 /** Bottom sheet (full width on a phone). Escape and the backdrop close it. */
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Sheet({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   const { t } = useT();
   useEffect(() => { const f = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', f); return () => window.removeEventListener('keydown', f); }, [onClose]);
   return (
     <div className="sheet-wrap" role="dialog" aria-modal="true" aria-label={title}>
       <button className="sheet-backdrop" aria-label={t('common.close')} onClick={onClose} />
-      <div className="sheet"><div className="sheet-head"><h2>{title}</h2><button className="icon" onClick={onClose} aria-label={t('common.close')}>✕</button></div>{children}</div>
+      <div className={`sheet${wide ? ' wide' : ''}`}><div className="sheet-head"><h2>{title}</h2><button className="icon" onClick={onClose} aria-label={t('common.close')}>✕</button></div>{children}</div>
     </div>
   );
 }

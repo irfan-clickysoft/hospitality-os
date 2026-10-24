@@ -198,11 +198,10 @@ export class QuotationsService {
     const pricing = cur.q.status === 'DRAFT' ? await this.price(propertyId, userId, body, cur.lines.map((l) => l.id)) : cur.q.pricing!;
     const tenantId = currentTenant().tenantId;
     return this.tdb.tx(async (trx) => {
-      let l = await trx.selectFrom('document_link').select(['token']).where('kind', '=', 'QUOTATION').where('ref_id', '=', id).where('revoked_at', 'is', null).executeTakeFirst();
-      if (!l) {
-        const token = `${tenantId.replace(/-/g, '')}-${randomBytes(16).toString('hex')}`;
-        l = await trx.insertInto('document_link').values({ tenant_id: tenantId, property_id: propertyId, kind: 'QUOTATION', ref_id: id, token, created_by: userId } as never).returning('token').executeTakeFirstOrThrow();
-      }
+      // two requests at once (the message and the email being written together) must end up with the same link
+      await trx.insertInto('document_link').values({ tenant_id: tenantId, property_id: propertyId, kind: 'QUOTATION', ref_id: id, token: `${tenantId.replace(/-/g, '')}-${randomBytes(16).toString('hex')}`, created_by: userId } as never)
+        .onConflict((oc) => oc.columns(['tenant_id', 'kind', 'ref_id']).where('revoked_at', 'is', null).doNothing()).execute();
+      const l = await trx.selectFrom('document_link').select(['token']).where('kind', '=', 'QUOTATION').where('ref_id', '=', id).where('revoked_at', 'is', null).executeTakeFirstOrThrow();
       if (cur.q.status === 'DRAFT') {
         await trx.updateTable('quotation').set({ status: 'SENT', pricing: JSON.stringify(pricing), sent_at: sql`now()`, sent_by: userId, updated_at: sql`now()`, version: sql`version + 1` } as never).where('id', '=', id).execute();
         await this.audit.record(trx, { action: 'quotation.send', resourceType: 'quotation', resourceId: id, propertyId, after: { total: pricing.total } });
