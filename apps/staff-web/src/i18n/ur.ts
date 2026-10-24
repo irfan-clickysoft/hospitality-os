@@ -3,7 +3,7 @@ import { uxUr } from './ux.js';
 
 /** اردو — same keys as English; the compiler rejects a missing or extra key. */
 export const ur: Record<Key, string> = {
-  'app.name': 'سن سیٹ سٹاف',
+  'app.name': 'اسٹے 360',
   'common.loading': 'لوڈ ہو رہا ہے…', 'common.retry': 'دوبارہ کوشش کریں', 'common.cancel': 'منسوخ', 'common.save': 'محفوظ کریں', 'common.close': 'بند کریں', 'common.back': 'واپس', 'common.optional': 'اختیاری',
   'common.refresh': 'تازہ کریں', 'common.none': 'یہاں کچھ نہیں', 'common.room': 'کمرہ', 'common.note': 'نوٹ', 'common.reason': 'وجہ', 'common.yes': 'جی ہاں', 'common.no': 'نہیں',
   'login.title': 'لاگ اِن کریں', 'login.tenant': 'کمپنی کوڈ', 'login.email': 'ای میل', 'login.password': 'پاس ورڈ', 'login.submit': 'لاگ اِن', 'login.mfa': 'اپنا 6 ہندسوں کا کوڈ درج کریں', 'login.mfaSubmit': 'تصدیق کریں',

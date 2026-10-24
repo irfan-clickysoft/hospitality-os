@@ -8,7 +8,7 @@
 :root {
   --font: "Inter Variable", "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Naskh Arabic", "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", Tahoma, system-ui, sans-serif;
   --bg: #f3f5f8; --bg2: #e9edf2; --card: #ffffff; --ink: #11161d; --muted: #566171; --line: #e4e8ee; --line-soft: #edf0f4; --line-strong: #8591a1;
-  --brand: #0b6a7d; --brand-ink: #ffffff; --brand-hover: #095868; --tonal: #eaf0f4; --tonal-hover: #dde6ed; --tint: #e3f1f4; --accent: #f4a259;
+  --brand: #0b63c9; --brand-ink: #ffffff; --brand-hover: #084fa3; --brand-2: #19b8ff; --tonal: #eaf0f8; --tonal-hover: #dce6f3; --tint: #e4efff; --accent: #f4a259;
   --top-bg: rgba(255, 255, 255, .78); --nav-bg: transparent; --nav-ink: #2b3542; --nav-on: #ffffff; --focus: #0a62c9;
   --r-sm: 10px; --r-md: 14px; --r-lg: 20px; --radius: 18px;
   --shadow-1: 0 1px 2px rgba(17, 24, 39, .05), 0 1px 1px rgba(17, 24, 39, .03);
@@ -16,17 +16,23 @@
   --shadow-3: 0 12px 40px rgba(17, 24, 39, .18), 0 2px 8px rgba(17, 24, 39, .08);
   --ease: cubic-bezier(.2, .7, .2, 1);
 }
-@media (prefers-color-scheme: dark) {
-  :root {
+:root[data-theme="dark"] {
     --bg: #0d1217; --bg2: #151c23; --card: #151c23; --ink: #eef2f6; --muted: #a2afbc; --line: #232d37; --line-soft: #1c252e; --line-strong: #7f8e9d;
-    --brand: #55b8cc; --brand-ink: #04151a; --brand-hover: #75c8d8; --tonal: #1e2831; --tonal-hover: #27333e; --tint: #12303a;
-    --top-bg: rgba(21, 28, 35, .78); --nav-ink: #cdd6df; --nav-on: #1e2831; --focus: #8cc0f5;
+    --brand: #5cb6ff; --brand-ink: #041423; --brand-hover: #85c9ff; --brand-2: #19b8ff; --tonal: #1e2831; --tonal-hover: #27333e; --tint: #112b47;
+    --top-bg: rgba(21, 28, 35, .78); --nav-bg: transparent; --nav-ink: #cdd6df; --nav-on: #1e2831; --focus: #8cc0f5;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, .4); --shadow-2: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 20px rgba(0, 0, 0, .35); --shadow-3: 0 12px 40px rgba(0, 0, 0, .6);
+  }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1217; --bg2: #151c23; --card: #151c23; --ink: #eef2f6; --muted: #a2afbc; --line: #232d37; --line-soft: #1c252e; --line-strong: #7f8e9d;
+    --brand: #5cb6ff; --brand-ink: #041423; --brand-hover: #85c9ff; --brand-2: #19b8ff; --tonal: #1e2831; --tonal-hover: #27333e; --tint: #112b47;
+    --top-bg: rgba(21, 28, 35, .78); --nav-bg: transparent; --nav-ink: #cdd6df; --nav-on: #1e2831; --focus: #8cc0f5;
     --shadow-1: 0 1px 2px rgba(0, 0, 0, .4); --shadow-2: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 20px rgba(0, 0, 0, .35); --shadow-3: 0 12px 40px rgba(0, 0, 0, .6);
   }
 }
 
 /* ── type ── */
-html, body { font-family: var(--font); font-size: 16px; line-height: 1.5; letter-spacing: -.003em; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+html { font-size: 100%; } html, body { font-family: var(--font); font-size: 1rem; line-height: 1.5; letter-spacing: -.003em; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 html[lang="ur"] body { letter-spacing: 0; }
 body { background: var(--bg); }
 h1, h2, h3 { letter-spacing: -.02em; font-weight: 700; } html[lang="ur"] h1, html[lang="ur"] h2, html[lang="ur"] h3 { letter-spacing: 0; }
@@ -39,7 +45,7 @@ h1 { font-size: 1.75rem; } h2 { font-size: 1.3rem; } h3 { font-size: 1.05rem; }
 button, a.button { border-radius: var(--r-md); border: 0; background: var(--tonal); color: var(--ink); font-weight: 600; min-height: 44px; padding: 0 18px; box-shadow: none; transition: background-color .15s var(--ease), box-shadow .15s var(--ease), transform .08s var(--ease); }
 a.button { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 button:hover:not(:disabled), a.button:hover { background: var(--tonal-hover); }
-button.primary, a.button.primary, .button.primary { background: var(--brand); color: var(--brand-ink); border: 0; box-shadow: 0 1px 2px rgba(11, 106, 125, .35), 0 4px 12px rgba(11, 106, 125, .22); font-weight: 650; }
+button.primary, a.button.primary, .button.primary { background: var(--brand); color: var(--brand-ink); border: 0; box-shadow: 0 1px 2px color-mix(in srgb, var(--brand) 40%, transparent), 0 4px 12px color-mix(in srgb, var(--brand) 25%, transparent); font-weight: 650; }
 button.primary:hover:not(:disabled), a.button.primary:hover { background: var(--brand-hover); }
 button.danger { background: var(--danger-fg); color: var(--card); box-shadow: 0 1px 2px rgba(164, 38, 44, .3); }
 button.link { background: none; color: var(--brand); text-decoration: none; font-weight: 600; padding: 0 8px; } button.link:hover:not(:disabled) { background: var(--tint); }
@@ -127,7 +133,7 @@ hr { border: 0; border-top: 1px solid var(--line); }
 .tab.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow-1), 0 0 0 1px var(--line); font-weight: 700; }
 .chips { padding-block: 8px; gap: 8px; }
 .chip { background: var(--card); border: 1px solid var(--line); color: var(--ink); border-radius: 999px; min-height: 38px; padding: 0 16px; font-weight: 600; box-shadow: var(--shadow-1); }
-.chip:hover:not(.on) { background: var(--tonal); } .chip.on { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); box-shadow: 0 2px 8px rgba(11, 106, 125, .3); }
+.chip:hover:not(.on) { background: var(--tonal); } .chip.on { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); box-shadow: 0 2px 8px color-mix(in srgb, var(--brand) 32%, transparent); }
 .row > .chip { margin-block: 2px; }
 
 /* ── lists, rows ── */
@@ -192,7 +198,7 @@ body:has(.login) { background: radial-gradient(900px 500px at 15% -10%, color-mi
 
 /* ── the action bar at the foot of the check-in/out flows ── */
 .actionbar { background: var(--top-bg); -webkit-backdrop-filter: saturate(180%) blur(18px); backdrop-filter: saturate(180%) blur(18px); border-top: 1px solid var(--line); box-shadow: 0 -8px 24px rgba(17, 24, 39, .06); }
-.stepno { background: var(--brand); box-shadow: 0 2px 6px rgba(11, 106, 125, .35); font-weight: 700; }
+.stepno { background: var(--brand); box-shadow: 0 2px 6px color-mix(in srgb, var(--brand) 35%, transparent); font-weight: 700; }
 
 /* ── smooth scrolling and scrollbars ── */
 * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 25%, transparent) transparent; }
@@ -263,3 +269,43 @@ html:not([lang="ur"]) body { font-optical-sizing: auto; font-feature-settings: "
 .qe-side .card { padding: 16px; } .pv-line { padding-bottom: 10px; border-bottom: 1px solid var(--line); } .pv-line ul { margin: 4px 0; } .ok { color: var(--ok-fg); } .card.ok { background: var(--ok-bg); }
 .span2 { grid-column: 1 / -1; } .card.inner.stack { gap: 10px; }
 .qe .chips { flex-wrap: wrap; overflow: visible; }
+
+/* ───────── Stay360 logo, sign-in and the top-bar mark ───────── */
+.brandlink { display: inline-flex; align-items: center; color: var(--ink); padding-inline: 4px; border-radius: 10px; } .brandlink:hover { background: var(--tonal); }
+.login-logo { margin: 0 0 18px; display: flex; justify-content: center; color: var(--ink); } .login-logo .logo-full { height: auto; max-height: 92px; }
+.login-theme { position: absolute; top: 14px; inset-inline-start: 14px; }
+.login .lang { z-index: 1; }
+.logo-mark, .logo-full { display: block; flex: none; }
+@media (max-width: 899px) { .topbar .brandlink { order: -1; } }
+
+/* ───────── display and accessibility choices ───────── */
+.choice { border: 0; padding: 0; margin: 0; min-width: 0; } .choice legend { font-weight: 650; padding: 0; margin-bottom: 8px; color: var(--ink); }
+.choice-row { display: flex; flex-wrap: wrap; gap: 8px; } .choice-opt { display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 16px; border-radius: var(--r-md); background: var(--tonal); color: var(--ink); font-weight: 600; cursor: pointer; border: 2px solid transparent; }
+.choice-opt input { position: absolute; opacity: 0; inline-size: 1px; block-size: 1px; } .choice-opt.on { background: var(--tint); border-color: var(--brand); color: var(--brand); } .choice-opt:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+label.check { align-items: flex-start; color: var(--ink); font-size: 1rem; font-weight: 400; }
+
+/* text size: everything is in rem, so the whole app scales */
+html[data-text="large"] { font-size: 112.5%; } html[data-text="xlarge"] { font-size: 125%; }
+html[lang="ur"] body { font-size: 1.125rem; }
+html[data-text="xlarge"] .rail { --rail-w: 280px; } html[data-text="large"] .app, html[data-text="xlarge"] .app { --rail-w: 270px; }
+
+/* calmer motion, when asked for here (the device's own setting is already respected) */
+html[data-motion="reduce"] *, html[data-motion="reduce"] *::before, html[data-motion="reduce"] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+
+/* higher contrast: stronger ink and borders, solid bars, a bold focus ring, links always underlined */
+:root[data-contrast="high"] { --ink: #000; --muted: #26303a; --line: #3b4654; --line-soft: #3b4654; --line-strong: #1b2430; --brand: #0a4aa6; --brand-hover: #07367a; --tint: #dbe8ff; --tonal: #e3e9f1; --tonal-hover: #cfd8e4; --focus: #002e8a; --top-bg: #ffffff; --nav-ink: #000;
+  --ok-fg: #0d4a24; --warn-fg: #6b3500; --danger-fg: #8a0f14; --info-fg: #073b8a; --neutral-fg: #1f2933; }
+:root[data-theme="dark"][data-contrast="high"] { --bg: #000; --bg2: #0a0a0a; --card: #0a0a0a; --ink: #fff; --muted: #dbe3ea; --line: #c2ccd6; --line-soft: #c2ccd6; --line-strong: #e8eef3; --brand: #8fd0ff; --brand-ink: #000; --brand-hover: #b9e1ff; --tint: #0d2b49; --tonal: #1a232c; --tonal-hover: #26323d; --focus: #ffd60a; --top-bg: #000; --nav-ink: #fff;
+  --ok-fg: #8ff0b0; --warn-fg: #ffd37a; --danger-fg: #ffb3b6; --info-fg: #a6d4ff; --neutral-fg: #f1f4f7; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"])[data-contrast="high"] { --bg: #000; --bg2: #0a0a0a; --card: #0a0a0a; --ink: #fff; --muted: #dbe3ea; --line: #c2ccd6; --line-soft: #c2ccd6; --line-strong: #e8eef3; --brand: #8fd0ff; --brand-ink: #000; --brand-hover: #b9e1ff; --tint: #0d2b49; --tonal: #1a232c; --tonal-hover: #26323d; --focus: #ffd60a; --top-bg: #000; --nav-ink: #fff;
+  --ok-fg: #8ff0b0; --warn-fg: #ffd37a; --danger-fg: #ffb3b6; --info-fg: #a6d4ff; --neutral-fg: #f1f4f7; } }
+html[data-contrast="high"] { --shadow-1: none; --shadow-2: none; }
+html[data-contrast="high"] .topbar, html[data-contrast="high"] .bottomnav, html[data-contrast="high"] .actionbar { -webkit-backdrop-filter: none; backdrop-filter: none; border-color: var(--line-strong); }
+html[data-contrast="high"] .card, html[data-contrast="high"] .block, html[data-contrast="high"] .step, html[data-contrast="high"] .ctx-card, html[data-contrast="high"] .kpi, html[data-contrast="high"] .qrow, html[data-contrast="high"] .row-card, html[data-contrast="high"] .stat, html[data-contrast="high"] .guestcard { border: 2px solid var(--line-strong); }
+html[data-contrast="high"] button, html[data-contrast="high"] a.button { border: 2px solid var(--line-strong); }
+html[data-contrast="high"] button.primary, html[data-contrast="high"] a.button.primary { border-color: var(--ink); }
+html[data-contrast="high"] .st, html[data-contrast="high"] .badge { border: 2px solid currentColor !important; }
+html[data-contrast="high"] a, html[data-contrast="high"] button.link { text-decoration: underline; text-underline-offset: 3px; }
+html[data-contrast="high"] :focus-visible { outline: 4px solid var(--focus); outline-offset: 3px; }
+html[data-contrast="high"] .navitem.on { border: 2px solid var(--brand); }
+@media (prefers-contrast: more) { :root:not([data-contrast]) { --line-strong: #1b2430; --muted: #26303a; } }
