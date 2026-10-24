@@ -6,7 +6,7 @@
    Logical properties only, so Urdu (right-to-left) mirrors by itself.
    ───────────────────────────────────────────────────────────────────────────────────────────── */
 :root {
-  --font: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Naskh Arabic", "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", Tahoma, system-ui, sans-serif;
+  --font: "Inter Variable", "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Naskh Arabic", "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", Tahoma, system-ui, sans-serif;
   --bg: #f3f5f8; --bg2: #e9edf2; --card: #ffffff; --ink: #11161d; --muted: #566171; --line: #e4e8ee; --line-soft: #edf0f4; --line-strong: #8591a1;
   --brand: #0b6a7d; --brand-ink: #ffffff; --brand-hover: #095868; --tonal: #eaf0f4; --tonal-hover: #dde6ed; --tint: #e3f1f4; --accent: #f4a259;
   --top-bg: rgba(255, 255, 255, .78); --nav-bg: transparent; --nav-ink: #2b3542; --nav-on: #ffffff; --focus: #0a62c9;
@@ -211,7 +211,7 @@ a:not([class]), .crumbs a { color: var(--brand); text-underline-offset: 3px; } a
 /* ── Today ── */
 .today-hero { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px 24px; flex-wrap: wrap; margin: 4px 0 22px; }
 .today-hello { font-size: clamp(1.7rem, 4vw, 2.4rem); letter-spacing: -.035em; margin: 4px 0 0; line-height: 1.1; font-weight: 750; }
-.today-date { display: flex; align-items: baseline; gap: 0; } .today-date h1 { font-size: inherit; letter-spacing: inherit; margin: 0; font-weight: inherit; color: inherit; text-transform: inherit; }
+.today-date { display: flex; align-items: baseline; gap: .4em; } .today-date h1 { font-size: inherit; letter-spacing: inherit; margin: 0; font-weight: inherit; color: inherit; text-transform: inherit; }
 .today-date { color: var(--brand); font-weight: 700; font-size: .85rem; letter-spacing: .08em; text-transform: uppercase; }
 .today-hero .head-actions .button { min-height: 46px; padding: 0 22px; }
 .stat-cards { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 0 0 22px; }
@@ -244,3 +244,5 @@ a:not([class]), .crumbs a { color: var(--brand); text-underline-offset: 3px; } a
   .avatar { display: none; } .room-pill { display: none; }
 }
 .count, .navitem .count, .tab .count { background: #b3212a; color: #fff; }
+html:not([lang="ur"]) body { font-optical-sizing: auto; font-feature-settings: "cv11", "ss03"; }   /* single-storey a, rounder letterforms: friendlier on small screens */
+.stat-card strong, .kpi strong, .big, td.num, .bill td, .room-no, .tile-no { font-variant-numeric: tabular-nums; }
