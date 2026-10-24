@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { GuestPortalService } from '../guest-portal/guest-portal.service.js';
 import { ArService } from '../companies/ar.service.js';
+import { RateProposalsService } from '../rate-proposals/service.js';
 import { QuotationsService } from '../quotations/service.js';
 import { DocumentsService } from '../documents/documents.service.js';
 import { TaxService } from '../tax/tax.service.js';
@@ -22,7 +23,7 @@ const METHOD: Record<string, string> = { CASH: 'Cash', CARD_SLIP: 'Card', WALLET
 
 @Injectable()
 export class MessagesService {
-  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(GuestPortalService) private readonly portal: GuestPortalService, @Inject(TaxService) private readonly tax: TaxService, @Inject(DocumentsService) private readonly docs: DocumentsService, @Inject(ArService) private readonly ar: ArService, @Inject(QuotationsService) private readonly quotes: QuotationsService) {}
+  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(GuestPortalService) private readonly portal: GuestPortalService, @Inject(TaxService) private readonly tax: TaxService, @Inject(DocumentsService) private readonly docs: DocumentsService, @Inject(ArService) private readonly ar: ArService, @Inject(QuotationsService) private readonly quotes: QuotationsService, @Inject(RateProposalsService) private readonly proposals: RateProposalsService) {}
 
   /** Every message the system sends, with the wording in use (the owner's, or the built-in one). */
   async list() {
@@ -194,5 +195,27 @@ export class MessagesService {
     };
     const dt = defaultTemplate('QUOTATION', channel); const subj = d.stored ? d.stored.subject : dt.subject;
     return { text: render(d.stored?.body ?? dt.body, vars), subject: channel === 'EMAIL' && subj ? render(subj, vars) : null, phone: q.phone, email: q.email, recipient: vars.recipient_name, url: link };
+  }
+
+  /** The message that sends a company its rate proposal, with the private link. Making it marks the proposal as sent. */
+  async composeProposal(propertyId: string, proposalId: string, origin?: string, channel: Channel = 'WHATSAPP') {
+    const actorId = currentTenant().actorId;
+    const link = (await this.proposals.linkFor(propertyId, actorId!, proposalId, origin)).url;
+    const q = await this.proposals.get(propertyId, proposalId);
+    const d = await this.tdb.tx(async (trx) => {
+      const [p, actor, stored, co] = await Promise.all([
+        trx.selectFrom('property').select(['name', 'city']).where('id', '=', propertyId).executeTakeFirstOrThrow(),
+        actorId ? trx.selectFrom('staff_user').select('full_name').where('id', '=', actorId).executeTakeFirst() : undefined,
+        trx.selectFrom('message_template').selectAll().where('event', '=', 'RATE_PROPOSAL').where('channel', '=', channel).executeTakeFirst(),
+        q.companyId ? trx.selectFrom('company').select(['contact_name', 'contact_phone', 'contact_email']).where('id', '=', q.companyId).executeTakeFirst() : undefined,
+      ]);
+      return { p, actor, stored, co };
+    });
+    const vars: Record<string, string | null> = {
+      recipient_name: q.attnName ?? d.co?.contact_name ?? q.companyName, company_name: q.companyName, property_name: d.p.city ? `${d.p.name}, ${d.p.city}` : d.p.name, manager_name: d.actor?.full_name ?? null, property_contact: null,
+      proposal_title: q.title ?? 'corporate room rates proposal', reference_number: q.reference ?? q.number, valid_from: date(q.validFrom), valid_to: date(q.validTo), document_link: link,
+    };
+    const dt = defaultTemplate('RATE_PROPOSAL', channel); const subj = d.stored ? d.stored.subject : dt.subject;
+    return { text: render(d.stored?.body ?? dt.body, vars), subject: channel === 'EMAIL' && subj ? render(subj, vars) : null, phone: d.co?.contact_phone ?? null, email: d.co?.contact_email ?? null, recipient: vars.recipient_name, url: link };
   }
 }

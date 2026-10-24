@@ -29,6 +29,8 @@ export class MailController {
   company(@Param('propertyId', uuid()) p: string, @Param('companyId', uuid()) c: string, @Body() b: unknown) { const x = parse(S.CompanySend, b); return this.svc.send(p, currentTenant().actorId!, { purpose: 'COMPANY', refId: c, ...x }); }
   @Post('quotation/:quotationId') @RequirePermission('reservation.create', P) @HttpCode(200)
   quotation(@Param('propertyId', uuid()) p: string, @Param('quotationId', uuid()) q: string, @Body() b: unknown) { const x = parse(S.QuotationSend, b); return this.svc.send(p, currentTenant().actorId!, { purpose: 'QUOTATION', refId: q, ...x }); }
+  @Post('proposal/:proposalId') @RequirePermission('company.manage', P) @HttpCode(200)
+  proposal(@Param('propertyId', uuid()) p: string, @Param('proposalId', uuid()) q: string, @Body() b: unknown) { const x = parse(S.ProposalSend, b); return this.svc.send(p, currentTenant().actorId!, { purpose: 'PROPOSAL', refId: q, ...x }); }
 }
 
 /** Where Amazon reports what became of each email. Public, but nothing is believed unless Amazon signed it for our own topic. */
