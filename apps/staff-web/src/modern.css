@@ -257,3 +257,9 @@ html:not([lang="ur"]) body { font-optical-sizing: auto; font-feature-settings: "
 .tl-slot > .queue { margin: 0; }
 .eta-input { max-inline-size: 180px; }
 @media (max-width: 599px) { .tl-slot { grid-template-columns: 52px 1fr; gap: 8px; } .tl-slot::before { inset-inline-start: 25px; } .tl-hour { font-size: .75rem; } }
+/* ── quotations ── */
+.sheet.wide { max-width: 1040px; } @media (min-width: 700px) { .sheet.wide { max-width: 1040px; } }
+.qe { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr); align-items: start; } @media (min-width: 900px) { .qe { grid-template-columns: minmax(0, 1fr) 340px; } .qe-side { position: sticky; top: 0; display: grid; gap: 12px; } }
+.qe-side .card { padding: 16px; } .pv-line { padding-bottom: 10px; border-bottom: 1px solid var(--line); } .pv-line ul { margin: 4px 0; } .ok { color: var(--ok-fg); } .card.ok { background: var(--ok-bg); }
+.span2 { grid-column: 1 / -1; } .card.inner.stack { gap: 10px; }
+.qe .chips { flex-wrap: wrap; overflow: visible; }

@@ -7,6 +7,8 @@ export interface QuoteClaims {
   channel: string; residency: string; companyId: string | null; currency: string; subtotalMinor: string; discountPct: number; discountApproved: boolean;
   /** Percentage (basis points) for each night in stay order, when nights are discounted differently; absent means discountPct on every night. */
   nightBp?: number[];
+  /** A fixed amount off this room's stay (minor units), instead of a percentage. */
+  discountAmountMinor?: string;
   depositDueMinor: string; nightsHash: string; exp: number;
 }
 

@@ -33,4 +33,8 @@ export class MessagesController {
   /** Sends a company its statement with a private link. */
   @Post('properties/:propertyId/companies/:companyId/message') @RequirePermission('company.view', P) @HttpCode(200)
   company(@Param('propertyId', new ParseUUIDPipe()) p: string, @Param('companyId', new ParseUUIDPipe()) c: string, @Query('channel') channel?: string, @Headers('origin') origin?: string) { return this.svc.composeCompany(p, c, origin, channel ? ch(channel) : 'WHATSAPP'); }
+
+  /** Writes the message that sends a quotation to the customer (and makes its private link). */
+  @Post('properties/:propertyId/quotations/:quotationId/message') @RequirePermission('reservation.create', P) @HttpCode(200)
+  quotation(@Param('propertyId', new ParseUUIDPipe()) p: string, @Param('quotationId', new ParseUUIDPipe()) q: string, @Query('channel') channel?: string, @Headers('origin') origin?: string) { return this.svc.composeQuotation(p, q, origin, channel ? ch(channel) : 'WHATSAPP'); }
 }
