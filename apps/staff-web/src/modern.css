@@ -66,7 +66,7 @@ html[dir="rtl"] select, html[lang="ur"] select { background-position: left 14px 
   border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-1); background: var(--card);
 }
 .card.inner, .qrow.done { background: var(--bg); box-shadow: none; border-color: var(--line); }
-.qrow.done { border-style: solid; opacity: .85; }
+.qrow.done { border-style: solid; }
 .block, .step, .ctx-card { padding: 20px; }
 .step { gap: 16px; } .block { gap: 14px; }
 .qrow, .row-card, .kpi, .stat, button.tile { transition: box-shadow .18s var(--ease), transform .18s var(--ease), border-color .18s; }
@@ -155,7 +155,6 @@ table.bill th, table.bill td, .nighttable th, .nighttable td { border-bottom-col
 @media (prefers-reduced-motion: no-preference) {
   .sheet { animation: rise .26s var(--ease); } @keyframes rise { from { transform: translateY(28px); opacity: 0; } }
   .cp { animation: pop .18s var(--ease); } @keyframes pop { from { transform: scale(.97) translateY(-6px); opacity: 0; } }
-  .main > * { animation: fade .25s var(--ease); } @keyframes fade { from { opacity: 0; transform: translateY(4px); } }
 }
 
 /* ── the rack (calendar) ── */
