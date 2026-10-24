@@ -12,6 +12,7 @@ import { RatesService } from '../rates/rates.service.js';
 import { ReservationsService } from '../reservations/reservations.service.js';
 import { currentTenant, runWithTenant } from '../tenancy/tenant-context.js';
 import { allocateDiscounts, depositOf, groupNights, type Discount } from './pricing.js';
+import { mergeSettings, QuoteSettingsBody } from './defaults.js';
 import { renderQuotation } from './render.js';
 import type * as S from './schemas.js';
 
@@ -22,14 +23,14 @@ const toUuid = (h: string) => `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 
 const SELLER = ['DRAFT', 'SENT', 'ACCEPTED', 'DECLINED'] as const;
 
 type Row = { id: string; property_id: string; number: string; status: string; company_id: string | null; guest_id: string | null; customer_name: string; contact_name: string | null; phone: string | null; email: string | null;
-  residency: 'RESIDENT' | 'NON_RESIDENT'; title: string | null; valid_until: string; discount_kind: 'NONE' | 'PCT' | 'AMOUNT'; discount_value: string; discount_reason: string | null; deposit_kind: 'NONE' | 'PCT' | 'AMOUNT'; deposit_value: string;
+  residency: 'RESIDENT' | 'NON_RESIDENT'; title: string | null; address: string | null; customer_ref: string | null; balance_due_days: number | null; valid_until: string; discount_kind: 'NONE' | 'PCT' | 'AMOUNT'; discount_value: string; discount_reason: string | null; deposit_kind: 'NONE' | 'PCT' | 'AMOUNT'; deposit_value: string;
   special_requests: string | null; amenities: string[]; terms: string | null; notes_internal: string | null; pricing: Pricing | null; version: number; created_at: Date; sent_at: Date | null; viewed_at: Date | null; views: number; responded_at: Date | null;
   responded_name: string | null; responded_note: string | null; desk_seen_at: Date | null; converted_at: Date | null; reservation_ids: string[] };
-type LineRow = { id: string; line_no: number; room_type_id: string; rate_plan_id: string | null; rooms: number; arrival: string; departure: string; adults: number; children: number; extra_beds: number; discount_kind: 'NONE' | 'PCT' | 'AMOUNT'; discount_value: string; note: string | null };
+type LineRow = { id: string; line_no: number; room_type_id: string; rate_plan_id: string | null; rooms: number; arrival: string; departure: string; adults: number; children: number; extra_beds: number; discount_kind: 'NONE' | 'PCT' | 'AMOUNT'; discount_value: string; note: string | null; room_numbers: string | null };
 
 export interface PricedLine { lineId: string | null; roomTypeId: string; roomTypeName: string; planId: string; planName: string; mealPlan: string | null; rooms: number; arrival: string; departure: string; nights: number; adults: number; children: number; extraBeds: number;
-  bands: Array<{ from: string; to: string; nights: number; rate: string; label: string }>; grossPerRoom: string; gross: string; lineDiscount: string; overallShare: string; discount: string; net: string; tax: string; total: string; roomDiscounts: string[]; roomsLeft: number; warning: string | null; note: string | null }
-export interface Pricing { currency: string; lines: PricedLine[]; gross: string; lineDiscounts: string; overallDiscount: string; discount: string; net: string; tax: string; total: string; deposit: { kind: string; amount: string }; computedAt: string }
+  bands: Array<{ from: string; to: string; nights: number; rate: string; label: string }>; grossPerRoom: string; gross: string; lineDiscount: string; overallShare: string; discount: string; net: string; tax: string; total: string; roomDiscounts: string[]; roomsLeft: number; warning: string | null; note: string | null; roomNumbers: string | null }
+export interface Pricing { currency: string; lines: PricedLine[]; gross: string; lineDiscounts: string; overallDiscount: string; discount: string; net: string; tax: string; taxLines: Array<{ label: string; amount: string }>; total: string; deposit: { kind: string; amount: string }; computedAt: string }
 
 const hundredths = (v: string) => BigInt(Math.round(Number(v) * 100));
 const discountMinor = (kind: 'NONE' | 'PCT' | 'AMOUNT', value: string | undefined, cur: string): Discount => kind === 'PCT' ? { kind, value: hundredths(value!) } : kind === 'AMOUNT' ? { kind, value: Money.parse(value!, cur).minor } : { kind: 'NONE', value: 0n };
@@ -50,7 +51,7 @@ export class QuotationsService {
     const channel = i.companyId ? 'CORPORATE' : 'DIRECT';
     let cur = 'PKR';
     type Opt = { roomType: { id: string; name: string }; plan: { id: string; name: string; mealPlan: string | null }; sellable: boolean; available: boolean; roomsLeft: number; nights: Array<{ date: string; source: string; total: string }>; subtotal: { amount: string; currency: string };
-      totalExTax: { amount: string }; taxTotal: { amount: string }; totalIncTax: { amount: string } };
+      totalExTax: { amount: string }; taxTotal: { amount: string }; totalIncTax: { amount: string }; taxes?: Array<{ code: string; ratePercent: number; tax: { amount: string } }> };
     const ask = async (l: (typeof i.lines)[number], discountAmount?: string): Promise<{ opts: Opt[]; currency: string }> => {
       const r = await this.rates.quote(propertyId, userId, { arrival: l.arrival, departure: l.departure, adults: l.adults, children: l.children, extraBeds: l.extraBeds, channel, residency: i.residency, companyId: i.companyId ?? null,
         roomTypeId: l.roomTypeId, discountPct: 0, nightDiscounts: [], includeUnavailable: true, ...(discountAmount ? { discountAmount } : {}) } as never);
@@ -65,29 +66,31 @@ export class QuotationsService {
       base.push({ opt, gross: Money.parse(opt.subtotal.amount, cur).minor });
     }
     const alloc = allocateDiscounts(i.lines.map((l, k) => ({ gross: base[k]!.gross, rooms: l.rooms, discount: discountMinor(l.discount.kind, 'value' in l.discount ? l.discount.value : undefined, cur) })), discountMinor(i.discount.kind, 'value' in i.discount ? i.discount.value : undefined, cur));
+    const taxBy = new Map<string, bigint>();
     const lines: PricedLine[] = []; let tGross = 0n, tLine = 0n, tOverall = 0n, tNet = 0n, tTax = 0n, tTotal = 0n;
     for (const [k, l] of i.lines.entries()) {
       const { opt, gross } = base[k]!; const a = alloc[k]!;
-      const taxCache = new Map<string, { net: bigint; tax: bigint }>();
+      const taxCache = new Map<string, { net: bigint; tax: bigint; by: Map<string, bigint> }>();
+      const by = (o: Opt) => { const m = new Map<string, bigint>(); for (const x of o.taxes ?? []) m.set(`${x.ratePercent}% ${x.code}`, (m.get(`${x.ratePercent}% ${x.code}`) ?? 0n) + Money.parse(x.tax.amount, cur).minor); return m; };
       let lineNet = 0n, lineTax = 0n;
       for (const d of a.roomDiscounts) {
         const key = d.toString();
         if (!taxCache.has(key)) {
-          if (d === 0n) taxCache.set(key, { net: Money.parse(opt.totalExTax.amount, cur).minor, tax: Money.parse(opt.taxTotal.amount, cur).minor });
-          else { const { opts } = await ask(l, Money.ofMinor(d, cur).toDecimalString()); const o = pick(opts, opt.plan.id); if (!o) throw fail(422, 'NO_RATE', 'The discount could not be applied to this rate'); taxCache.set(key, { net: Money.parse(o.totalExTax.amount, cur).minor, tax: Money.parse(o.taxTotal.amount, cur).minor }); }
+          if (d === 0n) taxCache.set(key, { net: Money.parse(opt.totalExTax.amount, cur).minor, tax: Money.parse(opt.taxTotal.amount, cur).minor, by: by(opt) });
+          else { const { opts } = await ask(l, Money.ofMinor(d, cur).toDecimalString()); const o = pick(opts, opt.plan.id); if (!o) throw fail(422, 'NO_RATE', 'The discount could not be applied to this rate'); taxCache.set(key, { net: Money.parse(o.totalExTax.amount, cur).minor, tax: Money.parse(o.taxTotal.amount, cur).minor, by: by(o) }); }
         }
-        const x = taxCache.get(key)!; lineNet += x.net; lineTax += x.tax;
+        const x = taxCache.get(key)!; lineNet += x.net; lineTax += x.tax; for (const [lbl, v] of x.by) taxBy.set(lbl, (taxBy.get(lbl) ?? 0n) + v);
       }
       const grossAll = gross * BigInt(l.rooms); const disc = a.lineDiscount + a.overallShare;
       const nights = opt.nights.map((n) => ({ date: n.date, source: n.source, total: Money.parse(n.total, cur).minor }));
       lines.push({ lineId: lineIds[k] ?? null, roomTypeId: l.roomTypeId, roomTypeName: opt.roomType.name, planId: opt.plan.id, planName: opt.plan.name, mealPlan: opt.plan.mealPlan, rooms: l.rooms, arrival: l.arrival, departure: l.departure, nights: nights.length,
         adults: l.adults, children: l.children, extraBeds: l.extraBeds, bands: groupNights(nights).map((g) => ({ from: g.from, to: g.to, nights: g.nights, rate: g.rate.toString(), label: bandLabel(g.source) })),
         grossPerRoom: gross.toString(), gross: grossAll.toString(), lineDiscount: a.lineDiscount.toString(), overallShare: a.overallShare.toString(), discount: disc.toString(), net: lineNet.toString(), tax: lineTax.toString(), total: (lineNet + lineTax).toString(),
-        roomDiscounts: a.roomDiscounts.map(String), roomsLeft: opt.roomsLeft, warning: opt.roomsLeft < l.rooms ? `Only ${opt.roomsLeft} of this room type ${opt.roomsLeft === 1 ? 'is' : 'are'} free for these dates` : null, note: l.note ?? null });
+        roomDiscounts: a.roomDiscounts.map(String), roomsLeft: opt.roomsLeft, warning: opt.roomsLeft < l.rooms ? `Only ${opt.roomsLeft} of this room type ${opt.roomsLeft === 1 ? 'is' : 'are'} free for these dates` : null, note: l.note ?? null, roomNumbers: l.roomNumbers ?? null });
       tGross += grossAll; tLine += a.lineDiscount; tOverall += a.overallShare; tNet += lineNet; tTax += lineTax; tTotal += lineNet + lineTax;
     }
     const dep = discountMinor(i.deposit.kind, 'value' in i.deposit ? i.deposit.value : undefined, cur);
-    return { currency: cur, lines, gross: tGross.toString(), lineDiscounts: tLine.toString(), overallDiscount: tOverall.toString(), discount: (tLine + tOverall).toString(), net: tNet.toString(), tax: tTax.toString(), total: tTotal.toString(),
+    return { currency: cur, lines, gross: tGross.toString(), lineDiscounts: tLine.toString(), overallDiscount: tOverall.toString(), discount: (tLine + tOverall).toString(), net: tNet.toString(), tax: tTax.toString(), taxLines: [...taxBy].map(([label, amount]) => ({ label, amount: amount.toString() })), total: tTotal.toString(),
       deposit: { kind: i.deposit.kind, amount: depositOf(tTotal, dep).toString() }, computedAt: new Date().toISOString() };
   }
 
@@ -100,12 +103,12 @@ export class QuotationsService {
   }
   private view(q: Row, lines: LineRow[], bd: string) {
     const expired = q.status === 'SENT' && q.valid_until < bd;
-    return { id: q.id, number: q.number, status: q.status, expired, customerName: q.customer_name, companyId: q.company_id, guestId: q.guest_id, contactName: q.contact_name, phone: q.phone, email: q.email, residency: q.residency, title: q.title, validUntil: q.valid_until,
+    return { id: q.id, number: q.number, status: q.status, expired, customerName: q.customer_name, companyId: q.company_id, guestId: q.guest_id, contactName: q.contact_name, phone: q.phone, email: q.email, residency: q.residency, title: q.title, address: q.address, customerRef: q.customer_ref, balanceDueDays: q.balance_due_days, validUntil: q.valid_until,
       discount: q.discount_kind === 'NONE' ? { kind: 'NONE' } : { kind: q.discount_kind, value: q.discount_kind === 'PCT' ? String(Number(q.discount_value) / 100) : null, minor: q.discount_kind === 'AMOUNT' ? q.discount_value : null }, discountReason: q.discount_reason,
       deposit: q.deposit_kind === 'NONE' ? { kind: 'NONE' } : { kind: q.deposit_kind, value: q.deposit_kind === 'PCT' ? String(Number(q.deposit_value) / 100) : null, minor: q.deposit_kind === 'AMOUNT' ? q.deposit_value : null },
       specialRequests: q.special_requests, amenities: q.amenities, terms: q.terms, notesInternal: q.notes_internal, pricing: q.pricing, version: q.version, createdAt: q.created_at, sentAt: q.sent_at, viewedAt: q.viewed_at, views: q.views,
       response: q.responded_at ? { at: q.responded_at, name: q.responded_name, note: q.responded_note, seen: !!q.desk_seen_at } : null, convertedAt: q.converted_at, reservationIds: q.reservation_ids,
-      lines: lines.map((l) => ({ id: l.id, roomTypeId: l.room_type_id, ratePlanId: l.rate_plan_id, rooms: l.rooms, arrival: l.arrival, departure: l.departure, adults: l.adults, children: l.children, extraBeds: l.extra_beds,
+      lines: lines.map((l) => ({ id: l.id, roomTypeId: l.room_type_id, ratePlanId: l.rate_plan_id, rooms: l.rooms, arrival: l.arrival, departure: l.departure, adults: l.adults, children: l.children, extraBeds: l.extra_beds, roomNumbers: l.room_numbers,
         discount: l.discount_kind === 'NONE' ? { kind: 'NONE' } : { kind: l.discount_kind, value: l.discount_kind === 'PCT' ? String(Number(l.discount_value) / 100) : Money.ofMinor(BigInt(l.discount_value), q.pricing?.currency ?? 'PKR').toDecimalString() }, note: l.note })) };
   }
   private async bd(trx: Parameters<Parameters<TenantDb['tx']>[0]>[0], propertyId: string) { return (await trx.selectFrom('property').select('business_date').where('id', '=', propertyId).executeTakeFirstOrThrow()).business_date as string; }
@@ -129,8 +132,8 @@ export class QuotationsService {
     const dv = (d: typeof i.discount) => (d.kind === 'NONE' ? 0n : d.kind === 'PCT' ? hundredths(d.value) : Money.parse(d.value, cur).minor);
     await trx.deleteFrom('quotation_line').where('quotation_id', '=', id).execute();
     await trx.insertInto('quotation_line').values(i.lines.map((l, k) => ({ tenant_id: currentTenant().tenantId, quotation_id: id, line_no: k + 1, room_type_id: l.roomTypeId, rate_plan_id: l.ratePlanId ?? pricing.lines[k]!.planId, rooms: l.rooms, arrival: l.arrival, departure: l.departure,
-      adults: l.adults, children: l.children, extra_beds: l.extraBeds, discount_kind: l.discount.kind, discount_value: dv(l.discount).toString(), note: l.note ?? null }))).execute();
-    return { customer_name: i.customerName, company_id: i.companyId ?? null, guest_id: i.guestId ?? null, contact_name: i.contactName ?? null, phone: i.phone ?? null, email: i.email ?? null, residency: i.residency, title: i.title ?? null, valid_until: i.validUntil,
+      adults: l.adults, children: l.children, extra_beds: l.extraBeds, discount_kind: l.discount.kind, discount_value: dv(l.discount).toString(), note: l.note ?? null, room_numbers: l.roomNumbers ?? null }))).execute();
+    return { customer_name: i.customerName, company_id: i.companyId ?? null, guest_id: i.guestId ?? null, contact_name: i.contactName ?? null, phone: i.phone ?? null, email: i.email ?? null, residency: i.residency, title: i.title ?? null, address: i.address ?? null, customer_ref: i.customerRef ?? null, balance_due_days: i.balanceDueDays ?? null, valid_until: i.validUntil,
       discount_kind: i.discount.kind, discount_value: dv(i.discount).toString(), discount_reason: i.discountReason ?? null, deposit_kind: i.deposit.kind, deposit_value: dv(i.deposit).toString(), special_requests: i.specialRequests ?? null,
       amenities: i.amenities, terms: i.terms ?? null, notes_internal: i.notesInternal ?? null, pricing: JSON.stringify(pricing) };
   }
@@ -212,18 +215,34 @@ export class QuotationsService {
   private toBody(q: Row, lines: LineRow[]): z.infer<typeof S.QuotationBody> {
     const cur = q.pricing?.currency ?? 'PKR';
     const d = (k: 'NONE' | 'PCT' | 'AMOUNT', v: string) => (k === 'NONE' ? { kind: 'NONE' as const } : k === 'PCT' ? { kind: 'PCT' as const, value: String(Number(v) / 100) } : { kind: 'AMOUNT' as const, value: Money.ofMinor(BigInt(v), cur).toDecimalString() });
-    return { customerName: q.customer_name, companyId: q.company_id, guestId: q.guest_id, contactName: q.contact_name, phone: q.phone, email: q.email, residency: q.residency, title: q.title, validUntil: q.valid_until, discount: d(q.discount_kind, q.discount_value),
+    return { customerName: q.customer_name, companyId: q.company_id, guestId: q.guest_id, contactName: q.contact_name, phone: q.phone, email: q.email, residency: q.residency, title: q.title, address: q.address, customerRef: q.customer_ref, balanceDueDays: q.balance_due_days, validUntil: q.valid_until, discount: d(q.discount_kind, q.discount_value),
       discountReason: q.discount_reason, deposit: d(q.deposit_kind, q.deposit_value), specialRequests: q.special_requests, amenities: q.amenities, terms: q.terms, notesInternal: q.notes_internal,
-      lines: lines.map((l) => ({ roomTypeId: l.room_type_id, ratePlanId: l.rate_plan_id, rooms: l.rooms, arrival: l.arrival, departure: l.departure, adults: l.adults, children: l.children, extraBeds: l.extra_beds, discount: d(l.discount_kind, l.discount_value), note: l.note })) } as never;
+      lines: lines.map((l) => ({ roomTypeId: l.room_type_id, ratePlanId: l.rate_plan_id, rooms: l.rooms, arrival: l.arrival, departure: l.departure, adults: l.adults, children: l.children, extraBeds: l.extra_beds, discount: d(l.discount_kind, l.discount_value), note: l.note, roomNumbers: l.room_numbers })) } as never;
   }
 
   // ───────────── the page ─────────────
   private async page(trx: Parameters<Parameters<TenantDb['tx']>[0]>[0], propertyId: string, q: Row, nonce: string, interactive: boolean) {
-    const [brand, p] = await Promise.all([this.docs.brand(trx, propertyId), trx.selectFrom('property').select(['business_date', 'terms_text']).where('id', '=', propertyId).executeTakeFirstOrThrow()]);
-    return renderQuotation(brand, { number: q.number, status: q.status, expired: q.valid_until < p.business_date && q.status === 'SENT', customerName: q.customer_name, contactName: q.contact_name, title: q.title, validUntil: q.valid_until, issued: (q.sent_at ?? q.created_at).toISOString().slice(0, 10),
-      discountReason: q.discount_reason, specialRequests: q.special_requests, amenities: q.amenities, terms: q.terms ?? p.terms_text, pricing: q.pricing!, response: q.responded_at ? { at: q.responded_at.toISOString().slice(0, 10), name: q.responded_name, note: q.responded_note, accepted: q.status === 'ACCEPTED' || q.status === 'CONVERTED' } : null,
+    const [brand, p] = await Promise.all([this.docs.brand(trx, propertyId), trx.selectFrom('property').select(['name', 'business_date', 'address', 'city', 'phone', 'maps_url', 'quote_settings']).where('id', '=', propertyId).executeTakeFirstOrThrow()]);
+    const pr = q.pricing!; const depPct = q.deposit_kind === 'PCT' ? Number(q.deposit_value) / 100 : null;
+    return renderQuotation(brand, { number: q.number, status: q.status, expired: q.valid_until < p.business_date && q.status === 'SENT', customerName: q.customer_name, contactName: q.contact_name, address: q.address, phone: q.phone, email: q.email, customerRef: q.customer_ref, title: q.title,
+      validUntil: q.valid_until, issued: (q.sent_at ?? q.created_at).toISOString().slice(0, 10), discountReason: q.discount_reason, specialRequests: q.special_requests, amenities: q.amenities, terms: q.terms, pricing: pr, balanceDueDays: q.balance_due_days,
+      depositKind: q.deposit_kind, depositPct: depPct, settings: mergeSettings(p.quote_settings, p.name), property: { address: p.address, city: p.city, phone: p.phone, mapsUrl: p.maps_url },
+      response: q.responded_at ? { at: q.responded_at.toISOString().slice(0, 10), name: q.responded_name, note: q.responded_note, accepted: q.status === 'ACCEPTED' || q.status === 'CONVERTED' } : null,
       interactive: interactive && q.status === 'SENT' && q.valid_until >= p.business_date }, nonce);
   }
+  /** The wording around the figures: this property's own, or the built-in one. */
+  async settings(propertyId: string) {
+    return this.tdb.tx(async (trx) => { const p = await trx.selectFrom('property').select(['name', 'quote_settings']).where('id', '=', propertyId).executeTakeFirst(); if (!p) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Property not found' }); return { ...mergeSettings(p.quote_settings, '{property}'), custom: !!p.quote_settings }; });
+  }
+  async saveSettings(propertyId: string, i: z.infer<typeof QuoteSettingsBody>) {
+    await this.tdb.tx(async (trx) => {
+      await trx.updateTable('property').set({ quote_settings: JSON.stringify({ ...i, contactEmail: i.contactEmail || null }) } as never).where('id', '=', propertyId).execute();
+      await this.audit.record(trx, { action: 'quotation.settings_save', resourceType: 'property', resourceId: propertyId, propertyId });
+    });
+    return this.settings(propertyId);
+  }
+  async resetSettings(propertyId: string) { await this.tdb.tx((trx) => trx.updateTable('property').set({ quote_settings: null } as never).where('id', '=', propertyId).execute()); return this.settings(propertyId); }
+
   /** For staff, drawn now from the saved figures. */
   async html(propertyId: string, id: string, nonce: string) { return this.tdb.tx(async (trx) => { const { q } = await this.load(trx, propertyId, id); if (!q.pricing) throw fail(409, 'NOT_PRICED', 'Nothing to show yet'); return this.page(trx, propertyId, q, nonce, false); }); }
 
