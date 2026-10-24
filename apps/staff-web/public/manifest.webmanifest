@@ -1,2 +1,2 @@
-{ "name": "Hospitality OS — Staff", "short_name": "Staff", "start_url": "/", "display": "standalone", "background_color": "#f6f4ef", "theme_color": "#0f4c5c",
+{ "name": "Stay360 — Hospitality. Simplified.", "short_name": "Stay360", "start_url": "/", "display": "standalone", "background_color": "#f3f5f8", "theme_color": "#0b63c9",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }] }

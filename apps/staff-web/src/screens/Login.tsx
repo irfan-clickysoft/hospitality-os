@@ -3,6 +3,8 @@ import { ApiError, NetworkError } from '../api/client.js';
 import { useT } from '../i18n/index.js';
 import { useAuth } from '../state.js';
 import { ErrorLine } from '../ui/kit.js';
+import { Logo } from '../ui/Logo.js';
+import { ThemeToggle } from '../shell/DisplaySettings.js';
 
 export function Login() {
   const { t, locale, setLocale } = useT();
@@ -21,7 +23,8 @@ export function Login() {
   return (
     <main className="login">
       <button className="link lang" onClick={() => setLocale(locale === 'ur' ? 'en' : 'ur')}>{t('nav.language')}</button>
-      <h1>{t('app.name')}</h1>
+      <div className="login-theme"><ThemeToggle /></div>
+      <h1 className="login-logo"><Logo height={92} title={t('app.name')} /></h1>
       <form onSubmit={submit} className="card stack">
         <h2>{status === 'mfa' ? t('login.mfa') : t('login.title')}</h2>
         {status === 'mfa' ? (

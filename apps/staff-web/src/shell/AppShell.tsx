@@ -3,6 +3,8 @@ import { errorText, useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
 import { shortDate, weekday } from '../lib/format.js';
 import { useAuth, useLive, useWork } from '../state.js';
+import { DisplaySettings, ThemeToggle } from './DisplaySettings.js';
+import { LogoMark } from '../ui/Logo.js';
 import { Account } from '../desk/Account.js';
 import { SidePanel, Skeleton } from '../ui/ds.js';
 import { Icon } from '../ui/icons.js';
@@ -43,7 +45,7 @@ function Frame() {
   const { me, property, properties, setPropertyId, can, logout, offlineBoot } = useAuth();
   const work = useWork();
   const route = useRoute();
-  const [account, setAccount] = useState(false); const [palette, setPalette] = useState(false); const [help, setHelp] = useState(false); const [more, setMore] = useState(false);
+  const [account, setAccount] = useState(false); const [display, setDisplayOpen] = useState(false); const [palette, setPalette] = useState(false); const [help, setHelp] = useState(false); const [more, setMore] = useState(false);
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(COLLAPSE) === '1'; } catch { return false; } });
   const sections = useMemo(() => SECTIONS.filter((s) => s.show(can)), [can]);
   const section = sectionFor(route.path);
@@ -90,6 +92,7 @@ function Frame() {
       <a className="skip" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById('main')?.focus(); }}>{t('shell.skip')}</a>
       <header className="topbar">
         <button className="iconbtn only-wide" aria-label={collapsed ? t('shell.expandNav') : t('shell.collapseNav')} aria-expanded={!collapsed} onClick={toggleRail}><Icon name="panel" /></button>
+        <Link to="/today" className="brandlink" aria-label="Stay360"><LogoMark size={26} /></Link>
         <div className="prop">
           {properties.length > 1
             ? <select aria-label={t('property.choose')} value={property.id} onChange={(e) => { setPropertyId(e.target.value); navigate('/today'); }}>{properties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
@@ -110,12 +113,14 @@ function Frame() {
                 <Link to="/inbox" className="button" onClick={close}>{t('shell.openInbox')}</Link>
               </div>)}
           </Popover>
+          <ThemeToggle />
           <Popover label={t('shell.profile')} icon="user">
             {(close) => (
               <div className="pop-body">
                 <p><strong>{me?.user.fullName}</strong><br /><span className="muted small">{me?.user.email}</span></p>
                 <p><span className="st st-neutral"><Icon name="user" size={14} />{t(`role.${persona}` as Key)}</span></p>
                 <button onClick={() => { setLocale(locale === 'ur' ? 'en' : 'ur'); close(); }}>{t('nav.language')}</button>
+                <button onClick={() => { setDisplayOpen(true); close(); }}>{t('dsp.title')}</button>
                 <button onClick={() => { setAccount(true); close(); }}>{t('acct.title')}</button>
                 <button onClick={() => { close(); void logout(); }}>{t('nav.logout')}</button>
               </div>)}
@@ -123,6 +128,7 @@ function Frame() {
         </div>
       </header>
       {account && <Account onClose={() => setAccount(false)} />}
+      {display && <DisplaySettings onClose={() => setDisplayOpen(false)} />}
       <div className="sysbanners">
         {(!work.online || offlineBoot) && <div className="banner warn" role="status">{t('banner.offline')}</div>}
         {work.pending.length > 0 && <div className="banner" role="status">{t('banner.pending', { n: work.pending.length })}</div>}

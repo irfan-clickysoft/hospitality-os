@@ -5,6 +5,7 @@ import { Public, RequirePermission } from '../authz/decorators.js';
 import { parse } from '../common/validate.js';
 import { PAGE_NOT_FOUND } from '../documents/render.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
+import { QuoteSettingsBody } from './defaults.js';
 import { QuotationsService } from './service.js';
 import * as S from './schemas.js';
 
@@ -19,6 +20,13 @@ const page = (reply: FastifyReply, html: string, status = 200, n = '') => reply.
 export class QuotationsController {
   constructor(@Inject(QuotationsService) private readonly svc: QuotationsService) {}
 
+  /** The wording around the figures (greeting, closing, contacts, terms): the property's own, or the built-in one. */
+  @Get('settings') @RequirePermission('reservation.view', P)
+  settings(@Param('propertyId', uuid()) p: string) { return this.svc.settings(p); }
+  @Put('settings') @RequirePermission('property.manage', P)
+  saveSettings(@Param('propertyId', uuid()) p: string, @Body() b: unknown) { return this.svc.saveSettings(p, parse(QuoteSettingsBody, b)); }
+  @Post('settings/reset') @RequirePermission('property.manage', P) @HttpCode(200)
+  resetSettings(@Param('propertyId', uuid()) p: string) { return this.svc.resetSettings(p); }
   @Get() @RequirePermission('reservation.view', P)
   list(@Param('propertyId', uuid()) p: string, @Query() q: unknown) { return this.svc.list(p, parse(S.ListQuery, q)); }
   /** Works out the figures for what is on the screen, without saving. */

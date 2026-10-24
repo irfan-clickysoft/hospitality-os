@@ -1,4 +1,4 @@
-# Hospitality OS
+# Stay360 — Hospitality. Simplified.
 
 Cloud hospitality operating system (PMS core; CRS, booking engine, channel manager, portals and apps to follow).
 Architecture and product decisions: [`docs/phase-0/00-index.md`](docs/phase-0/00-index.md). Pilot: Sunset BnB (Boulevard, Creek, Ramna).

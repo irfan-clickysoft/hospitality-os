@@ -45,7 +45,7 @@ services:
       DATABASE_URL_ADMIN: postgres://hos_admin:${HOS_ADMIN_PASSWORD}@db:5432/hos
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in deploy/.env}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://${SITE_ADDRESS:?set SITE_ADDRESS in deploy/.env}}
-      MFA_ISSUER: ${MFA_ISSUER:-Hospitality OS}
+      MFA_ISSUER: ${MFA_ISSUER:-Stay360}
       MAIL_FROM: ${MAIL_FROM:-}
       MAIL_REPLY_TO: ${MAIL_REPLY_TO:-}
       SES_REGION: ${SES_REGION:-}
