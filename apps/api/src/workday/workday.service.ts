@@ -91,6 +91,9 @@ export class WorkdayService {
         for (const d of today.departures.filter((x) => x.status === 'CHECKED_IN')) {
           for (const b of d.blockers.filter((x) => x.level === 'ACTION')) if (b.code === 'OVERDUE_DEPARTURE' || seeFolio) items.push({ id: `${b.code}:${d.lineId}`, kind: b.code, level: b.level, at: null, reservationId: d.reservationId, roomNumber: d.room ?? undefined, guest: d.guest.name, amount: b.amount });
         }
+        const answered = await sql<{ id: string; number: string; customer_name: string; status: string; responded_at: Date }>`SELECT id, number, customer_name, status, responded_at FROM quotation WHERE tenant_id = ${t} AND property_id = ${propertyId}
+          AND status IN ('ACCEPTED','DECLINED') AND responded_at IS NOT NULL AND desk_seen_at IS NULL ORDER BY responded_at`.execute(trx);
+        for (const x of answered.rows) items.push({ id: `QUOTATION_${x.status}:${x.id}`, kind: `QUOTATION_${x.status}`, level: x.status === 'ACCEPTED' ? 'ACTION' : 'INFO', at: x.responded_at.toISOString(), guest: x.customer_name, title: x.number });
         if (today.summary.noShowCandidates > 0) items.push({ id: 'NO_SHOWS', kind: 'NO_SHOW_CANDIDATES', level: 'ACTION', at: null, count: today.summary.noShowCandidates });
       }
       if (verify) {

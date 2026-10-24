@@ -51,4 +51,7 @@ export const QuoteRequest = z.object({
   roomTypeId: uuid.nullish(), discountPct: z.number().min(0).max(100).default(0),
   /** A different discount for particular nights (a last-minute first night at 40%, the next nights at 10%). Nights not listed use discountPct. */
   nightDiscounts: z.array(z.object({ date: businessDate, pct: z.number().min(0).max(100) })).max(90).default([]), includeUnavailable: z.boolean().default(false),
-}).refine((v) => v.departure > v.arrival, 'departure must be after arrival');
+  /** A fixed amount off the price of the stay for one room (instead of a percentage), e.g. 5000 off a 70000 stay. */
+  discountAmount: z.string().regex(/^\d{1,9}(\.\d{1,2})?$/, 'amount like 2500 or 2500.50').optional(),
+}).refine((v) => v.departure > v.arrival, 'departure must be after arrival')
+  .refine((v) => !v.discountAmount || (v.discountPct === 0 && v.nightDiscounts.length === 0), 'Give the discount as a percentage, per night, or an amount — one of them');

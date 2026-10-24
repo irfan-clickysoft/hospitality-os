@@ -143,6 +143,7 @@ export class DocumentsService {
     return runWithTenant({ tenantId: toUuid(token.slice(0, 32)) }, () => this.tdb.tx(async (trx) => {
       const l = await trx.selectFrom('document_link').selectAll().where('token', '=', token).where('revoked_at', 'is', null).executeTakeFirst();
       if (!l || (l.expires_at && new Date(l.expires_at) < new Date())) return null;
+      if (l.kind === 'QUOTATION') return null;                 // quotations have their own page and answer form
       if (l.kind === 'COMPANY_STATEMENT') {
         const cdoc = await this.companyDoc(l.ref_id).catch(() => null);
         if (!cdoc) return null;

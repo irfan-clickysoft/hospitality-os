@@ -132,7 +132,8 @@ export class ReservationsService {
         children: claims.children, extraBeds: claims.extraBeds, channel: claims.channel, residency: claims.residency as 'RESIDENT' | 'NON_RESIDENT', companyId: claims.companyId });
       if (!quote.sellable) throw new HttpException({ code: 'NOT_SELLABLE', message: 'This rate is no longer available for these dates', reasons: quote.reasons }, 409);
       const nightCuts = claims.nightBp && claims.nightBp.length === quote.nights.length ? perNightDiscounts(quote.nights.map((n) => n.totalMinor), claims.nightBp) : null;
-      const discountMinor = nightCuts ? nightCuts.reduce((a, b) => a + b, 0n) : (quote.subtotalMinor * BigInt(Math.round(claims.discountPct * 100))) / 10000n;
+      const fixedCut = claims.discountAmountMinor ? (BigInt(claims.discountAmountMinor) > quote.subtotalMinor ? quote.subtotalMinor : BigInt(claims.discountAmountMinor)) : 0n;
+      const discountMinor = fixedCut > 0n ? fixedCut : nightCuts ? nightCuts.reduce((a, b) => a + b, 0n) : (quote.subtotalMinor * BigInt(Math.round(claims.discountPct * 100))) / 10000n;
       if (quote.subtotalMinor - discountMinor !== BigInt(claims.subtotalMinor)) {
         throw new HttpException({ code: 'PRICE_CHANGED', message: 'The price changed since this quote was made. Search again.', newTotal: fmt(quote.subtotalMinor - discountMinor, p.currency) }, 409);
       }

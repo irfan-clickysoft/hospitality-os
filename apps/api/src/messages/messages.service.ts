@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { GuestPortalService } from '../guest-portal/guest-portal.service.js';
 import { ArService } from '../companies/ar.service.js';
+import { QuotationsService } from '../quotations/service.js';
 import { DocumentsService } from '../documents/documents.service.js';
 import { TaxService } from '../tax/tax.service.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
@@ -21,7 +22,7 @@ const METHOD: Record<string, string> = { CASH: 'Cash', CARD_SLIP: 'Card', WALLET
 
 @Injectable()
 export class MessagesService {
-  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(GuestPortalService) private readonly portal: GuestPortalService, @Inject(TaxService) private readonly tax: TaxService, @Inject(DocumentsService) private readonly docs: DocumentsService, @Inject(ArService) private readonly ar: ArService) {}
+  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(GuestPortalService) private readonly portal: GuestPortalService, @Inject(TaxService) private readonly tax: TaxService, @Inject(DocumentsService) private readonly docs: DocumentsService, @Inject(ArService) private readonly ar: ArService, @Inject(QuotationsService) private readonly quotes: QuotationsService) {}
 
   /** Every message the system sends, with the wording in use (the owner's, or the built-in one). */
   async list() {
@@ -169,5 +170,29 @@ export class MessagesService {
     };
     const dt = defaultTemplate('COMPANY_STATEMENT', channel); const subj = d.stored ? d.stored.subject : dt.subject;
     return { text: render(d.stored?.body ?? dt.body, vars), subject: channel === 'EMAIL' && subj ? render(subj, vars) : null, phone: d.c.contact_phone, email: d.c.contact_email, recipient: vars.recipient_name };
+  }
+
+  /** The message that sends a customer their quotation: the figures in short, and the private link to view, print and accept it. Making it marks the quotation as sent. */
+  async composeQuotation(propertyId: string, quotationId: string, origin?: string, channel: Channel = 'WHATSAPP') {
+    const actorId = currentTenant().actorId;
+    const link = (await this.quotes.linkFor(propertyId, actorId!, quotationId, origin)).url;
+    const q = await this.quotes.get(propertyId, quotationId);
+    const d = await this.tdb.tx(async (trx) => {
+      const [p, actor, stored] = await Promise.all([
+        trx.selectFrom('property').select(['name', 'city']).where('id', '=', propertyId).executeTakeFirstOrThrow(),
+        actorId ? trx.selectFrom('staff_user').select('full_name').where('id', '=', actorId).executeTakeFirst() : undefined,
+        trx.selectFrom('message_template').selectAll().where('event', '=', 'QUOTATION').where('channel', '=', channel).executeTakeFirst(),
+      ]);
+      return { p, actor, stored };
+    });
+    const pr = q.pricing!; const cur = pr.currency;
+    const rooms = pr.lines.reduce((a, l) => a + l.rooms, 0); const from = pr.lines.map((l) => l.arrival).sort()[0]!, to = pr.lines.map((l) => l.departure).sort().slice(-1)[0]!;
+    const vars: Record<string, string | null> = {
+      recipient_name: q.contactName ?? q.customerName, customer_name: q.customerName, property_name: d.p.city ? `${d.p.name}, ${d.p.city}` : d.p.name, manager_name: d.actor?.full_name ?? null, property_contact: null, quotation_number: q.number,
+      stay_summary: `${rooms} room${rooms === 1 ? '' : 's'} · ${date(from)} to ${date(to)}`, currency: cur, total: amt(pr.total, cur), saving: BigInt(pr.discount) > 0n ? amt(pr.discount, cur) : null, advance: BigInt(pr.deposit.amount) > 0n ? amt(pr.deposit.amount, cur) : null,
+      valid_until: date(q.validUntil), document_link: link,
+    };
+    const dt = defaultTemplate('QUOTATION', channel); const subj = d.stored ? d.stored.subject : dt.subject;
+    return { text: render(d.stored?.body ?? dt.body, vars), subject: channel === 'EMAIL' && subj ? render(subj, vars) : null, phone: q.phone, email: q.email, recipient: vars.recipient_name, url: link };
   }
 }
