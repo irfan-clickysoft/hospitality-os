@@ -1,7 +1,7 @@
 import { uxEn } from './ux.js';
 /** English strings. Urdu (ur.ts) must define exactly the same keys — the compiler and a test enforce it. */
 export const en = {
-  'app.name': 'Sunset Staff',
+  'app.name': 'Stay360',
   'common.loading': 'Loading…', 'common.retry': 'Try again', 'common.cancel': 'Cancel', 'common.save': 'Save', 'common.close': 'Close', 'common.back': 'Back', 'common.optional': 'optional',
   'common.refresh': 'Refresh', 'common.none': 'Nothing here', 'common.room': 'Room', 'common.note': 'Note', 'common.reason': 'Reason', 'common.yes': 'Yes', 'common.no': 'No',
   'login.title': 'Sign in', 'login.tenant': 'Company code', 'login.email': 'Email', 'login.password': 'Password', 'login.submit': 'Sign in', 'login.mfa': 'Enter your 6-digit code', 'login.mfaSubmit': 'Verify',

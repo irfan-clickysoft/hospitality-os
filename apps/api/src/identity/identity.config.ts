@@ -9,6 +9,6 @@ export function loadIdentityConfig(env: NodeJS.ProcessEnv = process.env): Identi
   return {
     idleMinutes: 60, absoluteHours: 12, stepUpMinutes: 15, lockoutThreshold: 5, lockoutMinutes: 15, mfaMaxFailures: 5,
     allowedOrigins: (env.ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
-    cookieName: insecureDev ? 'hos_session' : '__Host-hos_session', cookieSecure: !insecureDev, issuer: env.MFA_ISSUER ?? 'Hospitality OS',
+    cookieName: insecureDev ? 'hos_session' : '__Host-hos_session', cookieSecure: !insecureDev, issuer: env.MFA_ISSUER ?? 'Stay360',
   };
 }
