@@ -207,3 +207,40 @@ button kbd, a.button kbd { margin-inline-start: 10px; padding: 1px 7px; border: 
 a:not([class]), .crumbs a { color: var(--brand); text-underline-offset: 3px; } a:not([class]):hover { text-decoration-thickness: 2px; }
 .crumbs a { text-decoration: none; } .crumbs a:hover { text-decoration: underline; }
 .room-chip { border: 0; }
+
+/* ── Today ── */
+.today-hero { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px 24px; flex-wrap: wrap; margin: 4px 0 22px; }
+.today-hello { font-size: clamp(1.7rem, 4vw, 2.4rem); letter-spacing: -.035em; margin: 4px 0 0; line-height: 1.1; font-weight: 750; }
+.today-date { display: flex; align-items: baseline; gap: 0; } .today-date h1 { font-size: inherit; letter-spacing: inherit; margin: 0; font-weight: inherit; color: inherit; text-transform: inherit; }
+.today-date { color: var(--brand); font-weight: 700; font-size: .85rem; letter-spacing: .08em; text-transform: uppercase; }
+.today-hero .head-actions .button { min-height: 46px; padding: 0 22px; }
+.stat-cards { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 0 0 22px; }
+.stat-card { position: relative; align-items: flex-start; gap: 4px; padding: 20px 22px; min-height: 150px; border-radius: 24px; }
+.stat-card strong { font-size: 3rem; line-height: 1; letter-spacing: -.045em; font-weight: 750; margin-top: 6px; }
+.stat-label { color: var(--muted); font-weight: 600; font-size: .95rem; }
+.stat-ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 14px; background: var(--tint); color: var(--brand); }
+.stat-card.tone-leave .stat-ico { background: var(--warn-bg2); color: var(--warn-fg); } .stat-card.tone-stay .stat-ico { background: var(--info-bg); color: var(--info-fg); }
+.stat-card.on { box-shadow: 0 0 0 2px var(--brand), var(--shadow-2); }
+.stat-prog { display: grid; gap: 6px; inline-size: 100%; margin-top: 10px; }
+.bar-track { display: block; block-size: 6px; border-radius: 3px; background: var(--tonal); overflow: hidden; } .bar-fill { display: block; block-size: 100%; border-radius: 3px; background: var(--brand); transition: inline-size .5s var(--ease); }
+.stat-card.tone-leave .bar-fill { background: var(--warn-fg); } .stat-card.tone-stay .bar-fill { background: var(--info-fg); }
+.stat-card .kpi-flag { position: absolute; inset-block-start: 18px; inset-inline-end: 18px; background: var(--warn-bg2); padding: 3px 10px; border-radius: 999px; font-size: .75rem; }
+.qgroup { margin-top: 18px; } .qgroup-h { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: .78rem; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 700; }
+.qgroup-h.attention { color: var(--danger-fg); } .qgroup-n { background: var(--tonal); color: var(--muted); border-radius: 999px; padding: 0 8px; font-size: .75rem; letter-spacing: 0; }
+.avatar { flex: none; display: grid; place-items: center; inline-size: 44px; block-size: 44px; border-radius: 50%; background: var(--tint); color: var(--brand); font-weight: 700; font-size: .9rem; letter-spacing: .02em; }
+.avatar.vip-av { background: var(--warn-bg2); color: var(--warn-fg); }
+.room-pill { flex: none; min-inline-size: 48px; padding: 6px 12px; text-align: center; border-radius: 12px; background: var(--bg2); color: var(--ink); font-weight: 750; font-size: 1rem; letter-spacing: -.01em; }
+.qrow { padding: 14px 18px; gap: 14px; }
+.qrow.done .avatar { background: var(--ok-bg); color: var(--ok-fg); } .qrow.done .room-pill { background: transparent; color: var(--muted); }
+.toolbar { margin-block: 4px 6px; }
+
+@media (max-width: 599px) {
+  .stat-cards { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .stat-card { min-height: 118px; padding: 14px 12px; border-radius: 20px; } .stat-card strong { font-size: 2.1rem; } .stat-label { font-size: .8rem; }
+  .stat-ico { inline-size: 32px; block-size: 32px; border-radius: 11px; } .stat-ico .icon-svg { inline-size: 16px; block-size: 16px; }
+  .stat-prog .small { display: none; } .stat-prog { margin-top: 8px; }
+  .stat-card .kpi-flag { position: static; margin-top: 6px; padding: 2px 8px; font-size: .68rem; } .stat-card .kpi-flag .icon-svg { display: none; }
+  .today-hero { margin-bottom: 16px; } .today-hero .head-actions { inline-size: 100%; } .today-hero .head-actions .button { flex: 1; }
+  .avatar { display: none; } .room-pill { display: none; }
+}
+.count, .navitem .count, .tab .count { background: #b3212a; color: #fff; }
