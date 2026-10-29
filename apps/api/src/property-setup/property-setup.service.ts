@@ -33,7 +33,7 @@ export class PropertySetupService {
     return p;
   }
   private propDto(p: Awaited<ReturnType<PropertySetupService['prop']>>) {
-    return { id: p.id, code: p.code, name: p.name, legalEntityId: p.legal_entity_id, brandId: p.brand_id, timezone: p.timezone, currency: p.currency, businessDate: p.business_date, weekendDays: p.weekend_days, city: p.city, mapsUrl: p.maps_url, registrationStrict: p.registration_strict, nicopAloneOk: p.nicop_alone_ok, terms: p.terms_text, shortStayRule: p.short_stay_rule ?? null, checkInTime: String(p.check_in_time).slice(0, 5), checkOutTime: String(p.check_out_time).slice(0, 5), status: p.status, version: p.version, address: p.address, phone: p.phone, receiptFooter: p.receipt_footer, brandColor: p.brand_color, logoUrl: p.logo_file ? mediaUrl(currentTenant().tenantId, p.logo_file, '') : null };
+    return { id: p.id, code: p.code, name: p.name, legalEntityId: p.legal_entity_id, brandId: p.brand_id, timezone: p.timezone, currency: p.currency, businessDate: p.business_date, weekendDays: p.weekend_days, city: p.city, mapsUrl: p.maps_url, registrationStrict: p.registration_strict, nicopAloneOk: p.nicop_alone_ok, terms: p.terms_text, registrationRules: p.registration_rules, shortStayRule: p.short_stay_rule ?? null, checkInTime: String(p.check_in_time).slice(0, 5), checkOutTime: String(p.check_out_time).slice(0, 5), status: p.status, version: p.version, address: p.address, phone: p.phone, receiptFooter: p.receipt_footer, brandColor: p.brand_color, logoUrl: p.logo_file ? mediaUrl(currentTenant().tenantId, p.logo_file, '') : null };
   }
 
   /** Properties the current user may view (property-scoped users see only theirs). */
@@ -80,6 +80,7 @@ export class PropertySetupService {
       if (i.timezone !== undefined) set.timezone = i.timezone;
       if (i.brandId !== undefined) set.brand_id = i.brandId;
       if (i.terms !== undefined) set.terms_text = i.terms;
+      if (i.registrationRules !== undefined) set.registration_rules = i.registrationRules;
       if (i.registrationStrict !== undefined) set.registration_strict = i.registrationStrict;
       if (i.nicopAloneOk !== undefined) set.nicop_alone_ok = i.nicopAloneOk;
       if (i.city !== undefined) set.city = i.city;

@@ -270,6 +270,24 @@ describe('the document matrix at check-in', () => {
     expect(card.find((x: any) => x.fullName === 'Little Ali')).toMatchObject({ guestType: 'PAKISTANI_MINOR', guardianId: card.find((x: any) => x.fullName === 'Imran').id });
   });
 
+  it('the registration card shows the guest, companions with their relationship, purpose, rent and advance, the rules, and an on-screen signature', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const r = await walk(w, { adults: 2, nights: 3, purposeOfVisit: 'Business', occupants: [occ({ isPrimary: true, fullName: 'Imran Card' }), { fullName: 'Sana Card', ageGroup: 'ADULT', relationship: 'Spouse' }] });
+    expect(r.statusCode, r.body).toBe(201);
+    const url = `/v1/properties/${w.pid}/reservations/${r.json().id}/rooms/${r.json().lines[0].id}`;
+    const html = (await call('GET', `${url}/registration-card`, O)).body;
+    expect(html).toContain('Imran Card'); expect(html).toContain('Spouse of main guest'); expect(html).toContain('Business'); expect(html).toContain('Total nights');
+    expect(html).toContain('Rent and payment'); expect(html).toContain('Advance received'); expect(html).toContain('Rules &amp; policies'); expect(html).toContain('check-out by');
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    expect((await call('POST', `${url}/registration-sign`, O, { name: 'Imran Card', accepted: true, signature: 'javascript:alert(1)' })).statusCode).toBe(400);
+    expect((await call('POST', `${url}/registration-sign`, O, { name: 'Imran Card', accepted: false, signature: png })).statusCode).toBe(400);
+    expect((await call('POST', `${url}/registration-sign`, O, { name: 'Imran Card', accepted: true, signature: png })).statusCode).toBe(200);
+    const signed = (await call('GET', `${url}/registration-card`, O)).body;
+    expect(signed).toContain(`src="${png}"`); expect(signed).toContain('signed on screen');
+    expect((await call('POST', `${url}/registration-sign/clear`, O)).statusCode).toBe(200);
+    expect((await call('GET', `${url}/registration-card`, O)).body).not.toContain('signed on screen');
+  });
+
   it('a foreign guest needs the foreign-guest record: with it the card is complete and is kept and printed; without it, the gaps are named', async () => {
     const w = await sunset(); await setBd(w, '2026-11-05');
     const docs = seen('FOREIGN_PASSPORT', 'PASSPORT_BIO_COPY', 'VISA_BASIS', 'ENTRY_STAMP');

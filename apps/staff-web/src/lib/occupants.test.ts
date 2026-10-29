@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { checkOccupant, formatId, gapsFor, idNumberError, parseRoster, suggestType, type Matrix, type Occupant } from './occupants.js';
 
-const adult = (p: Partial<Occupant> = {}): Occupant => ({ fullName: 'Ali Raza', idType: 'CNIC', idNumber: '35202-1234567-1', nationality: 'PK', idExpiry: '', ageGroup: 'ADULT', guestType: '', docs: {}, foreign: {}, guardian: null, ...p });
+const adult = (p: Partial<Occupant> = {}): Occupant => ({ fullName: 'Ali Raza', idType: 'CNIC', idNumber: '35202-1234567-1', nationality: 'PK', idExpiry: '', ageGroup: 'ADULT', guestType: '', docs: {}, foreign: {}, guardian: null, relationship: '', ...p });
 const BD = '2026-11-05';
 
 describe('ID numbers are checked as the person leaves the field', () => {

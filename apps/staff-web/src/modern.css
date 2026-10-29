@@ -315,3 +315,8 @@ html[data-contrast="high"] .navitem.on { border: 2px solid var(--brand); }
 /* room stepper on the booking sheet */
 .stepper { gap: 12px; align-items: center; justify-content: flex-start; }
 .stepper button { min-width: 40px; min-height: 40px; font-size: 18px; }
+
+/* registration card: signature pad and rules */
+.sigpad { width: 100%; max-width: 640px; aspect-ratio: 640 / 220; background: #fff; border: 1px dashed var(--border, #9aa5ab); border-radius: 12px; touch-action: none; cursor: crosshair; }
+.rulesbox { white-space: pre-line; max-height: 220px; overflow: auto; font-size: 13px; padding: 10px 12px; border: 1px solid var(--border, #cfd6d9); border-radius: 12px; }
+.regsign { margin-top: 8px; }
