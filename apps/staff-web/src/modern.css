@@ -311,3 +311,7 @@ html[data-contrast="high"] .navitem.on { border: 2px solid var(--brand); }
 @media (prefers-contrast: more) { :root:not([data-contrast]) { --line-strong: #1b2430; --muted: #26303a; } }
 
 .grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+
+/* room stepper on the booking sheet */
+.stepper { gap: 12px; align-items: center; justify-content: flex-start; }
+.stepper button { min-width: 40px; min-height: 40px; font-size: 18px; }
