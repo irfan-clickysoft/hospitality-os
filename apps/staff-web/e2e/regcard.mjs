@@ -23,7 +23,7 @@ await page.getByRole('button', { name: 'Sign on screen' }).first().click();
 const box = page.getByRole('group', { name: 'Guest signature' }); await box.waitFor();
 check('the rules are shown before signing', (await box.innerText()).includes('Rules'));
 check('saving is blocked until the rules are accepted and a signature is drawn', await box.getByRole('button', { name: 'Save signature' }).isDisabled());
-const pad = box.getByRole('img', { name: /Sign in the box/ }).first(); const r = await pad.boundingBox();
+const pad = box.getByRole('img', { name: /Sign in the box/ }).first(); await pad.scrollIntoViewIfNeeded(); const r = await pad.boundingBox();
 await page.mouse.move(r.x + 30, r.y + 60); await page.mouse.down(); await page.mouse.move(r.x + 120, r.y + 20, { steps: 8 }); await page.mouse.move(r.x + 220, r.y + 90, { steps: 8 }); await page.mouse.up();
 await box.getByLabel(/has read and accepts/).check();
 await box.getByRole('button', { name: 'Save signature' }).click();
