@@ -72,7 +72,7 @@ describe('schedule rules', () => {
 });
 
 describe('scheduled report delivery', () => {
-  beforeAll(async () => { await adminDb.updateTable('staff_user').set({ status: 'ACTIVE' }).where('id', '=', T.ownerUserId).execute(); process.env.MAIL_FROM = 'reports@hotel.test'; process.env.PUBLIC_BASE_URL = 'https://app.hotel.test'; app.get(MailService).transport = { send: async (m) => { sent.push(m); return { id: `ses-${sent.length}` }; } }; });
+  beforeAll(async () => { await adminDb.updateTable('staff_user').set({ status: 'ACTIVE' }).where('id', '=', T.ownerUserId).execute(); process.env.MAIL_FROM = 'reports@hotel.test'; process.env.PUBLIC_BASE_URL = 'https://app.hotel.test'; app.get(MailService).transport = { send: async (m) => { sent.push(m); return { id: `sched-test-${Date.now()}-${sent.length}` }; } }; });
   beforeEach(() => { sent.length = 0; });
 
   it('is made when a day closes, delivered as an expiring link, and checked again when it is opened', async () => {
