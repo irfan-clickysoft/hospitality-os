@@ -15,7 +15,7 @@ const code = async (r: Promise<any>, status: number, c: string) => { const x = a
 const key = () => ({ 'idempotency-key': `na-${++n}-${Date.now()}` });
 const at = (date: string, time: string) => testClock.set(zonedToUtcMs(date, time, 'Asia/Karachi'));
 
-beforeAll(async () => { app = await createTestApp(); T = await provision(app, 'rep'); O = as(T.tenantId, T.ownerUserId); OM = as(T.tenantId, T.ownerUserId, { mfa: true }); });
+beforeAll(async () => { app = await createTestApp(); T = await provision(app, 'cas'); O = as(T.tenantId, T.ownerUserId); OM = as(T.tenantId, T.ownerUserId, { mfa: true }); });
 afterAll(async () => { await app.close(); testClock.reset(); });
 beforeEach(() => testClock.reset());
 
@@ -34,7 +34,7 @@ type W = Awaited<ReturnType<typeof sunset>>;
 const u = (w: W, tail: string) => `/v1/properties/${w.pid}/${tail}`;
 const setBd = (w: W, d: string) => adminDb.updateTable('property').set({ business_date: d }).where('id', '=', w.pid).execute();
 const bdOf = async (w: W) => (await adminDb.selectFrom('property').select('business_date').where('id', '=', w.pid).executeTakeFirstOrThrow()).business_date;
-const staff = async (w: W, role: string) => { const id = await addUser(T.tenantId, `${role}${++n}@rep.test`); await assignRole(T.tenantId, id, role, 'PROPERTY', w.pid); return { id, h: as(T.tenantId, id), hm: as(T.tenantId, id, { mfa: true }) }; };
+const staff = async (w: W, role: string) => { const id = await addUser(T.tenantId, `${role}${++n}@cas.test`); await assignRole(T.tenantId, id, role, 'PROPERTY', w.pid); return { id, h: as(T.tenantId, id), hm: as(T.tenantId, id, { mfa: true }) }; };
 
 async function book(w: W, o: { arrival?: string; departure?: string; hold?: number } = {}) {
   const q = (await call('POST', u(w, 'quotes'), O, { arrival: o.arrival ?? '2026-11-05', departure: o.departure ?? '2026-11-07', adults: 2, channel: 'PHONE' })).json();
@@ -76,6 +76,7 @@ describe('damage cases', () => {
     const done = await ok(call('GET', u(w, `damage/${made.id}`), O)); expect(done.status).toBe('RESOLVED');
     expect(done.events.map((e: any) => e.action)).toEqual(['REPORTED', 'VERIFIED', 'GUEST_NOTIFIED', 'GUEST_ACKNOWLEDGED', 'CHARGE_APPROVED', 'CHARGED', 'RESOLVED']);
     await code(call('PATCH', u(w, `damage/${made.id}`), fd.h, { description: 'rewritten' }), 409, 'CASE_CLOSED');
+    const rep = await ok(call('GET', u(w, 'insights/damage-charges?from=2026-10-01&to=2026-12-31'), O)); expect(rep.rows).toHaveLength(1); expect(rep.rows[0]).toMatchObject({ ref: made.ref, status: 'Resolved', approved: '300000', charged: '300000', response: 'Acknowledged' });
     const list = await ok(call('GET', u(w, 'damage?status=RESOLVED'), fd.h)); expect(list.items).toHaveLength(1);
     const trail = await adminDb.selectFrom('audit_log').select('action').where('resource_id', '=', made.id).execute(); expect(trail.map((x) => x.action)).toEqual(expect.arrayContaining(['damage.report', 'damage.verified', 'damage.charged']));
   });
@@ -112,6 +113,8 @@ describe('complaints and incidents', () => {
     await code(call('PATCH', u(w, `cases/${c1.id}`), fd.h, { rootCause: 'edit' }), 409, 'CASE_CLOSED');
     await ok(call('POST', u(w, `cases/${c1.id}/reopen`), fd.h, { reason: 'Guest complained again' })); expect((await ok(call('GET', u(w, `cases/${c1.id}`), fd.h))).status).toBe('IN_PROGRESS');
     const g = await ok(call('GET', u(w, `cases/${c1.id}`), fd.h)); expect(g.events.map((e: any) => e.action)).toEqual(['REPORTED', 'ASSIGNED', 'RESOLVED', 'CLOSED', 'REOPENED']);
+    const rep = await ok(call('GET', u(w, 'insights/complaints-incidents?from=2026-10-01&to=2026-12-31'), fd.h)); expect(rep.rows.map((x: any) => x.ref)).toEqual([c1.ref]); expect(rep.warnings[0]).toContain('Restricted cases');   // a restricted case never reaches a report for someone who may not see it
+    const repAll = await ok(call('GET', u(w, 'insights/complaints-incidents?from=2026-10-01&to=2026-12-31'), O)); expect(repAll.rows).toHaveLength(3);
     await adminDb.updateTable('case_record').set({ sla_due_at: new Date('2020-01-01T00:00:00Z') }).where('id', '=', c1.id).execute();
     expect((await ok(call('GET', u(w, 'cases?status=IN_PROGRESS'), fd.h))).items[0]).toMatchObject({ overdue: true });
   });

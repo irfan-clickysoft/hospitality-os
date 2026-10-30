@@ -66,7 +66,7 @@ describe('Reporting Center', () => {
 
     const cat = await ok(call('GET', u(w, 'insights'), O));
     const ids = cat.items.map((x: any) => x.id); expect(ids).toEqual(expect.arrayContaining(['flash', 'checkins', 'room-moves', 'cancellations', 'cashier', 'outstanding', 'room-status', 'historical', 'future-bookings', 'night-audit', 'lost-found', 'rate-changes', 'discounts', 'early-late', 'expected-arrivals', 'room-reassignments']));
-    expect(cat.planned.map((x: any) => x.id)).toEqual(['damage-charges', 'complaints-incidents']);
+    expect(cat.planned).toEqual([]); expect(ids).toEqual(expect.arrayContaining(['damage-charges', 'complaints-incidents']));
     for (const id of ids) {
       const e = await ok(call('GET', u(w, `insights/${id}?from=2026-11-01&to=2026-11-30`), O));
       expect(e.meta, id).toMatchObject({ id, timezone: 'Asia/Karachi', currency: 'PKR', property: { id: w.pid } }); expect(e.meta.asOf).toBeTruthy(); expect(e.meta.dateBasis.label).toBeTruthy(); expect(Array.isArray(e.rows) && Array.isArray(e.columns) && Array.isArray(e.kpis), id).toBe(true);

@@ -8,16 +8,14 @@ import * as FD from './frontdesk.js';
 import * as FIN from './finance.js';
 import * as RM from './rooms.js';
 import * as MG from './management.js';
+import * as CS from './cases.js';
 import type { Col, Def, Envelope, Row } from './types.js';
 import { addDays, dec, ymd } from './util.js';
 
 const fail = (status: number, code: string, message: string) => new HttpException({ code, message }, status);
-export const REGISTRY: Def[] = [MG.flash, FD.expectedArrivals, FD.checkins, FD.roomMoves, FD.roomReassignments, FD.cancellations, FD.earlyLate, FD.rateChanges, RM.roomStatus, FIN.cashier, FIN.outstanding, FIN.discounts, RM.lostFound, MG.nightAudit, MG.futureBookings, MG.historical];
+export const REGISTRY: Def[] = [MG.flash, FD.expectedArrivals, FD.checkins, FD.roomMoves, FD.roomReassignments, FD.cancellations, FD.earlyLate, FD.rateChanges, RM.roomStatus, FIN.cashier, FIN.outstanding, FIN.discounts, RM.lostFound, CS.damageCharges, CS.complaints, MG.nightAudit, MG.futureBookings, MG.historical];
 /** Reports in the plan that need new information to be captured first. Listed so nobody wonders where they are. */
-export const PLANNED = [
-  { id: 'damage-charges', name: 'Damage charges', category: 'risk', purpose: 'Damage cases tied to the guest bill, with evidence, approval and payment.', needs: 'A damage-case register (item, severity, photos, estimate, approved charge, guest acknowledgment) linked to the bill.' },
-  { id: 'complaints-incidents', name: 'Complaints and incidents', category: 'risk', purpose: 'Guest complaints and safety, security and medical incidents with owner, SLA and resolution.', needs: 'A case register with confidentiality levels, owners, SLAs and field-level permissions.' },
-] as const;
+export const PLANNED: ReadonlyArray<{ id: string; name: string; category: string; purpose: string; needs: string }> = [];
 const MAX_DAYS = 400;
 const QUOTE = /[^A-Za-z0-9._-]/g;
 
@@ -57,7 +55,8 @@ export class InsightsService {
       if (!p) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Property not found' });
       const { from, to } = this.rangeOf(d, p.business_date, q.from, q.to);
       const tenantId = currentTenant().tenantId;
-      const res = await d.run({ trx, tenantId, propertyId, prop: { code: p.code, name: p.name, currency: p.currency, timezone: p.timezone, businessDate: p.business_date, checkIn: p.check_in_time, checkOut: p.check_out_time }, from, to, basis: basis.id, params });
+      const canRestricted = (await this.authz.check(userId, { permission: 'case.restricted', scope: { propertyId } })).effect === 'ALLOW';
+      const res = await d.run({ trx, tenantId, propertyId, prop: { code: p.code, name: p.name, currency: p.currency, timezone: p.timezone, businessDate: p.business_date, checkIn: p.check_in_time, checkOut: p.check_out_time }, from, to, basis: basis.id, params, canRestricted });
       const totals = this.totalsOf(res.columns, res.rows);
       const me = await trx.selectFrom('staff_user').select('full_name').where('id', '=', userId).executeTakeFirst();
       if (opts.exported) await this.audit.record(trx, { action: 'report.export', resourceType: 'report', resourceId: d.id, propertyId, after: { basis: basis.id, from, to, params, rows: res.rows.length }, note: d.name });
