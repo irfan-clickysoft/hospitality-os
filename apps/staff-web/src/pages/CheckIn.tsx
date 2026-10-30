@@ -8,6 +8,7 @@ import { useAuth, useLive, useWork } from '../state.js';
 import { ApprovalBox } from '../desk/ComplianceBits.js';
 import { blankOccupant, occupantBody } from '../desk/CheckInSheet.js';
 import { checkOccupant, formatId, gapsFor, type Matrix, type OccErrors, type Occupant } from '../lib/occupants.js';
+import { PurposeField, RelationshipField } from '../desk/RegExtras.js';
 import { OccupantDocs } from '../desk/OccupantDocs.js';
 import { RoomPicker } from '../desk/RoomPicker.js';
 import type { ReservationDetail } from '../desk/types.js';
@@ -33,6 +34,7 @@ export function CheckIn({ stay }: { stay: Stay }) {
   const { r, line, room: rackRoom, businessDate, blockers } = stay;
   const res = r!, ln = line!;
   const foreign = res.residency === 'NON_RESIDENT';
+  const [purpose, setPurpose] = useState('');
   const [occ, setOcc] = useState<Occupant[]>(() => loadDraft(ln.id) ?? [blankOccupant(res.guest.fullName, foreign)]);
   const matrix = useLive<Matrix>(`/v1/properties/${property!.id}/registration/requirements`, 600_000).data ?? null;
   const [picked, setPicked] = useState<{ id: string; hk: string } | null>(null); const [changeRoom, setChangeRoom] = useState(false); const [pickerKey, setPickerKey] = useState(0);
@@ -76,7 +78,7 @@ export function CheckIn({ stay }: { stay: Stay }) {
   const submit = async (approval?: string) => {
     setAttempted(true); if (!approval && !canSubmit) return;
     clear();
-    const body = { roomId: roomId ?? undefined, allowNotReady: notReady && override, occupants: occ.map((o, i) => occupantBody(o, i === 0)), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
+    const body = { roomId: roomId ?? undefined, allowNotReady: notReady && override, occupants: occ.map((o, i) => occupantBody(o, i === 0)), ...(purpose.trim() ? { purposeOfVisit: purpose.trim() } : {}), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
     const out = await run(() => withStepUp(() => api<ReservationDetail>('POST', `/v1/properties/${property!.id}/reservations/${res.id}/rooms/${ln.id}/check-in`, body)));
     if (out) { try { localStorage.removeItem(draftKey(ln.id)); } catch { /* ignore */ } stay.settle(out); navigate(`/reservations/${res.id}?done=checkin${res.lines.length > 1 ? `&line=${ln.id}` : ''}`, { replace: true }); return; }
   };
@@ -118,6 +120,7 @@ export function CheckIn({ stay }: { stay: Stay }) {
           return (
             <fieldset className="guestcard" key={i}><legend>{i === 0 ? t('ci.primary') : t('ci.companion', { n: i })}</legend>
               <Field label={t('ci.name')} required error={show('fullName')}>{(p) => <input {...p} value={o.fullName} onChange={(x) => set(i, { fullName: x.target.value })} onBlur={() => blur('fullName')} autoComplete="off" />}</Field>
+              {i > 0 && <RelationshipField id={`c${i}`} value={o.relationship} onChange={(v) => set(i, { relationship: v })} />}
               <div className="grid2">
                 <Field label={t('ci.idType')} required error={show('idType')}>{(p) => <select {...p} value={o.idType} onChange={(x) => set(i, { idType: x.target.value })} onBlur={() => blur('idType')}>{ID_TYPES.map((k) => <option key={k} value={k}>{t(`ci.id.${k}` as Key)}</option>)}</select>}</Field>
                 <Field label={t('ci.idNumber')} required={i === 0} hint={i === 0 ? (o.idType === 'CNIC' ? t('ci.cnicHint') : undefined) : o.ageGroup === 'CHILD' ? t('ci.h.childNoId') : t('ci.h.sharedId')} error={show('idNumber')}>{(p) => <input {...p} value={o.idNumber} dir="ltr" inputMode={o.idType === 'CNIC' || o.idType === 'NICOP' ? 'numeric' : 'text'} placeholder={o.idType === 'CNIC' ? '35202-1234567-1' : ''} autoComplete="off" onChange={(x) => set(i, { idNumber: x.target.value })} onBlur={() => { set(i, { idNumber: formatId(o.idType, o.idNumber) }); blur('idNumber'); }} />}</Field>
@@ -131,6 +134,7 @@ export function CheckIn({ stay }: { stay: Stay }) {
             </fieldset>);
         })}
         <button type="button" onClick={() => { edited.current = true; setOcc((x) => [...x, blankOccupant('', foreign)]); }}>{t('ci.addGuest')}</button>
+        <PurposeField value={purpose} onChange={setPurpose} />
       </section>
 
       <section className="step" aria-labelledby="s-confirm"><h3 id="s-confirm"><span className="stepno">3</span> {t('ci.step.confirm')}</h3>

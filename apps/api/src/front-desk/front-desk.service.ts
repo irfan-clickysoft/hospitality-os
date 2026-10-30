@@ -20,6 +20,7 @@ import { nextStatus } from '../reservations/state-machine.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { evaluateCard, suggestGuestType, type CardPerson, type DocumentKey, type GuestType } from '../registration/rules.js';
 import { toCsv } from '../reports/csv.js';
+import { DEFAULT_RULES } from './registration-card.js';
 import { idHash, last4, maskId, normaliseIdNumber, type IdType } from './id-documents.js';
 import { parseRule, percentFor, share } from './short-stay.js';
 import type * as S from './schemas.js';
@@ -114,7 +115,7 @@ export class FrontDeskService {
     });
   }
 
-  async checkInIn(trx: Trx, propertyId: string, id: string, lineId: string, userId: string, i: { roomId?: string; occupants: Occupant[]; allowNotReady: boolean; complianceApproval?: { reason: string } }) {
+  async checkInIn(trx: Trx, propertyId: string, id: string, lineId: string, userId: string, i: { roomId?: string; occupants: Occupant[]; purposeOfVisit?: string | null; allowNotReady: boolean; complianceApproval?: { reason: string } }) {
     const p = await this.res.prop(trx, propertyId);
     const { res, lines } = await this.res.load(trx, propertyId, id, true);
     const line = lines.find((l) => l.id === lineId);
@@ -147,9 +148,10 @@ export class FrontDeskService {
     for (const [k, o] of occupants.entries()) {
       const row = await trx.insertInto('stay_guest').values({ tenant_id: tenantId, property_id: propertyId, reservation_room_id: lineId, full_name: o.fullName, is_primary: o.primary, age_group: o.ageGroup,
         id_type: o.idType ?? null, id_number_sealed: o.canonical ? this.box.seal(o.canonical, this.aad(lineId)) : null, id_last4: o.canonical ? last4(o.canonical) : null, id_hash: o.canonical ? idHash(o.idType!, o.canonical) : null, nationality: o.nationality ?? null, id_expiry: o.idExpiry ?? null, created_by: userId,
-        guest_type: registration.people[k]!.guestType, documents: JSON.stringify(o.documents ?? {}), foreign_details: o.foreign ? JSON.stringify(o.foreign) : null } as never).returning('id').executeTakeFirstOrThrow();
+        guest_type: registration.people[k]!.guestType, documents: JSON.stringify(o.documents ?? {}), foreign_details: o.foreign ? JSON.stringify(o.foreign) : null, relationship: o.primary ? null : (o.relationship?.trim() || null) } as never).returning('id').executeTakeFirstOrThrow();
       ids.push(row.id);
     }
+    if (i.purposeOfVisit?.trim()) await trx.updateTable('reservation_room').set({ purpose_of_visit: i.purposeOfVisit.trim() }).where('tenant_id', '=', tenantId).where('id', '=', lineId).execute();
     for (const [k, o] of occupants.entries()) {
       const g = o.guardianIndex;
       if (g !== null && g !== undefined && g !== k && ids[g]) await trx.updateTable('stay_guest').set({ guardian_id: ids[g] } as never).where('id', '=', ids[k]!).execute();
@@ -353,7 +355,7 @@ export class FrontDeskService {
       if (!roomId) throw fail(409, 'NO_ROOM_READY', 'No clean, free room of this type is available right now. Check housekeeping, or choose another type.');
     }
     const created = await this.res.createIn(trx, propertyId, userId, { guestId: i.guestId, guest: i.guest, lines: [{ quoteToken: token }], source: 'WALK_IN', complianceApproval: i.complianceApproval, notesInternal: i.notesInternal, specialRequests: i.specialRequests, companyId: i.companyId ?? undefined } as never);
-    const flags = await this.checkInIn(trx, propertyId, created.id, created.lines[0]!.id, userId, { roomId, occupants: i.occupants, allowNotReady: i.allowNotReady, complianceApproval: i.complianceApproval });
+    const flags = await this.checkInIn(trx, propertyId, created.id, created.lines[0]!.id, userId, { roomId, occupants: i.occupants, purposeOfVisit: i.purposeOfVisit, allowNotReady: i.allowNotReady, complianceApproval: i.complianceApproval });
     return { ...(await this.res.detail(trx, propertyId, created.id)), checkIn: flags };
   }
 
@@ -367,7 +369,7 @@ export class FrontDeskService {
       const rows = await trx.selectFrom('stay_guest').selectAll().where('reservation_room_id', '=', lineId).where('voided_at', 'is', null).orderBy('is_primary', 'desc').orderBy('created_at').execute();
       if (reveal) await this.audit.record(trx, { action: 'frontdesk.view_id', resourceType: 'reservation', resourceId: id, propertyId, note: `${rows.length} document(s) revealed` });
       return { items: rows.map((r) => ({ id: r.id, fullName: r.full_name, isPrimary: r.is_primary, ageGroup: r.age_group, idType: r.id_type, idNumber: !r.id_type || !r.id_number_sealed ? null : reveal ? this.box.open(r.id_number_sealed, this.aad(lineId)) : maskId(r.id_type as IdType, r.id_last4!),
-        nationality: r.nationality, idExpiry: r.id_expiry, guestType: r.guest_type, documents: r.documents ?? {}, foreign: r.foreign_details ?? null, guardianId: r.guardian_id })), registration: await this.registrationOf(trx, propertyId, id, rows) };
+        nationality: r.nationality, idExpiry: r.id_expiry, guestType: r.guest_type, documents: r.documents ?? {}, foreign: r.foreign_details ?? null, guardianId: r.guardian_id, relationship: r.relationship })), registration: await this.registrationOf(trx, propertyId, id, rows) };
     });
   }
 
@@ -461,17 +463,58 @@ export class FrontDeskService {
   async registrationCard(propertyId: string, id: string, lineId: string, userId: string, reveal: boolean) {
     const occ = await this.occupants(propertyId, id, lineId, userId, reveal);
     return this.tdb.tx(async (trx) => {
-      const p = await trx.selectFrom('property').select(['name', 'business_date', 'legal_entity_id']).where('id', '=', propertyId).executeTakeFirstOrThrow();
+      const tenantId = currentTenant().tenantId;
+      const p = await trx.selectFrom('property').select(['name', 'business_date', 'legal_entity_id', 'currency', 'check_in_time', 'check_out_time', 'registration_rules']).where('id', '=', propertyId).executeTakeFirstOrThrow();
       const le = await trx.selectFrom('legal_entity').select('name').where('id', '=', p.legal_entity_id).executeTakeFirstOrThrow();
-      const l = await sql<{ confirmation_no: string; arrival: string; departure: string; adults: number; children: number; type: string; room: string | null }>`
-        SELECT r.confirmation_no, l.arrival::text AS arrival, l.departure::text AS departure, l.adults, l.children, rt.name AS type, rm.number AS room
-        FROM reservation_room l JOIN reservation r ON r.tenant_id = l.tenant_id AND r.id = l.reservation_id JOIN room_type rt ON rt.id = l.room_type_id
+      const l = await sql<{ confirmation_no: string; arrival: string; departure: string; adults: number; children: number; type: string; room: string | null; guest_name: string; guest_phone: string | null; purpose: string | null; checked_in_at: string | null;
+        subtotal: string; discount: string; total: string; signature: string | null; signed_at: string | null; signed_name: string | null; signed_rules: string | null }>`
+        SELECT r.confirmation_no, l.arrival::text AS arrival, l.departure::text AS departure, l.adults, l.children, rt.name AS type, rm.number AS room, g.full_name AS guest_name, g.phone AS guest_phone,
+               l.purpose_of_visit AS purpose, l.checked_in_at::text AS checked_in_at, l.subtotal_minor::text AS subtotal, l.discount_minor::text AS discount, l.total_minor::text AS total,
+               l.reg_signature AS signature, l.reg_signed_at::text AS signed_at, l.reg_signed_name AS signed_name, l.reg_rules AS signed_rules
+        FROM reservation_room l JOIN reservation r ON r.tenant_id = l.tenant_id AND r.id = l.reservation_id JOIN guest g ON g.id = r.guest_id JOIN room_type rt ON rt.id = l.room_type_id
         LEFT JOIN room_assignment a ON a.assignment_ref = l.id AND a.status IN ('ASSIGNED','IN_HOUSE','ENDED') LEFT JOIN room rm ON rm.id = a.room_id
-        WHERE l.tenant_id = ${currentTenant().tenantId} AND l.property_id = ${propertyId} AND l.id = ${lineId} AND r.id = ${id} ORDER BY a.created_at DESC NULLS LAST LIMIT 1`.execute(trx);
+        WHERE l.tenant_id = ${tenantId} AND l.property_id = ${propertyId} AND l.id = ${lineId} AND r.id = ${id} ORDER BY a.created_at DESC NULLS LAST LIMIT 1`.execute(trx);
       const row = l.rows[0];
       if (!row) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room line not found on this reservation' });
+      const nights = await sql<{ rate: string; n: number }>`SELECT (room_minor + extras_minor)::text AS rate, count(*)::int AS n FROM stay_night WHERE tenant_id = ${tenantId} AND reservation_room_id = ${lineId} GROUP BY 1 ORDER BY min(business_date)`.execute(trx);
+      const paid = await sql<{ advance: string }>`
+        SELECT COALESCE(sum(CASE WHEN py.kind = 'REFUND' THEN -py.amount_minor ELSE py.amount_minor END), 0)::text AS advance
+        FROM payment py JOIN folio f ON f.id = py.folio_id WHERE py.tenant_id = ${tenantId} AND f.reservation_id = ${id} AND py.status = 'CAPTURED'`.execute(trx);
+      const totalNights = nights.rows.reduce((t, x) => t + x.n, 0) || nightsOf(row.arrival, row.departure, 366).length;
       return { company: le.name, property: p.name, confirmationNo: row.confirmation_no, room: row.room, roomType: row.type, arrival: row.arrival, departure: row.departure, adults: row.adults, children: row.children, printedOn: p.business_date, idRevealed: reveal,
-        guests: occ.items.map((g) => ({ fullName: g.fullName, isPrimary: g.isPrimary, ageGroup: g.ageGroup, idType: g.idType, idNumber: g.idNumber, nationality: g.nationality, idExpiry: g.idExpiry, guestType: g.guestType, documents: g.documents as Record<string, { state: string; note?: string | null }>, foreign: g.foreign as Record<string, unknown> | null })), complete: occ.registration.complete };
+        guestName: row.guest_name, guestPhone: row.guest_phone, purpose: row.purpose, checkInTime: p.check_in_time, checkOutTime: p.check_out_time, checkedInAt: row.checked_in_at,
+        rent: { currency: p.currency, nights: totalNights, bands: nights.rows.map((x) => ({ nights: x.n, rateMinor: x.rate })), subtotalMinor: row.subtotal, discountMinor: row.discount, totalMinor: row.total, advanceMinor: paid.rows[0]?.advance ?? '0' },
+        rules: row.signature ? (row.signed_rules ?? p.registration_rules ?? DEFAULT_RULES) : (p.registration_rules?.trim() || DEFAULT_RULES),
+        signature: row.signature ? { image: row.signature, signedAt: row.signed_at, name: row.signed_name } : null,
+        guests: occ.items.map((g) => ({ fullName: g.fullName, isPrimary: g.isPrimary, ageGroup: g.ageGroup, relationship: (g as any).relationship ?? null, idType: g.idType, idNumber: g.idNumber, nationality: g.nationality, idExpiry: g.idExpiry, guestType: g.guestType, documents: g.documents as Record<string, { state: string; note?: string | null }>, foreign: g.foreign as Record<string, unknown> | null })), complete: occ.registration.complete };
+    });
+  }
+
+  async rulesText(propertyId: string) {
+    return this.tdb.tx(async (trx) => { const p = await trx.selectFrom('property').select('registration_rules').where('id', '=', propertyId).executeTakeFirstOrThrow(); return { rules: p.registration_rules?.trim() || DEFAULT_RULES }; });
+  }
+
+  /** Stores the guest's on-screen signature with the rules they accepted (a snapshot, so later edits to the rules do not change what was signed). */
+  async signCard(propertyId: string, id: string, lineId: string, userId: string, i: z.infer<typeof S.SignCard>) {
+    return this.tdb.tx(async (trx) => {
+      const tenantId = currentTenant().tenantId;
+      const p = await trx.selectFrom('property').select('registration_rules').where('id', '=', propertyId).executeTakeFirstOrThrow();
+      const rules = p.registration_rules?.trim() || DEFAULT_RULES;
+      const r = await trx.updateTable('reservation_room').set({ reg_signature: i.signature, reg_signed_at: sql`now()`, reg_signed_name: i.name, reg_signed_by: userId, reg_rules: rules })
+        .where('tenant_id', '=', tenantId).where('property_id', '=', propertyId).where('reservation_id', '=', id).where('id', '=', lineId).where('status', 'in', ['CONFIRMED', 'CHECKED_IN']).returning('id').executeTakeFirst();
+      if (!r) throw new NotFoundException({ code: 'NOT_FOUND', message: 'This room line is not waiting for arrival or in house' });
+      await this.audit.record(trx, { action: 'frontdesk.registration_signed', resourceType: 'reservation', resourceId: id, propertyId, after: { lineId, name: i.name } });
+      return { signed: true };
+    });
+  }
+
+  async clearSignature(propertyId: string, id: string, lineId: string, userId: string) {
+    return this.tdb.tx(async (trx) => {
+      const r = await trx.updateTable('reservation_room').set({ reg_signature: null, reg_signed_at: null, reg_signed_name: null, reg_signed_by: null, reg_rules: null })
+        .where('tenant_id', '=', currentTenant().tenantId).where('property_id', '=', propertyId).where('reservation_id', '=', id).where('id', '=', lineId).where('reg_signature', 'is not', null).returning('id').executeTakeFirst();
+      if (!r) throw new NotFoundException({ code: 'NOT_FOUND', message: 'There is no signature on this room line' });
+      await this.audit.record(trx, { action: 'frontdesk.registration_signature_cleared', resourceType: 'reservation', resourceId: id, propertyId, after: { lineId } });
+      return { cleared: true };
     });
   }
 

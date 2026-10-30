@@ -4,7 +4,7 @@ import type { Key } from '../i18n/en.js';
 export interface Occupant {
   fullName: string; idType: string; idNumber: string; nationality: string; idExpiry: string; ageGroup: 'ADULT' | 'CHILD';
   /** The kind of guest; empty means "worked out from the card". */
-  guestType: string; docs: Record<string, { state: 'SEEN' | 'NOT_AVAILABLE'; note?: string }>; foreign: Record<string, string | boolean>; /** Position of the accompanying adult on the card. */ guardian: number | null;
+  guestType: string; docs: Record<string, { state: 'SEEN' | 'NOT_AVAILABLE'; note?: string }>; foreign: Record<string, string | boolean>; /** Position of the accompanying adult on the card. */ guardian: number | null; /** How a companion is related to the main guest. */ relationship: string;
 }
 export type OccErrors = Partial<Record<'fullName' | 'idType' | 'idNumber' | 'nationality' | 'idExpiry', Key>>;
 
@@ -101,7 +101,7 @@ export function parseRoster(text: string): { people: Occupant[]; skipped: string
       else if (/\d/.test(tok) && !id) id = tok;
     }
     const idType = !id ? 'CNIC' : /^\d{13}$/.test(digits(id)) ? 'CNIC' : 'PASSPORT';
-    people.push({ fullName: name, idType, idNumber: id ? formatId(idType, id) : '', nationality: nat || (idType === 'CNIC' ? 'PK' : ''), idExpiry: '', ageGroup: age, guestType: '', docs: {}, foreign: {}, guardian: null });
+    people.push({ fullName: name, idType, idNumber: id ? formatId(idType, id) : '', nationality: nat || (idType === 'CNIC' ? 'PK' : ''), idExpiry: '', ageGroup: age, guestType: '', docs: {}, foreign: {}, guardian: null, relationship: '' });
   }
   return { people, skipped };
 }

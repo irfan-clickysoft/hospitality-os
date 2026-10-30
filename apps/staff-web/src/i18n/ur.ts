@@ -120,7 +120,7 @@ export const ur: Record<Key, string> = {
   'bk.deposit': 'ایڈوانس درکار',
   'bk.exTaxNote': 'قیمتوں میں ٹیکس شامل نہیں۔ ٹیکس انوائس پر لگے گا۔',
   'bk.findGuest': 'مہمان تلاش کریں',
-  'bk.findGuestHint': 'نام، فون یا ای میل',
+  'bk.findGuestHint': 'نام، فون، ای میل، شناختی کارڈ یا پاسپورٹ نمبر',
   'bk.newGuest': 'یا نیا مہمان شامل کریں',
   'bk.phone': 'فون',
   'bk.useNew': 'اس مہمان کے ساتھ آگے بڑھیں',
