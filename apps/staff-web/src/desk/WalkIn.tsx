@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 import { useT } from '../i18n/index.js';
 import { useAction } from '../lib/action.js';
-import { addDays, money, newKey, shortDate } from '../lib/format.js';
+import { addDays, money, newKey, nightsBetween, shortDate } from '../lib/format.js';
 import { checkOccupant, hasErrors } from '../lib/occupants.js';
 import { useAuth, useLive } from '../state.js';
 import { Banner } from '../ui/ds.js';
 import { ErrorLine, Sheet } from '../ui/kit.js';
 import { useStepUp } from '../lib/stepup.js';
 import { ApprovalBox } from './ComplianceBits.js';
+import { PurposeField } from './RegExtras.js';
 import { blankOccupant, OccupantsForm, occupantBody, type Occupant } from './CheckInSheet.js';
 import type { Matrix } from '../lib/occupants.js';
 import type { Amount, RackData } from './types.js';
@@ -26,6 +27,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
   const key = useMemo(newKey, []);
   const [typeId, setTypeId] = useState(''); const [nights, setNights] = useState(1); const [adults, setAdults] = useState(2); const [children, setChildren] = useState(0); const [extraBeds, setExtraBeds] = useState(0); const [foreign, setForeign] = useState(false);
   const [planId, setPlanId] = useState('');
+  const [purpose, setPurpose] = useState('');
   const [name, setName] = useState(''); const [phone, setPhone] = useState(''); const [occ, setOcc] = useState<Occupant[]>([blankOccupant('', false)]);
   const [options, setOptions] = useState<PlanOption[]>([]); const [done, setDone] = useState<{ id: string; confirmationNo: string } | null>(null);
   const [known, setKnown] = useState<Known | null>(null); const [q, setQ] = useState(''); const [hits, setHits] = useState<Known[]>([]); const [searched, setSearched] = useState(false);
@@ -65,7 +67,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
       if (name.trim().length < 2 || hasErrors(errors)) { window.setTimeout(() => (document.querySelector('.sheet [aria-invalid="true"]') as HTMLElement | null)?.focus(), 30); return; }
     }
     const body = { ...(known ? { guestId: known.id } : { guest: { fullName: name.trim(), ...(phone.trim() ? { phone: phone.trim() } : {}), nationality: foreign ? (occ[0]?.nationality || 'XX') : 'PK' } }),
-      roomTypeId: typeId, nights, adults, children, extraBeds, ...(planId ? { ratePlanId: planId } : {}), occupants: occ.map((o, i) => occupantBody(o, i === 0)), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
+      roomTypeId: typeId, nights, adults, children, extraBeds, ...(planId ? { ratePlanId: planId } : {}), occupants: occ.map((o, i) => occupantBody(o, i === 0)), ...(purpose.trim() ? { purposeOfVisit: purpose.trim() } : {}), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
     const call = () => api<{ id: string; confirmationNo: string }>('POST', `${base}/front-desk/walk-ins`, body, { 'idempotency-key': key });
     const r = await run(() => (approval ? withStepUp(call) : call()));
     if (r) setDone(r);
@@ -88,6 +90,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
           </div>
         )}
         <label>{t('wi.type')}<select value={typeId} onChange={(e) => setTypeId(e.target.value)}>{types.map((x) => <option key={x.id} value={x.id} disabled={free(x.id) <= 0}>{x.name} ({t('bk.left', { n: free(x.id) })})</option>)}</select></label>
+        <label>{t('bk.departure')}<input type="date" value={addDays(businessDate, nights)} min={addDays(businessDate, 1)} max={addDays(businessDate, 30)} onChange={(e) => { if (e.target.value) setNights(Math.min(30, Math.max(1, nightsBetween(businessDate, e.target.value)))); }} dir="ltr" /></label>
         <div className="grid2">{stepper(t('bk.nights'), nights, setNights, 1, 30)}{stepper(t('d.adults'), adults, setAdults, 1, 6)}{stepper(t('d.children'), children, setChildren, 0, 6)}{stepper(t('wi.mattress'), extraBeds, setExtraBeds, 0, 3)}</div>
         <p className="muted small">{t('wi.mattressHint')}</p>
         <label className="check"><input type="checkbox" checked={foreign} onChange={(e) => setForeign(e.target.checked)} /> {t('bk.foreign')}</label>
@@ -101,6 +104,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
         <h3>{t('ci.guests')}</h3>
         <p className="muted small">{t('wi.idNote')}</p>
         <OccupantsForm occupants={occ} onChange={setOcc} foreign={foreign} businessDate={businessDate} attempted={attempted} matrix={matrix} />
+        <PurposeField value={purpose} onChange={setPurpose} />
         {attempted && hasErrors(errors) && <Banner level="ACTION" title={t('ci.e.fix')} />}
         <ErrorLine code={problem?.code} detail={problem?.detail} />
         <ApprovalBox problem={problem} busy={busy} onApprove={(r) => void submit(r)} />

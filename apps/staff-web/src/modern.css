@@ -311,3 +311,44 @@ html[data-contrast="high"] .navitem.on { border: 2px solid var(--brand); }
 @media (prefers-contrast: more) { :root:not([data-contrast]) { --line-strong: #1b2430; --muted: #26303a; } }
 
 .grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+
+/* room stepper on the booking sheet */
+.stepper { gap: 12px; align-items: center; justify-content: flex-start; }
+.stepper button { min-width: 40px; min-height: 40px; font-size: 18px; }
+
+/* registration card: signature pad and rules */
+.sigpad { width: 100%; max-width: 640px; aspect-ratio: 640 / 220; background: #fff; border: 1px dashed var(--border, #9aa5ab); border-radius: 12px; touch-action: none; cursor: crosshair; }
+.rulesbox { white-space: pre-line; max-height: 220px; overflow: auto; font-size: 13px; padding: 10px 12px; border: 1px solid var(--border, #cfd6d9); border-radius: 12px; }
+.regsign { margin-top: 8px; }
+
+/* Reporting Center */
+.ins-search { min-width: 240px; max-width: 420px; }
+.ins-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.ins-card { display: flex; flex-direction: column; gap: 6px; }
+.ins-link { text-decoration: none; color: inherit; }
+.ins-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 6px 20px; margin: 0; }
+.ins-meta dt { color: var(--muted, #5d6b72); font-size: 12px; } .ins-meta dd { margin: 0; }
+.ins-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.ins-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 0; padding: 0; }
+.ins-kpi { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--border, #d6dde0); border-radius: 12px; }
+.ins-kpi.warn { border-color: #b26a00; } .ins-kpi.bad { border-color: #b3212a; } .ins-kpi.ok { border-color: #1f7a4d; }
+.ins-chart { margin: 0; } .ins-chart svg { width: 100%; height: 160px; color: var(--text, #1d2a30); }
+.ins-tablewrap { overflow: auto; max-height: 70vh; border: 1px solid var(--border, #d6dde0); border-radius: 12px; }
+.ins-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ins-table th, .ins-table td { padding: 7px 10px; text-align: start; border-bottom: 1px solid var(--border, #e3e8ea); white-space: nowrap; vertical-align: top; }
+.ins-table thead th { position: sticky; top: 0; background: var(--surface, #fff); z-index: 1; } .ins-table tfoot td { position: sticky; bottom: 0; background: var(--surface, #fff); border-top: 2px solid var(--border, #9aa5ab); }
+.ins-table .num { text-align: end; font-variant-numeric: tabular-nums; } .ins-table .neg { color: #b3212a; }
+.ins-cols summary { cursor: pointer; } .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 640px) {
+  .ins-tablewrap { border: 0; max-height: none; overflow: visible; } .ins-table thead { display: none; }
+  .ins-table, .ins-table tbody, .ins-table tr, .ins-table td, .ins-table tfoot { display: block; width: 100%; }
+  .ins-table tr { border: 1px solid var(--border, #d6dde0); border-radius: 12px; margin-bottom: 10px; padding: 6px 8px; }
+  .ins-table td { display: flex; justify-content: space-between; gap: 12px; border: 0; white-space: normal; padding: 3px 2px; } .ins-table td::before { content: attr(data-label); color: var(--muted, #5d6b72); font-size: 12px; }
+}
+@media print { .no-print, nav, header.shell-top, .shell-nav { display: none !important; } .ins-tablewrap { overflow: visible; max-height: none; } }
+:root[data-theme="dark"] .ins-table thead th, :root[data-theme="dark"] .ins-table tfoot td { background: var(--surface, #14191c); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ins-table thead th, :root:not([data-theme="light"]) .ins-table tfoot td { background: var(--surface, #14191c); } }
+
+/* damage and case registers */
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; } .photo-thumb { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; border: 1px solid var(--border, #d6dde0); }
+.timeline { display: flex; flex-direction: column; gap: 8px; border-inline-start: 2px solid var(--border, #d6dde0); padding-inline-start: 12px; margin: 0; }

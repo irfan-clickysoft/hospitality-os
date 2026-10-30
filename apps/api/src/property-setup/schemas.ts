@@ -15,7 +15,7 @@ export const UpdateProperty = z.object({
   shortStayRule: ShortStayRule.nullable().optional(), name: z.string().min(2).max(120).optional(), timezone: tz.optional(), brandId: uuid.nullish(), weekendDays: z.array(z.number().int().min(1).max(7)).max(7).optional(),
   registrationStrict: z.boolean().optional(), nicopAloneOk: z.boolean().optional(),
   city: z.string().trim().min(2).max(80).nullable().optional(), mapsUrl: z.string().trim().max(500).regex(/^https:\/\//, 'Use the full https:// link from Google Maps').nullable().optional(),
-  terms: z.string().trim().max(8000).nullable().optional(),
+  terms: z.string().trim().max(8000).nullable().optional(), registrationRules: z.string().trim().max(8000).nullable().optional(),
   address: z.string().trim().max(300).nullable().optional(), phone: z.string().trim().max(40).nullable().optional(), receiptFooter: z.string().trim().max(300).nullable().optional(), brandColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'A colour like #1d4e5f').nullable().optional(),
   checkInTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(), checkOutTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(), version: z.number().int() });
 export const GoLive = z.object({ openingBusinessDate: businessDate.optional() });

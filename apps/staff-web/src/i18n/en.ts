@@ -118,7 +118,7 @@ export const en = {
   'bk.deposit': 'Deposit needed',
   'bk.exTaxNote': 'Prices exclude tax. Tax is added on the invoice.',
   'bk.findGuest': 'Find the guest',
-  'bk.findGuestHint': 'Name, phone or email',
+  'bk.findGuestHint': 'Name, phone, email, CNIC or passport number',
   'bk.newGuest': 'Or add a new guest',
   'bk.phone': 'Phone',
   'bk.useNew': 'Continue with this guest',

@@ -40,8 +40,14 @@ export class FrontDeskController {
   @Get('reservations/:id/rooms/:lineId/registration-card') @RequirePermission('reservation.view', P)
   async card(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Query() q: unknown, @Res() reply: FastifyReply) {
     const v = await this.svc.registrationCard(pid, id, line, me(), parse(S.OccupantsQuery, q).reveal === 'true');
-    reply.header('content-type', 'text/html; charset=utf-8').header('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'").header('x-content-type-options', 'nosniff').send(renderRegistrationCard(v));
+    reply.header('content-type', 'text/html; charset=utf-8').header('content-security-policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'").header('x-content-type-options', 'nosniff').send(renderRegistrationCard(v));
   }
+  @Get('registration-rules') @RequirePermission('reservation.view', P)
+  rules(@Param('propertyId', uuid()) pid: string) { return this.svc.rulesText(pid); }
+  @Post('reservations/:id/rooms/:lineId/registration-sign') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
+  sign(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Body() body: unknown) { return this.svc.signCard(pid, id, line, me(), parse(S.SignCard, body)); }
+  @Post('reservations/:id/rooms/:lineId/registration-sign/clear') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
+  clearSign(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string) { return this.svc.clearSignature(pid, id, line, me()); }
   @Get('reservations/:id/rooms/:lineId/guests') @RequirePermission('reservation.view', P)
   occupants(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Query() q: unknown) { return this.svc.occupants(pid, id, line, me(), parse(S.OccupantsQuery, q).reveal === 'true'); }
 

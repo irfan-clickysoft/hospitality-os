@@ -35,14 +35,17 @@ export const SECTIONS: Section[] = [
   ] },
   { id: 'guests', path: '/guests', label: 'nav.guests', icon: 'guests', show: any('guest.view') },
   { id: 'inbox', path: '/inbox', label: 'nav.inbox', icon: 'inbox', show: () => true, primary: true },
-  { id: 'tasks', path: '/tasks', label: 'nav.tasks', icon: 'tasks', show: any('maintenance.view', 'maintenance.request', 'compliance.view', 'fnb.order', 'visitor.log', 'arrivals.view_masked', 'frontdesk.check_in'), tabs: [
+  { id: 'tasks', path: '/tasks', label: 'nav.tasks', icon: 'tasks', show: any('maintenance.view', 'maintenance.request', 'compliance.view', 'fnb.order', 'visitor.log', 'arrivals.view_masked', 'frontdesk.check_in', 'damage.view', 'damage.report', 'case.view', 'case.report'), tabs: [
     { id: 'gate', label: 'nav.gate', show: any('visitor.log', 'arrivals.view_masked'), Page: L(() => import('../desk/Gate.js'), 'Gate') },
     { id: 'hoteleye', label: 'nav.hotelEye', show: any('frontdesk.check_in'), Page: L(() => import('../desk/HotelEye.js'), 'HotelEye') },
     { id: 'maintenance', label: 'nav.maintenance', show: any('maintenance.view', 'maintenance.request'), Page: L(() => import('../desk/Maintenance.js'), 'Maintenance') },
     { id: 'compliance', label: 'nav.compliance', show: any('compliance.view'), Page: L(() => import('../desk/Compliance.js'), 'Compliance') },
+    { id: 'damage', label: 'dm.nav', show: any('damage.view', 'damage.report'), Page: L(() => import('../desk/Damage.js'), 'Damage') },
+    { id: 'cases', label: 'cs.nav', show: any('case.view', 'case.report'), Page: L(() => import('../desk/Cases.js'), 'Cases') },
     { id: 'kitchen', label: 'nav.kitchen', show: any('fnb.order'), Page: L(() => import('../desk/Kitchen.js'), 'Kitchen') },
   ] },
-  { id: 'reports', path: '/reports', label: 'nav.reports', icon: 'reports', show: any('management.view', 'report.view', 'nightaudit.run', 'audit.view'), tabs: [
+  { id: 'reports', path: '/reports', label: 'nav.reports', icon: 'reports', show: any('management.view', 'report.view', 'nightaudit.run', 'audit.view', 'reservation.view', 'housekeeping.view', 'cashier.review'), tabs: [
+    { id: 'center', label: 'ins.nav', show: any('management.view', 'report.view', 'reservation.view', 'housekeeping.view', 'cashier.review', 'nightaudit.run'), Page: L(() => import('../insights/ReportingCenter.js'), 'ReportingCenter') },
     { id: 'overview', label: 'nav.management', show: any('management.view'), Page: L(() => import('../desk/Management.js'), 'Management') },
     { id: 'downloads', label: 'nav.downloads', show: any('report.view'), Page: L(() => import('../desk/Reports.js'), 'Reports') },
     { id: 'nightaudit', label: 'nav.audit', show: any('nightaudit.run'), Page: L(() => import('../desk/NightAudit.js'), 'NightAudit') },

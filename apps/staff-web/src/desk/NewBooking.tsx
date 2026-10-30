@@ -3,7 +3,7 @@ import { api } from '../api/client.js';
 import { useT } from '../i18n/index.js';
 import type { Key } from '../i18n/en.js';
 import { useAction } from '../lib/action.js';
-import { addDays, money, newKey, shortDate } from '../lib/format.js';
+import { addDays, money, newKey, nightsBetween, shortDate } from '../lib/format.js';
 import { useAuth, useLive } from '../state.js';
 import { useStepUp } from '../lib/stepup.js';
 import { GuestMessage } from './GuestMessage.js';
@@ -16,7 +16,9 @@ interface Option {
   roomType: { id: string; code: string; name: string }; plan: { id: string; code: string; name: string; mealPlan: string }; roomsLeft: number; bookable: boolean; reasons: Array<{ code: string; message: string }>;
   nights: Array<{ date: string; total: string; discountPct: number; discount: string; payable: string }>; totalExTax: Amount; taxes?: Array<{ code: string; ratePercent: number; tax: Amount }>; taxTotal?: Amount; totalIncTax?: Amount; depositDue: Amount; policy: Parameters<typeof policyLines>[1]; quoteToken: string | null; discount: unknown;
 }
-interface GuestHit { id: string; fullName: string; phone: string | null; email: string | null; nationality: string | null; residency: 'RESIDENT' | 'NON_RESIDENT'; vip: boolean }
+/** Several rooms can go on one booking; a booking holds at most this many. */
+const MAX_ROOMS = 10;
+interface GuestHit { id: string; fullName: string; phone: string | null; email: string | null; nationality: string | null; residency: 'RESIDENT' | 'NON_RESIDENT'; vip: boolean; stays?: number; matchedById?: boolean }
 const SOURCES = ['PHONE', 'WHATSAPP', 'WEBSITE', 'CORPORATE', 'TRAVEL_AGENT', 'OTHER'] as const;
 const CHANNEL: Record<string, string> = { PHONE: 'PHONE', WHATSAPP: 'DIRECT', WEBSITE: 'DIRECT', CORPORATE: 'CORPORATE', TRAVEL_AGENT: 'AGENT', OTHER: 'DIRECT' };
 
@@ -30,7 +32,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   const companies = useLive<{ items: Array<{ id: string; name: string; status: string }> }>(can('company.view') ? '/v1/companies' : null, 300_000);
   const [companyId, setCompanyId] = useState(''); const [eta, setEta] = useState('');
   const [foreign, setForeign] = useState(false); const [source, setSource] = useState<(typeof SOURCES)[number]>('PHONE');
-  const [options, setOptions] = useState<Option[]>([]); const [chosen, setChosen] = useState<Option | null>(null);
+  const [options, setOptions] = useState<Option[]>([]); const [picks, setPicks] = useState<Record<string, number>>({});
   const [q, setQ] = useState(''); const [hits, setHits] = useState<GuestHit[]>([]); const [guest, setGuest] = useState<GuestHit | null>(null);
   const [nf, setNf] = useState({ fullName: '', phone: '', nationality: 'PK' });
   const [hold, setHold] = useState(false); const [holdKind, setHoldKind] = useState<'half' | 'days' | 'date'>('half'); const [holdHalf, setHoldHalf] = useState(4); const [holdDays, setHoldDays] = useState(3); const [holdDate, setHoldDate] = useState(''); const [notes, setNotes] = useState(''); const [ext, setExt] = useState('');
@@ -42,11 +44,20 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   const withStepUp = useStepUp();
   const lastBook = useState<{ g: { guestId?: string; guest?: Record<string, unknown> } } | null>(null);
   const departure = addDays(arrival, nights);
+  const optKey = (o: Option) => `${o.roomType.id}-${o.plan.id}`;
+  const rooms = options.filter((o) => (picks[optKey(o)] ?? 0) > 0 && o.quoteToken).map((o) => ({ o, n: picks[optKey(o)]! }));
+  const roomCount = rooms.reduce((s, r) => s + r.n, 0);
+  const totalOf = rooms.reduce((s, r) => s + Number(r.o.totalExTax.amount) * r.n, 0);
+  const cur = rooms[0]?.o.totalExTax.currency ?? 'PKR';
+  const totalMoney = { amount: totalOf.toFixed(2), currency: cur } as Amount;
+  const roomsLabel = rooms.map((r) => `${r.n} × ${r.o.roomType.name}`).join(', ');
+  const bump = (o: Option, d: number) => setPicks((p) => { const k = optKey(o); const next = Math.max(0, Math.min(o.roomsLeft, (p[k] ?? 0) + d)); const total = Object.values({ ...p, [k]: next }).reduce((a, b) => a + b, 0); return total > MAX_ROOMS ? p : { ...p, [k]: next }; });
 
   const pct = (v: string) => Math.min(100, Math.max(0, Number(v) || 0));
   const quoteBody = () => ({ arrival, departure, adults, children, channel: CHANNEL[source], residency: foreign ? 'NON_RESIDENT' : 'RESIDENT', ...(companyId ? { companyId } : {}), ...(initial.roomTypeId ? { roomTypeId: initial.roomTypeId } : {}),
     discountPct: pct(discAll), nightDiscounts: Object.entries(nightPct).filter(([, v]) => v !== '').map(([date, v]) => ({ date, pct: pct(v) })) });
   const search = async () => {
+    setPicks({});
     const r = await run(() => api<{ options: Option[] }>('POST', `${base}/quotes`, quoteBody()));
     if (r) { setOptions(r.options); setStep('options'); }
   };
@@ -68,7 +79,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
 
   const book = async (g: { guestId?: string; guest?: Record<string, unknown> }, approval?: string) => {
     lastBook[1]({ g });
-    const body = { ...g, source, lines: [{ quoteToken: chosen!.quoteToken }], ...(hold ? { hold: holdKind === 'half' ? { minutes: holdHalf * 30 } : holdKind === 'days' ? { days: holdDays } : { untilDate: holdUntil } } : {}), ...(notes.trim() ? { notesInternal: notes.trim() } : {}), ...(ext.trim() ? { externalRef: ext.trim() } : {}), ...(eta ? { expectedArrival: eta } : {}), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
+    const body = { ...g, source, lines: rooms.flatMap(({ o, n }) => Array.from({ length: n }, () => ({ quoteToken: o.quoteToken! }))), ...(hold ? { hold: holdKind === 'half' ? { minutes: holdHalf * 30 } : holdKind === 'days' ? { days: holdDays } : { untilDate: holdUntil } } : {}), ...(notes.trim() ? { notesInternal: notes.trim() } : {}), ...(ext.trim() ? { externalRef: ext.trim() } : {}), ...(eta ? { expectedArrival: eta } : {}), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
     const call = () => api<NonNullable<typeof result>>('POST', `${base}/reservations`, body, { 'idempotency-key': key });
     const r = await run(() => (approval ? withStepUp(call) : call()));
     if (r) { setResult(r); setStep('done'); }
@@ -77,7 +88,8 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   return (
     <Sheet title={t('bk.new')} onClose={onClose}>
       {step === 'search' && (<>
-        <div className="grid2"><label>{t('bk.arrival')}<input type="date" value={arrival} min={businessDate} onChange={(e) => setArrival(e.target.value)} dir="ltr" /></label><label>{t('bk.nights')}<input type="number" min={1} max={60} value={nights} onChange={(e) => setNights(Math.max(1, Number(e.target.value) || 1))} dir="ltr" /></label></div>
+        <div className="grid2"><label>{t('bk.arrival')}<input type="date" value={arrival} min={businessDate} onChange={(e) => setArrival(e.target.value)} dir="ltr" /></label><label>{t('bk.departure')}<input type="date" value={departure} min={addDays(arrival, 1)} onChange={(e) => { if (e.target.value) setNights(Math.min(60, Math.max(1, nightsBetween(arrival, e.target.value)))); }} dir="ltr" /></label></div>
+        <div className="grid2"><label>{t('bk.nights')}<input type="number" min={1} max={60} value={nights} onChange={(e) => setNights(Math.max(1, Number(e.target.value) || 1))} dir="ltr" /></label></div>
         <p className="muted small">{shortDate(arrival, locale)} → {shortDate(departure, locale)}</p>
         <div className="grid2"><label>{t('d.adults')}<input type="number" min={1} max={10} value={adults} onChange={(e) => setAdults(Math.max(1, Number(e.target.value) || 1))} dir="ltr" /></label><label>{t('d.children')}<input type="number" min={0} max={10} value={children} onChange={(e) => setChildren(Math.max(0, Number(e.target.value) || 0))} dir="ltr" /></label></div>
         <label>{t('bk.source')}<select value={source} onChange={(e) => setSource(e.target.value as typeof source)}>{SOURCES.map((s) => <option key={s} value={s}>{t(`src.${s}` as Key)}</option>)}</select></label>
@@ -108,16 +120,22 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
             {o.taxes && o.taxes.length > 0 && o.taxTotal && o.totalIncTax && <div className="small">{o.taxes.map((x) => <div key={x.code + x.ratePercent} className="row between muted"><span>{x.code} {x.ratePercent}%</span><span dir="ltr">{money(x.tax)}</span></div>)}<div className="row between"><strong>{t('bk.totalIncTax')}</strong><strong>{money(o.totalIncTax)}</strong></div></div>}
             {o.depositDue.amount !== '0.00' && <p className="small">{t('bk.deposit')}: {money(o.depositDue)}</p>}
             <ul className="small muted">{policyLines(t, o.policy).map((l) => <li key={l}>{l}</li>)}</ul>
-            <div className="actions"><button className="primary" disabled={!o.bookable || repricing} onClick={() => { setChosen(o); setStep('guest'); clear(); }}>{t('bk.select')}</button></div>
+            <div className="row stepper" role="group" aria-label={`${o.roomType.name}: ${t('bk.roomsOf')}`}>
+              <button type="button" aria-label={t('bk.fewer')} disabled={!o.bookable || (picks[optKey(o)] ?? 0) === 0} onClick={() => bump(o, -1)}>−</button>
+              <strong dir="ltr" aria-live="polite">{picks[optKey(o)] ?? 0}</strong>
+              <button type="button" aria-label={t('bk.more')} disabled={!o.bookable || repricing || (picks[optKey(o)] ?? 0) >= o.roomsLeft || roomCount >= MAX_ROOMS} onClick={() => bump(o, 1)}>+</button>
+            </div>
           </div>
         ))}
+        {roomCount > 0 && <div className="card inner row between"><span><strong>{roomsLabel}</strong><br /><span className="muted small">{money(totalMoney)} {t('d.exTax')}</span></span><button className="primary" disabled={repricing} onClick={() => { setStep('guest'); clear(); }}>{t('bk.continueN', { n: roomCount })}</button></div>}
+        {options.length > 0 && <p className="muted small">{t('bk.groupHint', { max: MAX_ROOMS })}</p>}
         <div className="actions"><button onClick={() => setStep('search')}>{t('common.back')}</button></div>
       </>)}
 
-      {step === 'guest' && chosen && (<>
-        <p className="muted small">{chosen.roomType.name} · {money(chosen.totalExTax)}</p>
+      {step === 'guest' && roomCount > 0 && (<>
+        <p className="muted small">{roomsLabel} · {money(totalMoney)}</p>
         <label>{t('bk.findGuest')}<input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('bk.findGuestHint')} autoFocus /></label>
-        {hits.length > 0 && <ul className="plain">{hits.map((h) => <li key={h.id}><button className="wide pick" disabled={(h.residency === 'NON_RESIDENT') !== foreign} title={(h.residency === 'NON_RESIDENT') !== foreign ? t('bk.residencyMismatch') : undefined} onClick={() => { setGuest(h); setStep('confirm'); clear(); }}><strong>{h.fullName}{h.vip ? ' ★' : ''}</strong> <span className="muted small">{h.phone ?? ''} {h.nationality ?? ''}</span></button></li>)}</ul>}
+        {hits.length > 0 && <ul className="plain">{hits.map((h) => <li key={h.id}><button className="wide pick" disabled={(h.residency === 'NON_RESIDENT') !== foreign} title={(h.residency === 'NON_RESIDENT') !== foreign ? t('bk.residencyMismatch') : undefined} onClick={() => { setGuest(h); setStep('confirm'); clear(); }}><strong>{h.fullName}{h.vip ? ' ★' : ''}</strong> <span className="muted small">{h.phone ?? ''} {h.nationality ?? ''}</span>{h.matchedById && <> <Badge tone="neutral">{t('wi.byId')}</Badge></>}{!!h.stays && <span className="muted small"> · {t('wi.stays', { n: h.stays })}</span>}</button></li>)}</ul>}
         <h3>{t('bk.newGuest')}</h3>
         <label>{t('ci.name')}<input value={nf.fullName} onChange={(e) => setNf({ ...nf, fullName: e.target.value })} /></label>
         <div className="grid2"><label>{t('bk.phone')}<input value={nf.phone} onChange={(e) => setNf({ ...nf, phone: e.target.value })} dir="ltr" inputMode="tel" /></label><label>{t('ci.nationality')}<input value={nf.nationality} maxLength={2} onChange={(e) => setNf({ ...nf, nationality: e.target.value.toUpperCase() })} dir="ltr" /></label></div>
@@ -125,8 +143,8 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
         <div className="actions"><button className="primary" disabled={nf.fullName.trim().length < 2 || (nf.nationality.trim().toUpperCase() !== 'PK' && nf.nationality.trim() !== '') !== foreign} onClick={() => { setGuest(null); setStep('confirm'); clear(); }}>{t('bk.useNew')}</button><button onClick={() => setStep('options')}>{t('common.back')}</button></div>
       </>)}
 
-      {step === 'confirm' && chosen && (<>
-        <div className="card inner"><strong>{guest ? guest.fullName : nf.fullName}</strong><p className="muted small">{chosen.roomType.name} · {shortDate(arrival, locale)} → {shortDate(departure, locale)} · <strong>{money(chosen.totalExTax)}</strong> {t('d.exTax')}</p></div>
+      {step === 'confirm' && roomCount > 0 && (<>
+        <div className="card inner"><strong>{guest ? guest.fullName : nf.fullName}</strong><p className="muted small">{roomsLabel} · {shortDate(arrival, locale)} → {shortDate(departure, locale)} · <strong>{money(totalMoney)}</strong> {t('d.exTax')}</p></div>
         <label className="check"><input type="checkbox" checked={hold} onChange={(e) => setHold(e.target.checked)} /> {t('bk.hold')}</label>
         {hold && (
           <div className="grid2">

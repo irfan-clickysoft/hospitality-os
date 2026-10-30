@@ -1,0 +1,35 @@
+// Browser test for the registration card: the guest signs on the screen and the signature, rules, rent and companions appear on the card.
+import { chromium } from 'playwright';
+import { BASE, session, book, cnic } from './lib.mjs';
+const fail = []; const check = (name, cond) => { console.log((cond ? 'PASS ' : 'FAIL ') + name); if (!cond) fail.push(name); };
+const s = await session('hira@sunset.local'); const sana = await session('sana@sunset.local');
+const pid = (await s.get('/v1/me/properties')).items.find((p) => p.name.endsWith('Boulevard')).id; const P = `/v1/properties/${pid}`;
+const bd = (await s.get(P)).businessDate;
+const b = await book(s, pid, { name: 'Card Signer', phone: `0300 ${String(Date.now()).slice(-7)}`, arrival: bd, nights: 2 });
+const rooms = (await s.get(`${P}/rack?days=1`)).rooms;
+const tid = (await s.get(`${P}/reservations/${b.id}`)).lines[0].roomType.id;
+const room = rooms.find((r) => r.roomTypeId === tid && r.occupancy === 'VACANT')?.id;
+await sana.put(`${P}/housekeeping/rooms/${room}/status`, { status: 'CLEAN' });
+await s.post(`${P}/reservations/${b.id}/rooms/${b.line}/check-in`, { roomId: room, purposeOfVisit: 'Business', occupants: [
+  { fullName: 'Card Signer', isPrimary: true, ageGroup: 'ADULT', idType: 'CNIC', idNumber: cnic(Date.now() % 700), nationality: 'PK' }, { fullName: 'Spouse Signer', ageGroup: 'ADULT', relationship: 'Spouse' }] });
+const browser = await chromium.launch({ args: ['--no-sandbox'] });
+const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+const page = await ctx.newPage(); page.on('pageerror', (e) => { console.log('PAGEERROR', e.message); fail.push(`pageerror ${e.message}`); });
+await page.goto(BASE);
+await page.getByLabel(/Company code/).fill('sunset'); await page.getByLabel(/Email/).fill('hira@sunset.local'); await page.getByLabel(/Password/).fill(process.env.E2E_PASSWORD ?? 'sunset-demo-passphrase'); await page.getByRole('button', { name: /sign in/i }).click();
+await page.getByRole('navigation', { name: /Main navigation/ }).first().waitFor();
+await page.goto(`${BASE}/#/reservations/${b.id}`);
+await page.getByRole('button', { name: 'Sign on screen' }).first().click();
+const box = page.getByRole('group', { name: 'Guest signature' }); await box.waitFor();
+check('the rules are shown before signing', (await box.innerText()).includes('Rules'));
+check('saving is blocked until the rules are accepted and a signature is drawn', await box.getByRole('button', { name: 'Save signature' }).isDisabled());
+const pad = box.getByRole('img', { name: /Sign in the box/ }).first(); await pad.scrollIntoViewIfNeeded(); const r = await pad.boundingBox();
+await page.mouse.move(r.x + 30, r.y + 60); await page.mouse.down(); await page.mouse.move(r.x + 120, r.y + 20, { steps: 8 }); await page.mouse.move(r.x + 220, r.y + 90, { steps: 8 }); await page.mouse.up();
+await box.getByLabel(/has read and accepts/).check();
+await box.getByRole('button', { name: 'Save signature' }).click();
+await page.getByRole('button', { name: 'Sign on screen' }).first().waitFor();
+const html = await (await ctx.request.get(`${BASE}${P}/reservations/${b.id}/rooms/${b.line}/registration-card`)).text();
+check('the card shows the signature picture', html.includes('src="data:image/png;base64,') && html.includes('signed on screen'));
+check('the card shows the companion and the relationship', html.includes('Spouse Signer') && html.includes('Spouse of main guest'));
+check('the card shows the purpose, the rent and the rules', html.includes('Business') && html.includes('Rent and payment') && html.includes('Rules &amp; policies'));
+await browser.close(); if (fail.length) { console.log('FAILED', fail); process.exit(1); } console.log('all passed');

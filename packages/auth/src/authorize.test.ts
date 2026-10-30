@@ -99,7 +99,8 @@ describe('role templates', () => {
   it('never give frontline roles sensitive permissions', () => {
     for (const k of ['housekeeper', 'kitchen_support', 'gate_security', 'reservation_agent', 'cashier', 'front_desk_agent']) {
       const r = ROLE_TEMPLATES.find((x) => x.key === k)!;
-      expect(r.permissions.filter((p) => SENSITIVE_PERMISSIONS.has(p)), k).toEqual([]);
+      // the front desk may see ID numbers (with a fresh second factor) on purpose; nothing else sensitive
+      expect(r.permissions.filter((p) => SENSITIVE_PERMISSIONS.has(p)), k).toEqual(k === 'front_desk_agent' ? ['frontdesk.view_id'] : []);
     }
   });
   it('gate security cannot see guest financials or full reservation data', () => {
