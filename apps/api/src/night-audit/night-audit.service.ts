@@ -1,3 +1,4 @@
+import { takeBookingSnapshot } from '../insights/snapshots.js';
 import { ForbiddenException, HttpException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { sql, type Transaction } from 'kysely';
 import type { z } from 'zod';
@@ -222,6 +223,7 @@ export class NightAuditService {
       const run = await trx.selectFrom('night_audit_run').select('started_at').where('id', '=', runId).executeTakeFirstOrThrow();
       const since = prev?.completed_at ?? new Date(new Date(run.started_at).getTime() - 24 * 3_600_000);
       const snap = await this.snapshot(trx, propertyId, p.currency, bd, runId, since);
+      await takeBookingSnapshot(trx, currentTenant().tenantId, propertyId, bd, 'NIGHT_AUDIT', userId);        // the books as they stood when the day closed: pace, pickup and forecast are built from these
       const next = addDays(bd, 1);
       const rolled = await trx.updateTable('property').set({ business_date: next, version: sql`version + 1` as never }).where('id', '=', propertyId).where('business_date', '=', bd).returning('id').executeTakeFirst();   // compare-and-set
       if (!rolled) throw fail(409, 'STALE_BUSINESS_DATE', 'The business date has already moved on.');

@@ -26,6 +26,14 @@ check('historical shows its date basis in the filter labels', (await page.getByL
 check('every key figure has a definition', (await page.getByText('Definition', { exact: true }).count()) >= 4);
 const href = await page.getByRole('link', { name: 'Download CSV' }).getAttribute('href'); check('the CSV link carries the same filters', href.includes('format=csv') && href.includes('/insights/historical'));
 const csv = await ctx.request.get(`${BASE}${href}`); check('the export downloads with its header block', csv.ok() && (await csv.text()).includes('Date basis:'));
+await page.evaluate(() => { window.location.hash = '/reports/center?r=forecast'; });
+await page.getByRole('heading', { name: 'Occupancy and revenue forecast' }).waitFor(); await page.getByRole('table').waitFor();
+check('with no history the forecast says so instead of inventing numbers', (await page.getByText(/No snapshot history yet/).count()) > 0 && (await page.getByText('Not enough history').count()) > 0);
+await page.evaluate(() => { window.location.hash = '/reports/center?r=booking-pace'; });
+await page.getByRole('heading', { name: 'Booking pace and pickup' }).waitFor(); await page.getByRole('table').waitFor();
+check('booking pace asks which earlier books to compare with', (await page.getByLabel('Compare with the books').count()) === 1);
+await page.evaluate(() => { window.location.hash = '/reports/center'; }); await page.getByRole('heading', { name: 'Reporting Center' }).first().waitFor();
+check('the home says how many daily snapshots are saved', (await page.getByText(/daily snapshots of the books/).count()) > 0);
 await page.evaluate(() => { window.location.hash = '/reports/center?r=room-status'; });
 await page.getByRole('heading', { name: 'Room status' }).first().waitFor(); await page.getByRole('table').waitFor();
 check('room status shows three separate status columns', (await page.getByRole('columnheader', { name: /Occupancy/ }).count()) > 0 && (await page.getByRole('columnheader', { name: /Housekeeping/ }).count()) > 0 && (await page.getByRole('columnheader', { name: /Maintenance/ }).count()) > 0);

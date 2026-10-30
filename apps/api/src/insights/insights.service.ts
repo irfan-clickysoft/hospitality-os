@@ -9,11 +9,13 @@ import * as FIN from './finance.js';
 import * as RM from './rooms.js';
 import * as MG from './management.js';
 import * as CS from './cases.js';
+import * as PC from './pace.js';
+import { takeBookingSnapshot } from './snapshots.js';
 import type { Col, Def, Envelope, Row } from './types.js';
 import { addDays, dec, ymd } from './util.js';
 
 const fail = (status: number, code: string, message: string) => new HttpException({ code, message }, status);
-export const REGISTRY: Def[] = [MG.flash, FD.expectedArrivals, FD.checkins, FD.roomMoves, FD.roomReassignments, FD.cancellations, FD.earlyLate, FD.rateChanges, RM.roomStatus, FIN.cashier, FIN.outstanding, FIN.discounts, RM.lostFound, CS.damageCharges, CS.complaints, MG.nightAudit, MG.futureBookings, MG.historical];
+export const REGISTRY: Def[] = [MG.flash, FD.expectedArrivals, FD.checkins, FD.roomMoves, FD.roomReassignments, FD.cancellations, FD.earlyLate, FD.rateChanges, RM.roomStatus, FIN.cashier, FIN.outstanding, FIN.discounts, RM.lostFound, CS.damageCharges, CS.complaints, MG.nightAudit, MG.futureBookings, PC.bookingPace, PC.forecast, MG.historical];
 /** Reports in the plan that need new information to be captured first. Listed so nobody wonders where they are. */
 export const PLANNED: ReadonlyArray<{ id: string; name: string; category: string; purpose: string; needs: string }> = [];
 const MAX_DAYS = 400;
@@ -84,5 +86,28 @@ export class InsightsService {
     const lines = toCsv(cols.map((c) => c.label), body as never);
     const csv = head.map((r) => r.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(',')).join('\r\n') + '\r\n' + lines;
     return { filename: `${m.property.code}-${m.id}-${(m.from ?? m.businessDate)}${m.to ? `_${m.to}` : ''}.csv`.replace(QUOTE, '_'), csv };
+  }
+
+  /** What snapshots exist: how many days, the first and latest, and whether today's is saved. */
+  async snapshotStatus(userId: string, propertyId: string) {
+    const ok = (await this.authz.check(userId, { permission: 'management.view', scope: { propertyId } })).effect === 'ALLOW' || (await this.authz.check(userId, { permission: 'report.view', scope: { propertyId } })).effect === 'ALLOW';
+    if (!ok) throw new ForbiddenException({ code: 'PERMISSION_DENIED', message: 'You do not have access to this' });
+    return this.tdb.tx(async (trx) => {
+      const p = await trx.selectFrom('property').select('business_date').where('id', '=', propertyId).executeTakeFirstOrThrow();
+      const r = await trx.selectFrom('booking_snapshot_run').select(({ fn }) => [fn.countAll<string>().as('n'), fn.min('snapshot_date').as('first'), fn.max('snapshot_date').as('latest')]).where('property_id', '=', propertyId).executeTakeFirstOrThrow();
+      const last = await trx.selectFrom('booking_snapshot_run').select(['source', 'taken_at']).where('property_id', '=', propertyId).orderBy('snapshot_date', 'desc').limit(1).executeTakeFirst();
+      return { days: Number(r.n), first: r.first, latest: r.latest, lastSource: last?.source ?? null, lastTakenAt: last?.taken_at ?? null, businessDate: p.business_date, todaySaved: r.latest === p.business_date };
+    });
+  }
+
+  /** Saves the books for the current business date now (replaced by the night audit's own when the day closes). */
+  async takeSnapshot(userId: string, propertyId: string) {
+    if ((await this.authz.check(userId, { permission: 'nightaudit.run', scope: { propertyId } })).effect !== 'ALLOW') throw new ForbiddenException({ code: 'PERMISSION_DENIED', message: 'Saving a snapshot needs the night-audit permission' });
+    return this.tdb.tx(async (trx) => {
+      const p = await trx.selectFrom('property').select('business_date').where('id', '=', propertyId).executeTakeFirstOrThrow();
+      const r = await takeBookingSnapshot(trx, currentTenant().tenantId, propertyId, p.business_date, 'MANUAL', userId);
+      await this.audit.record(trx, { action: 'report.snapshot', resourceType: 'property', resourceId: propertyId, propertyId, after: { date: p.business_date, rows: r.rows } });
+      return { snapshotDate: p.business_date, rows: r.rows };
+    });
   }
 }

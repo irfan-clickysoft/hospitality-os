@@ -22,7 +22,7 @@ export function ReportView({ item }: { item: CatalogItem }) {
   const quick = useMemo(() => ({ today: [bd, bd], mtd: [`${bd.slice(0, 8)}01`, bd], last7: [addDays(bd, -6), bd], last30: [addDays(bd, -29), bd], next7: [bd, addDays(bd, 6)], next30: [bd, addDays(bd, 29)], next90: [bd, addDays(bd, 89)] } as Record<string, [string, string]>), [bd]);
   const [data, setData] = useState<Envelope | null>(null); const [problem, setProblem] = useState<{ code: string; detail?: string } | null>(null); const [loading, setLoading] = useState(true);
   const [views, setViews] = useState<Saved[]>(() => loadViews(pid, item.id));
-  const search = useMemo(() => { const p = new URLSearchParams(); for (const k of ['basis', 'from', 'to', 'view', 'group']) { const v = qp.get(k); if (v) p.set(k, v); } return p.toString(); }, [qp]);
+  const search = useMemo(() => { const p = new URLSearchParams(); for (const k of ['basis', 'from', 'to', 'view', 'group', 'compare']) { const v = qp.get(k); if (v) p.set(k, v); } return p.toString(); }, [qp]);
   useEffect(() => {
     let dead = false; setLoading(true); setProblem(null);
     api<Envelope>('GET', `/v1/properties/${pid}/insights/${item.id}${search ? `?${search}` : ''}`).then((r) => { if (!dead) { setData(r); setLoading(false); } }).catch((e) => { if (!dead) { setProblem(problemOf(e)); setData(null); setLoading(false); } });
