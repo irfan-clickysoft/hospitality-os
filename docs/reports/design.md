@@ -36,6 +36,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Built with the registers (migration 0049):** E *Damage charges* and K *Complaints and incidents*, with the damage and case registers behind them (Tasks → Damage, Tasks → Complaints).
 
+**Built with snapshots (migration 0050):** *Booking pace and pickup* (net pickup split into new bookings, cancellations and changes) and *Occupancy and revenue forecast* (on the books + typical pickup at that distance, with samples and confidence shown, no forecast where history is thin).
+
 **Next (needs new capture):** early/late **fees and waivers** (the fee event), cancellation initiator and reason codes, discount reasons and approvals, room-status history.
 
 **Later:** booking pace and pickup, forecast and forecast accuracy (need nightly snapshots), channel/segment/corporate production, group pickup, payment-gateway and OTA reconciliation, commission payable, housekeeping productivity and inspection, maintenance aging/downtime, F&B and inventory reports, staff productivity, access/export audit reports, multi-property portfolio views, scheduled delivery, custom builder.
@@ -96,7 +98,7 @@ Built: screen, print view, CSV with a header block (report, property, date basis
 ## 13. Event and snapshot data model
 
 Existing and used: booking history, room assignments, payments, cashier shifts, folio postings, night-audit runs and daily statistics, stay nights, lost-and-found events.
-To add as needed: `booking_snapshot` (daily on-the-books by stay date, for pace/pickup/forecast); cancellation initiator and reason code; fee/waiver events for early/late; damage cases; complaint/incident cases; room-status history; discount reason and approval; collection follow-up (promise, dispute); report schedules and delivery log.
+To add as needed: `booking_snapshot` — **built**: daily on-the-books by stay date, room type and channel, saved in the transaction that closes the business day (and on demand); cancellation initiator and reason code; fee/waiver events for early/late; damage cases; complaint/incident cases; room-status history; discount reason and approval; collection follow-up (promise, dispute); report schedules and delivery log.
 
 ## 14. Layouts
 
@@ -112,7 +114,7 @@ Desktop: dense sticky-header table with column chooser, sortable columns, totals
 
 1. **Done:** engine, catalog, shell, components, sixteen reports above.
 2. Capture slices that unlock the registers: damage cases (E), complaints/incidents (K), early/late fees, cancellation reason codes, discount approvals.
-3. Daily snapshots → booking pace, pickup, forecast, forecast accuracy.
+3. **Done:** daily snapshots → booking pace, pickup, forecast. Still to add: forecast accuracy (needs forecasts saved over time), pace by channel/segment, same-date-last-year pace.
 4. Scheduling and delivery (expiring links), Excel/PDF, shared views.
 5. Reconciliation reports (gateway, OTA, bank), channel/segment/corporate, housekeeping and maintenance analytics.
 6. Portfolio (multi-property, currency conversion with stated FX), owner pack.

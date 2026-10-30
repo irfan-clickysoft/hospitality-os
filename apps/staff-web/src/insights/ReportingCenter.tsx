@@ -48,7 +48,21 @@ export function ReportingCenter() {
       {CATS.map((c) => group(t(`ins.cat.${c}` as Key), items.filter((x) => x.category === c && match(x))))}
       {needle && items.filter(match).length === 0 && <p className="muted center">{t('ins.none')}</p>}
       {!needle && planned.length > 0 && <section className="stack"><h3>{t('ins.planned')}</h3><ul className="plain ins-grid">{planned.map((p) => <li key={p.id} className="card inner"><strong>{p.name}</strong><p className="muted small">{p.purpose}</p><p className="muted small">{t('ins.needs')}: {p.needs}</p></li>)}</ul></section>}
+      <Snapshots />
       <p className="muted small">{t('rp.help')} <Link to="/reports/downloads">{t('ins.downloads')}</Link></p>
     </section>
+  );
+}
+
+/** What daily snapshots of the books are saved (they feed pace, pickup and forecast), and a button to save today's now. */
+function Snapshots() {
+  const { t } = useT(); const { property, can } = useAuth(); const pid = property!.id;
+  const [st, setSt] = useState<{ days: number; latest: string | null; todaySaved: boolean } | null>(null); const [busy, setBusy] = useState(false);
+  const load = () => api<NonNullable<typeof st>>('GET', `/v1/properties/${pid}/insights/snapshots`).then(setSt).catch(() => setSt(null));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pid]);
+  if (!st) return null;
+  return (
+    <p className="muted small" role="status">{st.days === 0 ? t('ins.snap.none') : t('ins.snap.status', { days: st.days, latest: st.latest ?? '' })}{' '}
+      {can('nightaudit.run') && !st.todaySaved && <button type="button" className="link" disabled={busy} onClick={async () => { setBusy(true); try { await api('POST', `/v1/properties/${pid}/insights/snapshots`, {}); await load(); } finally { setBusy(false); } }}>{t('ins.snap.now')}</button>}</p>
   );
 }
