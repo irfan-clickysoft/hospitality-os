@@ -42,7 +42,8 @@ export const SECTIONS: Section[] = [
     { id: 'compliance', label: 'nav.compliance', show: any('compliance.view'), Page: L(() => import('../desk/Compliance.js'), 'Compliance') },
     { id: 'kitchen', label: 'nav.kitchen', show: any('fnb.order'), Page: L(() => import('../desk/Kitchen.js'), 'Kitchen') },
   ] },
-  { id: 'reports', path: '/reports', label: 'nav.reports', icon: 'reports', show: any('management.view', 'report.view', 'nightaudit.run', 'audit.view'), tabs: [
+  { id: 'reports', path: '/reports', label: 'nav.reports', icon: 'reports', show: any('management.view', 'report.view', 'nightaudit.run', 'audit.view', 'reservation.view', 'housekeeping.view', 'cashier.review'), tabs: [
+    { id: 'center', label: 'ins.nav', show: any('management.view', 'report.view', 'reservation.view', 'housekeeping.view', 'cashier.review', 'nightaudit.run'), Page: L(() => import('../insights/ReportingCenter.js'), 'ReportingCenter') },
     { id: 'overview', label: 'nav.management', show: any('management.view'), Page: L(() => import('../desk/Management.js'), 'Management') },
     { id: 'downloads', label: 'nav.downloads', show: any('report.view'), Page: L(() => import('../desk/Reports.js'), 'Reports') },
     { id: 'nightaudit', label: 'nav.audit', show: any('nightaudit.run'), Page: L(() => import('../desk/NightAudit.js'), 'NightAudit') },

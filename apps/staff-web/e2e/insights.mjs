@@ -1,0 +1,42 @@
+// Browser test for the Reporting Center: the home, role-based suggestions, a report with its scope and definitions, the table, export link, and an accessibility check.
+import { chromium } from 'playwright';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { BASE } from './lib.mjs';
+const AXE = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
+const browser = await chromium.launch({ args: ['--no-sandbox'] });
+const fail = []; const check = (name, cond) => { console.log((cond ? 'PASS ' : 'FAIL ') + name); if (!cond) fail.push(name); };
+const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+const page = await ctx.newPage(); page.on('pageerror', (e) => { console.log('PAGEERROR', e.message); fail.push(`pageerror ${e.message}`); });
+await page.goto(BASE);
+await page.getByLabel(/Company code/).fill('sunset'); await page.getByLabel(/Email/).fill('manager@sunset.local'); await page.getByLabel(/Password/).fill(process.env.E2E_PASSWORD ?? 'sunset-demo-passphrase'); await page.getByRole('button', { name: /sign in/i }).click();
+await page.getByRole('navigation', { name: /Main navigation/ }).first().waitFor();
+await page.evaluate(() => { window.location.hash = '/reports/center'; });
+await page.getByRole('heading', { name: 'Reporting Center' }).first().waitFor();
+check('the catalog lists the core reports', (await page.getByText('Completed check-ins').count()) > 0 && (await page.getByText('Collection and cashier').count()) > 0 && (await page.getByText('Historical performance').count()) > 0);
+check('reports that need new information are listed as planned', (await page.getByText('Damage charges').count()) > 0);
+await page.getByRole('link', { name: 'Daily manager flash' }).first().click();
+await page.getByRole('heading', { name: 'Daily manager flash' }).waitFor();
+const meta = await page.getByRole('term').allInnerTexts(); check('the scope shows property, date basis, time zone, as-of and currency', ['Property', 'Date basis', 'Time zone', 'Data as of', 'Currency and tax'].every((x) => meta.includes(x)));
+await page.getByRole('table').waitFor(); await page.screenshot({ path: '/tmp/work/ins-flash.png', fullPage: true });
+check('the flash has its measures', (await page.getByRole('cell', { name: 'Sellable rooms' }).count()) > 0);
+await page.evaluate(() => { window.location.hash = '/reports/center?r=historical'; });
+await page.getByRole('heading', { name: 'Historical performance' }).waitFor(); await page.getByRole('table').waitFor();
+check('historical shows its date basis in the filter labels', (await page.getByLabel(/Business date \(closed days\) — From/).count()) === 1);
+check('every key figure has a definition', (await page.getByText('Definition', { exact: true }).count()) >= 4);
+const href = await page.getByRole('link', { name: 'Download CSV' }).getAttribute('href'); check('the CSV link carries the same filters', href.includes('format=csv') && href.includes('/insights/historical'));
+const csv = await ctx.request.get(`${BASE}${href}`); check('the export downloads with its header block', csv.ok() && (await csv.text()).includes('Date basis:'));
+await page.evaluate(() => { window.location.hash = '/reports/center?r=room-status'; });
+await page.getByRole('heading', { name: 'Room status' }).first().waitFor(); await page.getByRole('table').waitFor();
+check('room status shows three separate status columns', (await page.getByRole('columnheader', { name: /Occupancy/ }).count()) > 0 && (await page.getByRole('columnheader', { name: /Housekeeping/ }).count()) > 0 && (await page.getByRole('columnheader', { name: /Maintenance/ }).count()) > 0);
+for (const [name, hash] of [['catalog', '/reports/center'], ['room status', '/reports/center?r=room-status'], ['historical', '/reports/center?r=historical']]) {
+  await page.evaluate((h) => { window.location.hash = h; }, hash); await page.waitForTimeout(900);
+  await page.addScriptTag({ content: AXE });
+  const r = await page.evaluate(async () => window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] } }));
+  const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+  check(`accessibility: ${name} has no serious findings${bad.length ? ' — ' + bad.map((v) => v.id).join(',') : ''}`, bad.length === 0);
+}
+await page.setViewportSize({ width: 390, height: 800 }); await page.evaluate(() => { window.location.hash = '/reports/center?r=room-status'; }); await page.waitForTimeout(800);
+check('on a phone there is no sideways page scroll', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+await page.screenshot({ path: '/tmp/work/ins-mobile.png' });
+await browser.close(); if (fail.length) { console.log('FAILED', fail); process.exit(1); } console.log('all passed');
