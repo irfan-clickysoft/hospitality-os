@@ -21,9 +21,28 @@ export const PLANNED: ReadonlyArray<{ id: string; name: string; category: string
 const MAX_DAYS = 400;
 const QUOTE = /[^A-Za-z0-9._-]/g;
 
+/** The report as a spreadsheet file: a header block (what, where, which dates and filters, currency and tax basis, time zone, who and when), the rows, and a totals row. */
+export function envelopeToCsv(e: Envelope): { filename: string; csv: string } {
+  const cols = e.columns.filter((c) => !!c.label);
+  const cell = (c: Col, r: Row) => { const v = r[c.key]; if (v === null || v === undefined || v === '') return ''; if (c.type === 'money') return dec(v as string); if (r._fmt === 'money') return typeof v === 'string' ? v : String(v); return v as string | number; };
+  const m = e.meta;
+  const head: Array<Array<string | number>> = [[m.name], [`Property: ${m.property.name} (${m.property.code})`], [`Date basis: ${m.dateBasis.label}${m.from ? ` — ${m.from} to ${m.to}` : ''}`], [`Filters: ${Object.entries(m.params).map(([k, v]) => `${k}=${v}`).join(', ') || 'none'}`], [`Currency: ${m.currency}. Tax basis: ${m.taxBasis}`],
+    [`Time zone: ${m.timezone}. Business date: ${m.businessDate}`], [`Generated: ${m.asOf} by ${m.generatedBy ?? 'unknown'}. Data as of: ${m.asOf}. Report definition v${m.definitionVersion}`], []];
+  const body = e.rows.map((r) => cols.map((c) => cell(c, r)));
+  if (e.totals) body.push(cols.map((c, i) => (i === 0 ? 'Total' : e.totals![c.key] === undefined ? '' : c.type === 'money' ? dec(e.totals![c.key] as string) : (e.totals![c.key] as number))));
+  const lines = toCsv(cols.map((c) => c.label), body as never);
+  const csv = head.map((r) => r.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(',')).join('\r\n') + '\r\n' + lines;
+  return { filename: `${m.property.code}-${m.id}-${(m.from ?? m.businessDate)}${m.to ? `_${m.to}` : ''}.csv`.replace(QUOTE, '_'), csv };
+}
+
 @Injectable()
 export class InsightsService {
   constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuthorizationService) private readonly authz: AuthorizationService, @Inject(AuditService) private readonly audit: AuditService) {}
+
+  /** Whether this person may open the report at the property right now. Checked again whenever a stored copy is opened. */
+  async canOpen(userId: string, reportId: string, propertyId: string): Promise<boolean> { const d = REGISTRY.find((x) => x.id === reportId); return !!d && this.allowed(userId, d, propertyId); }
+  reportName(reportId: string) { return REGISTRY.find((x) => x.id === reportId)?.name ?? null; }
+  reportDef(reportId: string) { return REGISTRY.find((x) => x.id === reportId) ?? null; }
 
   private async allowed(userId: string, d: Def, propertyId: string): Promise<boolean> {
     for (const permission of d.permissions) if ((await this.authz.check(userId, { permission, scope: { propertyId } })).effect === 'ALLOW') return true;
@@ -45,7 +64,7 @@ export class InsightsService {
     return { from: f, to: t };
   }
 
-  async run(userId: string, propertyId: string, id: string, q: { basis?: string; from?: string; to?: string; params?: Record<string, string> }, opts: { exported?: boolean } = {}): Promise<Envelope> {
+  async run(userId: string, propertyId: string, id: string, q: { basis?: string; from?: string; to?: string; params?: Record<string, string> }, opts: { exported?: boolean; scheduled?: boolean } = {}): Promise<Envelope> {
     const d = REGISTRY.find((x) => x.id === id);
     if (!d) throw new NotFoundException({ code: 'NOT_FOUND', message: 'No such report' });
     if (!(await this.allowed(userId, d, propertyId))) throw new ForbiddenException({ code: 'PERMISSION_DENIED', message: `You do not have access to the “${d.name}” report` });
@@ -57,7 +76,7 @@ export class InsightsService {
       if (!p) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Property not found' });
       const { from, to } = this.rangeOf(d, p.business_date, q.from, q.to);
       const tenantId = currentTenant().tenantId;
-      const canRestricted = (await this.authz.check(userId, { permission: 'case.restricted', scope: { propertyId } })).effect === 'ALLOW';
+      const canRestricted = !opts.scheduled && (await this.authz.check(userId, { permission: 'case.restricted', scope: { propertyId } })).effect === 'ALLOW';      // a scheduled copy never carries restricted cases: it is read by other people later
       const res = await d.run({ trx, tenantId, propertyId, prop: { code: p.code, name: p.name, currency: p.currency, timezone: p.timezone, businessDate: p.business_date, checkIn: p.check_in_time, checkOut: p.check_out_time }, from, to, basis: basis.id, params, canRestricted });
       const totals = this.totalsOf(res.columns, res.rows);
       const me = await trx.selectFrom('staff_user').select('full_name').where('id', '=', userId).executeTakeFirst();
@@ -75,17 +94,7 @@ export class InsightsService {
   }
 
   async csv(userId: string, propertyId: string, id: string, q: Parameters<InsightsService['run']>[3]) {
-    const e = await this.run(userId, propertyId, id, q, { exported: true });
-    const cols = e.columns.filter((c) => !!c.label);
-    const cell = (c: Col, r: Row) => { const v = r[c.key]; if (v === null || v === undefined || v === '') return ''; if (c.type === 'money') return dec(v as string); if (r._fmt === 'money') return typeof v === 'string' ? v : String(v); return v as string | number; };
-    const m = e.meta;
-    const head: Array<Array<string | number>> = [[m.name], [`Property: ${m.property.name} (${m.property.code})`], [`Date basis: ${m.dateBasis.label}${m.from ? ` — ${m.from} to ${m.to}` : ''}`], [`Filters: ${Object.entries(m.params).map(([k, v]) => `${k}=${v}`).join(', ') || 'none'}`], [`Currency: ${m.currency}. Tax basis: ${m.taxBasis}`],
-      [`Time zone: ${m.timezone}. Business date: ${m.businessDate}`], [`Generated: ${m.asOf} by ${m.generatedBy ?? 'unknown'}. Data as of: ${m.asOf}. Report definition v${m.definitionVersion}`], []];
-    const body = e.rows.map((r) => cols.map((c) => cell(c, r)));
-    if (e.totals) body.push(cols.map((c, i) => (i === 0 ? 'Total' : e.totals![c.key] === undefined ? '' : c.type === 'money' ? dec(e.totals![c.key] as string) : (e.totals![c.key] as number))));
-    const lines = toCsv(cols.map((c) => c.label), body as never);
-    const csv = head.map((r) => r.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(',')).join('\r\n') + '\r\n' + lines;
-    return { filename: `${m.property.code}-${m.id}-${(m.from ?? m.businessDate)}${m.to ? `_${m.to}` : ''}.csv`.replace(QUOTE, '_'), csv };
+    return envelopeToCsv(await this.run(userId, propertyId, id, q, { exported: true }));
   }
 
   /** What snapshots exist: how many days, the first and latest, and whether today's is saved. */

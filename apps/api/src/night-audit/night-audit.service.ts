@@ -1,3 +1,4 @@
+import { ScheduledReportsService } from '../insights/scheduled.service.js';
 import { takeBookingSnapshot } from '../insights/snapshots.js';
 import { ForbiddenException, HttpException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { sql, type Transaction } from 'kysely';
@@ -47,6 +48,7 @@ export class NightAuditService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
     @Inject(CLOCK) private readonly clock: ClockLike,
+    @Inject(ScheduledReportsService) private readonly scheduled: ScheduledReportsService,
   ) {}
 
   private async prop(trx: Trx, id: string, lock = false) {
@@ -177,6 +179,7 @@ export class NightAuditService {
         throw fail(500, 'AUDIT_STEP_FAILED', `The audit stopped at "${key}". Fix the cause and start it again — it continues from this step.`, { runId, step: key, reason: message });
       }
     }
+    await this.scheduled.onDayClosed(propertyId, bd);                                              // scheduled reports go out once the day has closed; a problem there never undoes the close
     return this.runView(propertyId, runId);
   }
 
