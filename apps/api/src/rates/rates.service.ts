@@ -335,7 +335,8 @@ export class RatesService {
   // ───────── quotes (search) ─────────
   async quote(propertyId: string, userId: string, i: z.infer<typeof S.QuoteRequest>) {
     const stayDates = nightsOf(i.arrival, i.departure, 90);
-    for (const o of [...i.nightDiscounts, ...i.nightPrices]) if (!stayDates.includes(o.date)) throw new UnprocessableEntityException({ code: 'VALIDATION_FAILED', message: `${o.date} is not a night of this stay` });
+    const nightPrices = i.nightPrices ?? [];
+    for (const o of [...i.nightDiscounts, ...nightPrices]) if (!stayDates.includes(o.date)) throw new UnprocessableEntityException({ code: 'VALIDATION_FAILED', message: `${o.date} is not a night of this stay` });
     const perNight = i.nightDiscounts.length > 0;
     const nightBp = nightBpFor(stayDates, i.discountPct, i.nightDiscounts);
     const topPct = Math.max(...nightBp) / 100;                                       // the deepest cut decides whether the person may give it
@@ -369,7 +370,7 @@ export class RatesService {
           const eligible = q.reasons.length === 0;
           if (!(eligible && rooms >= 1) && !i.includeUnavailable) continue;           // sold-out or ineligible options are listed only on request
           const fixedMinor = i.discountAmount ? Money.parse(i.discountAmount, cur).minor : i.agreedTotal ? (q.subtotalMinor > Money.parse(i.agreedTotal, cur).minor ? q.subtotalMinor - Money.parse(i.agreedTotal, cur).minor : 0n) : 0n;
-          const priceMap = new Map(i.nightPrices.map((o) => [o.date, Money.parse(o.price, cur).minor]));
+          const priceMap = new Map(nightPrices.map((o) => [o.date, Money.parse(o.price, cur).minor]));
           const exactCuts = priceMap.size > 0 ? q.nights.map((n) => { const price = priceMap.get(n.date); return price === undefined || price >= n.totalMinor ? 0n : n.totalMinor - price; }) : null;      // an agreed price for some nights: the cut is exactly the difference, never a rounded percentage
           const fixedCut = fixedMinor > q.subtotalMinor ? q.subtotalMinor : fixedMinor;
           const exactTop = exactCuts ? Math.max(0, ...exactCuts.map((c, k) => (q.nights[k]!.totalMinor > 0n ? Number((c * 10000n) / q.nights[k]!.totalMinor) / 100 : 0))) : 0;
