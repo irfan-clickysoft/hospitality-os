@@ -50,6 +50,9 @@ export class CaseService {
     });
   }
 
+  /** Names only, for choosing who owns a case. */
+  async people() { return this.tdb.tx(async (trx) => ({ items: await trx.selectFrom('staff_user').select(['id', 'full_name as name']).where('status', '=', 'ACTIVE').orderBy('full_name').execute() })); }
+
   async create(propertyId: string, userId: string, i: z.infer<typeof S.CaseCreate>) {
     return this.tdb.tx(async (trx) => {
       const p = await this.prop(trx, propertyId); const t = currentTenant().tenantId;

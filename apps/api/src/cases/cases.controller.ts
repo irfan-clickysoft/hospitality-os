@@ -45,6 +45,7 @@ export class DamageController {
 export class CasesController {
   constructor(@Inject(CaseService) private readonly svc: CaseService) {}
   @Get() @RequirePermission('case.view', P) list(@Param('propertyId', uuid()) pid: string, @Query() q: unknown) { return this.svc.list(pid, me(), parse(S.CaseList, q)); }
+  @Get('people') @RequirePermission('case.manage', P) people() { return this.svc.people(); }
   @Post() @RequirePermission('case.report', P) create(@Param('propertyId', uuid()) pid: string, @Body() b: unknown) { return this.svc.create(pid, me(), parse(S.CaseCreate, b)); }
   @Get(':id') @RequirePermission('case.view', P) get(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string) { return this.svc.get(pid, id, me()); }
   @Patch(':id') @RequirePermission('case.manage', P) update(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Body() b: unknown) { return this.svc.update(pid, id, me(), parse(S.CaseUpdate, b)); }
