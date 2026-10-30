@@ -574,3 +574,35 @@ describe('short stays', () => {
     expect((await setRule(w, null)).json().shortStayRule).toBeNull();
   });
 });
+
+describe('negotiated walk-in prices', () => {
+  const walk = (w: W, o: Record<string, unknown>, h = O) => call('POST', `/v1/properties/${w.pid}/front-desk/walk-ins`, h, { guest: { fullName: `Neg ${++n}`, phone: `0314${String(6000000 + n).slice(-7)}`, nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 1, adults: 2, children: 0, ...o }, { 'idempotency-key': `neg-${++n}-${Date.now()}` });
+  const quote = (w: W, body: Record<string, unknown>, h = O) => call('POST', `/v1/properties/${w.pid}/quotes`, h, { arrival: '2026-11-05', departure: '2026-11-08', adults: 2, channel: 'WALKIN', roomTypeId: w.rt.STD, ...body });
+  const optionOf = async (w: W, body: Record<string, unknown>, h = O) => (await ok(quote(w, body, h), 200)).options[0];
+  const ok = async (r: Promise<any>, status = 200) => { const x = await r; expect(x.statusCode, x.body).toBe(status); return x.json(); };
+
+  it('prices an agreed price for the whole stay or for the first night exactly, and books the walk-in at it', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const whole = await optionOf(w, { agreedTotal: '30000' }); expect(whole.totalExTax.amount).toBe('30000.00'); expect(whole.discount).toMatchObject({ amount: '6000.00' });
+    const first = await optionOf(w, { nightPrices: [{ date: '2026-11-05', price: '9000' }] });
+    expect(first.totalExTax.amount).toBe('33000.00'); expect(first.nights[0]).toMatchObject({ payable: '9000.00', discount: '3000.00', discountPct: 25 }); expect(first.nights[1]).toMatchObject({ payable: '12000.00', discount: '0.00' });
+    expect((await optionOf(w, { agreedTotal: '99999' })).totalExTax.amount).toBe('36000.00');                         // an agreed price never raises the price
+    expect((await quote(w, { agreedTotal: '30000', discountPct: 5 })).statusCode).toBe(400);                           // one way of discounting at a time
+    const r = await walk(w, { nights: 3, quoteToken: first.quoteToken, occupants: [occ({ isPrimary: true })] });
+    expect(r.statusCode, r.body).toBe(201);
+    const detail = r.json(); const line = detail.lines[0]; expect(line.total.amount).toBe('33000.00');
+    const nights = await adminDb.selectFrom('stay_night').select(['business_date', 'room_minor', 'discount_minor', 'total_minor']).where('reservation_room_id', '=', line.id).orderBy('business_date').execute();
+    expect(nights.map((x) => [String(x.total_minor)])).toEqual([['900000'], ['1200000'], ['1200000']]);              // the first night really is 9,000 on the books
+    expect((await adminDb.selectFrom('folio_posting').select(['txn_code', 'amount_minor']).where('reservation_room_id', '=', line.id).execute()).length).toBeGreaterThanOrEqual(0);
+  });
+
+  it('refuses a price made for a different stay, and a discount bigger than the person may give', async () => {
+    const w = await sunset(); await setBd(w, '2026-11-05');
+    const opt = await optionOf(w, { agreedTotal: '30000' });
+    const bad = await walk(w, { nights: 2, quoteToken: opt.quoteToken, occupants: [occ({ isPrimary: true })] }); expect(bad.statusCode).toBe(422); expect(bad.json().code).toBe('QUOTE_MISMATCH');
+    const limited = await addUser(T.tenantId, `limited${++n}@fd.test`); await assignRole(T.tenantId, limited, 'front_desk_agent', 'PROPERTY', w.pid, { limits: { maxDiscountPct: 10 } });
+    const L = as(T.tenantId, limited);
+    const small = await optionOf(w, { agreedTotal: '33000' }, L); expect(small.bookable).toBe(true); expect(small.quoteToken).toBeTruthy();          // 8.3% off: within the limit
+    const big = await optionOf(w, { agreedTotal: '30000' }, L); expect(big.bookable).toBe(false); expect(big.quoteToken).toBeNull();            // 16.7% off: needs a manager
+  });
+});

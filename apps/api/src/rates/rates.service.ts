@@ -288,6 +288,9 @@ export class RatesService {
     return { quote, currency: p.currency, businessDate: p.business_date };
   }
 
+  /** The claims of a signed quote (its signature and expiry are checked). */
+  verifyQuote(token: string) { return this.signer.verify(token, this.clock.now()); }
+
   /** A signed quote for exactly one room/plan with no discount — used by flows that price and book in one step (walk-ins). */
   async issueQuoteToken(trx: Trx, propertyId: string, planId: string, r: Parameters<RatesService['priceOne']>[3]): Promise<string> {
     if (r.companyId) await this.companies.assertBookable(trx, r.companyId);
@@ -332,7 +335,7 @@ export class RatesService {
   // ───────── quotes (search) ─────────
   async quote(propertyId: string, userId: string, i: z.infer<typeof S.QuoteRequest>) {
     const stayDates = nightsOf(i.arrival, i.departure, 90);
-    for (const o of i.nightDiscounts) if (!stayDates.includes(o.date)) throw new UnprocessableEntityException({ code: 'VALIDATION_FAILED', message: `${o.date} is not a night of this stay` });
+    for (const o of [...i.nightDiscounts, ...i.nightPrices]) if (!stayDates.includes(o.date)) throw new UnprocessableEntityException({ code: 'VALIDATION_FAILED', message: `${o.date} is not a night of this stay` });
     const perNight = i.nightDiscounts.length > 0;
     const nightBp = nightBpFor(stayDates, i.discountPct, i.nightDiscounts);
     const topPct = Math.max(...nightBp) / 100;                                       // the deepest cut decides whether the person may give it
@@ -365,12 +368,15 @@ export class RatesService {
           if (rooms < 1) reasons.push({ code: 'SOLD_OUT', message: 'Sold out for these dates' });
           const eligible = q.reasons.length === 0;
           if (!(eligible && rooms >= 1) && !i.includeUnavailable) continue;           // sold-out or ineligible options are listed only on request
-          const fixedMinor = i.discountAmount ? Money.parse(i.discountAmount, cur).minor : 0n;
+          const fixedMinor = i.discountAmount ? Money.parse(i.discountAmount, cur).minor : i.agreedTotal ? (q.subtotalMinor > Money.parse(i.agreedTotal, cur).minor ? q.subtotalMinor - Money.parse(i.agreedTotal, cur).minor : 0n) : 0n;
+          const priceMap = new Map(i.nightPrices.map((o) => [o.date, Money.parse(o.price, cur).minor]));
+          const exactCuts = priceMap.size > 0 ? q.nights.map((n) => { const price = priceMap.get(n.date); return price === undefined || price >= n.totalMinor ? 0n : n.totalMinor - price; }) : null;      // an agreed price for some nights: the cut is exactly the difference, never a rounded percentage
           const fixedCut = fixedMinor > q.subtotalMinor ? q.subtotalMinor : fixedMinor;
-          const optPct = fixedCut > 0n ? (q.subtotalMinor > 0n ? Number((fixedCut * 10000n) / q.subtotalMinor) / 100 : 0) : null;
+          const exactTop = exactCuts ? Math.max(0, ...exactCuts.map((c, k) => (q.nights[k]!.totalMinor > 0n ? Number((c * 10000n) / q.nights[k]!.totalMinor) / 100 : 0))) : 0;
+          const optPct = fixedCut > 0n ? (q.subtotalMinor > 0n ? Number((fixedCut * 10000n) / q.subtotalMinor) / 100 : 0) : exactCuts ? exactTop : null;
           const optDecision = optPct !== null && optPct > 0 ? await this.authz.check(userId, { permission: 'reservation.create', scope: { propertyId }, discountPct: optPct }) : discount;
           if (optDecision.effect === 'DENY') throw new ForbiddenException({ code: 'PERMISSION_DENIED', message: 'You may not give this discount' });
-          const nightCuts = perNight ? perNightDiscounts(q.nights.map((n) => n.totalMinor), nightBp) : null;
+          const nightCuts = exactCuts ?? (perNight ? perNightDiscounts(q.nights.map((n) => n.totalMinor), nightBp) : null);
           const discounted = fixedCut > 0n ? q.subtotalMinor - fixedCut : nightCuts ? q.subtotalMinor - nightCuts.reduce((a, b) => a + b, 0n) : i.discountPct > 0 ? q.subtotalMinor - (q.subtotalMinor * BigInt(Math.round(i.discountPct * 100))) / 10000n : q.subtotalMinor;
           const bookable = eligible && rooms >= 1 && optDecision.effect === 'ALLOW';
           const nightsHash = Buffer.from(q.nights.map((n) => `${n.date}:${n.totalMinor}`).join('|')).toString('base64url').slice(0, 64);
@@ -388,13 +394,13 @@ export class RatesService {
             roomType: { id: t.id, code: t.code, name: t.name }, plan: { id: pr.id, code: pr.code, name: pr.name, mealPlan: pr.meal_plan },
             sellable: eligible, available: rooms >= 1, roomsLeft: Math.max(0, rooms), bookable, reasons: reasons.map((r) => ({ code: r.code, message: r.message })),
             nights: q.nights.map((n, k) => ({ date: n.date, source: n.source, room: fmt(n.roomMinor, cur).amount, extras: fmt(n.totalMinor - n.roomMinor, cur).amount, total: fmt(n.totalMinor, cur).amount,
-              discountPct: (nightBp[k] ?? 0) / 100, discount: fmt(shares[k]!, cur).amount, payable: fmt(n.totalMinor - shares[k]!, cur).amount })),
+              discountPct: exactCuts ? (n.totalMinor > 0n ? Number((shares[k]! * 10000n) / n.totalMinor) / 100 : 0) : (nightBp[k] ?? 0) / 100, discount: fmt(shares[k]!, cur).amount, payable: fmt(n.totalMinor - shares[k]!, cur).amount })),
             subtotal: fmt(q.subtotalMinor, cur), discount: (optPct ?? topPct) > 0 ? { pct: optPct ?? topPct, amount: fmt(q.subtotalMinor - discounted, cur).amount, status: optDecision.effect === 'ALLOW' ? 'APPLIED' : 'APPROVAL_REQUIRED' } : null,
             totalExTax: fmt(discounted, cur), taxNote: 'Amounts exclude tax. Taxes are added at the end of the quote and on the invoice.',
             taxes: [...taxByCode.values()].map((e) => ({ code: e.code, ratePercent: e.rateBp / 100, taxable: fmt(e.taxableMinor, cur), tax: fmt(e.taxMinor, cur) })), taxTotal: fmt(taxTotal, cur), totalIncTax: fmt(discounted + taxTotal, cur),
             depositDue: fmt(q.depositDueMinor, cur), policy: q.policy,
             quoteToken: bookable ? this.signer.sign({ propertyId, planId: pr.id, roomTypeId: t.id, arrival: i.arrival, departure: i.departure, adults: i.adults, children: i.children, extraBeds: i.extraBeds,
-              channel: i.channel, residency: i.residency, companyId: i.companyId ?? null, currency: cur, subtotalMinor: discounted.toString(), discountPct: optPct ?? i.discountPct, discountApproved: optDecision.effect === 'ALLOW', ...(perNight ? { nightBp } : {}), ...(fixedCut > 0n ? { discountAmountMinor: fixedCut.toString() } : {}),
+              channel: i.channel, residency: i.residency, companyId: i.companyId ?? null, currency: cur, subtotalMinor: discounted.toString(), discountPct: optPct ?? i.discountPct, discountApproved: optDecision.effect === 'ALLOW', ...(exactCuts ? { nightCutsMinor: exactCuts.map((c) => c.toString()) } : perNight ? { nightBp } : {}), ...(fixedCut > 0n ? { discountAmountMinor: fixedCut.toString() } : {}),
               depositDueMinor: q.depositDueMinor.toString(), nightsHash }, 900, this.clock.now()) : null,
           });
         }

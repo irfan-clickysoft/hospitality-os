@@ -54,7 +54,10 @@ export const WalkIn = z.object({
   roomTypeId: uuid, nights: z.number().int().min(1).max(60).default(1),
   adults: z.number().int().min(1).max(20).default(2), children: z.number().int().min(0).max(20).default(0), extraBeds: z.number().int().min(0).max(5).default(0),
   ratePlanId: uuid.optional(), companyId: uuid.nullish(), roomId: uuid.optional(),
-  occupants: Occupants, purposeOfVisit: z.string().trim().max(80).nullish(), allowNotReady: z.boolean().default(false), complianceApproval: z.object({ reason: z.string().trim().min(3).max(300) }).optional(),
+  occupants: Occupants, purposeOfVisit: z.string().trim().max(80).nullish(),
+  /** A signed quote for this room with a negotiated discount or agreed price (from the quotes search). Without it the walk-in rate is charged. */
+  quoteToken: z.string().max(2000).optional(),
+  allowNotReady: z.boolean().default(false), complianceApproval: z.object({ reason: z.string().trim().min(3).max(300) }).optional(),
   notesInternal: z.string().max(2000).nullish(), specialRequests: z.string().max(2000).nullish(),
 }).refine((v) => (v.guestId ? 1 : 0) + (v.guest ? 1 : 0) === 1, { message: 'provide either guestId or guest' });
 export const HousekeepingStatus = z.object({ status: z.enum(['CLEAN', 'DIRTY', 'INSPECTED']) });

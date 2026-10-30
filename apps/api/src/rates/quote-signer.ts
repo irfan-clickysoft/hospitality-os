@@ -9,6 +9,8 @@ export interface QuoteClaims {
   nightBp?: number[];
   /** A fixed amount off this room's stay (minor units), instead of a percentage. */
   discountAmountMinor?: string;
+  /** The exact amount off each night (minor units, in stay order), when the guest was given an agreed price for particular nights. */
+  nightCutsMinor?: string[];
   depositDueMinor: string; nightsHash: string; exp: number;
 }
 
