@@ -18,6 +18,7 @@ export interface Ctx {
   trx: Trx; tenantId: string; propertyId: string;
   prop: { code: string; name: string; currency: string; timezone: string; businessDate: string; checkIn: string; checkOut: string };
   from: string; to: string; basis: string; params: Record<string, string>;
+  /** Holds the permission to see restricted cases at this property. */ canRestricted: boolean;
 }
 export interface Def {
   id: string; name: string; category: Category; kind: Kind; purpose: string;

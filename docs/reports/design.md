@@ -34,7 +34,9 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Built (this phase):** flash · expected arrivals · completed check-ins · room moves · pre-arrival reassignments · cancellations and no-shows · early check-in/late checkout (timing) · room rate changes · room status · collection/cashier · due and outstanding · discounts and complimentary · lost and found · night audit · future bookings and revenue (on the books) · historical performance.
 
-**Next (needs new capture):** E *Damage charges* (damage-case register tied to the bill, evidence, approval) and K *Complaints and incidents* (case register with confidentiality, owner, SLA, field-level permissions). Early/late **fees and waivers** need the fee event recorded.
+**Built with the registers (migration 0049):** E *Damage charges* and K *Complaints and incidents*, with the damage and case registers behind them (Tasks → Damage, Tasks → Complaints).
+
+**Next (needs new capture):** early/late **fees and waivers** (the fee event), cancellation initiator and reason codes, discount reasons and approvals, room-status history.
 
 **Later:** booking pace and pickup, forecast and forecast accuracy (need nightly snapshots), channel/segment/corporate production, group pickup, payment-gateway and OTA reconciliation, commission payable, housekeeping productivity and inspection, maintenance aging/downtime, F&B and inventory reports, staff productivity, access/export audit reports, multi-property portfolio views, scheduled delivery, custom builder.
 
@@ -63,13 +65,13 @@ Each entry: grain · source · default basis/range · main exclusions · drill-d
 * **B Room move** — one row per `ROOM_MOVED` event on a checked-in line; old/new room and type, reason, actor. Pre-arrival changes are a separate report. A move keeps rates, so no charge. *Gap: guest- vs property-initiated, approvals, housekeeping/maintenance impact, related complaint.*
 * **C Cancellations and no-shows** — one row per lost room line; separate or combined; expected revenue, deposit, fee and whether waived, lost revenue. A no-show is whatever staff confirmed, never inferred from the clock. *Gap: initiator, commission, standard reason codes.*
 * **D Early check-in / late checkout** — timing against the property's standard times, with the guest's request. *Gap: approved time, fee, waiver, next-arrival impact.*
-* **E Damage charge** — **not built**; needs the damage-case register.
+* **E Damage charge** — one row per damage case; suspected and verified kept apart (suspected is never charged); estimate, actual, approved, waived and charged amounts; guest told and their response; who approved and charged; the bill it landed on. Pictures and internal notes stay in the case (permission-gated). *Gap: refunds and payments per charge are handled on the bill.*
 * **F Room rate change** — one row per booking modification with before/after dates and stay totals, reason, actor, revenue impact; the history is the existing immutable booking history. *Gap: per-night before/after, tax impact, approvals, source type.*
 * **G Room status** — snapshot with occupancy, housekeeping and maintenance as three columns and an explicit discrepancy column. *Gap: status history timeline.*
 * **H Collection and cashier** — one row per shift; cash and non-cash apart; blind-close respected. *Gap: paid-outs, gateway/OTA batches, sign-off steps.*
 * **I Due and outstanding** — open bills split in-house / departed / company; aged from departure (or bill opening). A card pre-authorization is not a payment. *Gap: disputes, promises, write-offs, credit limits, collection owner.*
 * **J Discounts and complimentary** — booking discounts, zero-charge lines (complimentary) and bill discounts, separate types. *Gap: reason, requested/approved-by, category.*
-* **K Complaints and incidents** — **not built**; needs the case register.
+* **K Complaints and incidents** — one row per case: type (complaint, service failure, safety, security, medical, internal), severity, owner, SLA target and overdue flag, resolution and time to resolve, root/corrective/preventive action, compensation. Restricted cases (safety, security, medical, confidential) are filtered out for anyone without `case.restricted`, and the text of a restricted report is not copied into its history.
 * **L Lost and found** — one row per item with status, storage, age and retention flag. Photos and handover signatures live on the item.
 
 ## 6–9. Management reports

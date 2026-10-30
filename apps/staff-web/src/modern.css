@@ -348,3 +348,7 @@ html[data-contrast="high"] .navitem.on { border: 2px solid var(--brand); }
 @media print { .no-print, nav, header.shell-top, .shell-nav { display: none !important; } .ins-tablewrap { overflow: visible; max-height: none; } }
 :root[data-theme="dark"] .ins-table thead th, :root[data-theme="dark"] .ins-table tfoot td { background: var(--surface, #14191c); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ins-table thead th, :root:not([data-theme="light"]) .ins-table tfoot td { background: var(--surface, #14191c); } }
+
+/* damage and case registers */
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; } .photo-thumb { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; border: 1px solid var(--border, #d6dde0); }
+.timeline { display: flex; flex-direction: column; gap: 8px; border-inline-start: 2px solid var(--border, #d6dde0); padding-inline-start: 12px; margin: 0; }
