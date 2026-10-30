@@ -5,18 +5,16 @@ import { addDays, money } from '../lib/format.js';
 import { useAuth } from '../state.js';
 import { navigate, useRoute, useSetQuery } from '../shell/router.js';
 import { ErrorLine, Spinner, problemOf } from '../ui/kit.js';
-import { Chart } from './Chart.js';
-import { DataTable } from './DataTable.js';
-import type { CatalogItem, Envelope, Kpi } from './types.js';
+import { ReportBody } from './ReportBody.js';
+import type { CatalogItem, Envelope } from './types.js';
 
-const kpiText = (k: Kpi, v: string | number, currency: string) => (k.type === 'money' && typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v) ? money(v, currency) : k.type === 'pct' ? `${v}%` : typeof v === 'number' ? v.toLocaleString('en-US') : String(v));
 type Saved = { name: string; q: string };
 const viewsKey = (pid: string, id: string) => `hos.ins.views.${pid}.${id}`;
 const loadViews = (pid: string, id: string): Saved[] => { try { return JSON.parse(localStorage.getItem(viewsKey(pid, id)) ?? '[]') as Saved[]; } catch { return []; } };
 
 /** One report: purpose, scope and date basis up front, KPIs with their definitions, an optional chart, the table, and the ways out (export, print, share, saved views). */
 export function ReportView({ item }: { item: CatalogItem }) {
-  const { t, locale } = useT(); const { property } = useAuth(); const route = useRoute(); const setQuery = useSetQuery();
+  const { t, locale } = useT(); const { property, can } = useAuth(); const route = useRoute(); const setQuery = useSetQuery();
   const pid = property!.id; const bd = property!.businessDate;
   const qp = route.query; const basis = qp.get('basis') ?? item.basis[0]!.id;
   const quick = useMemo(() => ({ today: [bd, bd], mtd: [`${bd.slice(0, 8)}01`, bd], last7: [addDays(bd, -6), bd], last30: [addDays(bd, -29), bd], next7: [bd, addDays(bd, 6)], next30: [bd, addDays(bd, 29)], next90: [bd, addDays(bd, 89)] } as Record<string, [string, string]>), [bd]);
@@ -62,26 +60,14 @@ export function ReportView({ item }: { item: CatalogItem }) {
           <button type="button" onClick={() => window.print()}>{t('ins.print')}</button>
           <button type="button" onClick={() => { void navigator.clipboard?.writeText(window.location.href); }}>{t('ins.copyLink')}</button>
           <button type="button" onClick={saveView}>{t('ins.saveView')}</button>
+          {can('report.schedule') && <button type="button" onClick={() => navigate(`/reports?tab=schedules&new=${item.id}`)}>{t('sch.scheduleThis')}</button>}
           {views.length > 0 && <label className="inline">{t('ins.savedViews')}<select value="" onChange={(e) => { const v = views.find((x) => x.name === e.target.value); if (v) applyView(v.q); }}><option value="">—</option>{views.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)}</select></label>}
         </div>
         <p className="muted small">{t('ins.laterPhase')}</p>
       </section>
       {loading && !data && <Spinner />}
       <ErrorLine code={problem?.code} detail={problem?.detail} />
-      {data && <>
-        {data.warnings?.map((w) => <p key={w} className="warnbox" role="status">⚠ {w}</p>)}
-        {data.kpis.length > 0 && <ul className="ins-kpis plain" aria-label={t('ins.kpis')}>{data.kpis.map((k) => (
-          <li key={k.key} className={`ins-kpi${k.tone ? ` ${k.tone}` : ''}`}>
-            <span className="muted small">{k.label}</span><strong className="big" dir="ltr">{kpiText(k, k.value, cur)}</strong>
-            {k.compare?.map((c) => <span key={c.label} className="muted small">{c.label}: {typeof c.value === 'string' && /^-?\d+(\.\d+)?$/.test(c.value) && k.type === 'money' ? money(c.value, cur) : c.value}</span>)}
-            <details className="small"><summary>{t('ins.definition')}</summary><p>{k.definition}</p></details>
-          </li>))}</ul>}
-        {data.chart && <Chart rows={data.rows} x={data.chart.x} series={data.chart.series} kind={data.chart.kind} />}
-        <DataTable columns={data.columns} rows={data.rows} totals={data.totals} currency={cur} storageKey={`${pid}.${item.id}`} caption={`${item.name}. ${dateLabel}${m?.from ? ` ${m.from} – ${m.to}` : ''}`} />
-        {data.notes?.map((n) => <p key={n} className="muted small">ℹ {n}</p>)}
-        {data.definitions.length > 0 && <details className="card inner"><summary>{t('ins.definitions')}</summary><dl className="stack small">{data.definitions.map((d) => <div key={d.term}><dt><strong>{d.term}</strong></dt><dd>{d.text}</dd></div>)}</dl></details>}
-        <p className="muted small">{t('ins.footer', { by: m?.generatedBy ?? '', v: m?.definitionVersion ?? '1' })}</p>
-      </>}
+      {data && <ReportBody data={data} name={item.name} storageKey={`${pid}.${item.id}`} />}
     </article>
   );
 }
