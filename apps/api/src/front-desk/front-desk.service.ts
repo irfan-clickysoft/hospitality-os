@@ -337,13 +337,18 @@ export class FrontDeskService {
     let residency: 'RESIDENT' | 'NON_RESIDENT';
     if (i.guestId) { const g = await trx.selectFrom('guest').select(['residency']).where('id', '=', i.guestId).executeTakeFirst(); if (!g) throw fail(422, 'REFERENCE_INVALID', 'Guest not found'); residency = g.residency; }
     else residency = residencyOf(i.guest!.nationality);
-    let planId = i.ratePlanId;
+    let planId = i.ratePlanId; let negotiated: string | null = null;
+    if (i.quoteToken) {                                                                    // a negotiated price: the quote the desk already priced, signed by the server; it must be for exactly this walk-in
+      const c = this.rates.verifyQuote(i.quoteToken);
+      if (c.propertyId !== propertyId || c.roomTypeId !== i.roomTypeId || c.arrival !== arrival || c.departure !== departure || c.adults !== i.adults || c.children !== i.children || c.extraBeds !== i.extraBeds || c.channel !== 'WALKIN' || (c.companyId ?? null) !== (i.companyId ?? null) || c.residency !== residency) throw fail(422, 'QUOTE_MISMATCH', 'That price was for different dates, guests or room. Price it again.');
+      negotiated = i.quoteToken; planId = c.planId;
+    }
     if (!planId) {                                                                         // the walk-in rack rate: the cheapest-sorted public plan that matches the guest's residency
       const plans = await trx.selectFrom('rate_plan').select(['id', 'residency', 'audience', 'channels']).where('property_id', '=', propertyId).where('status', '=', 'ACTIVE').orderBy('sort_order').orderBy('code').execute();
       planId = plans.find((x) => x.audience === 'PUBLIC' && (x.residency === 'ANY' || x.residency === residency) && x.channels.includes('WALKIN'))?.id;
       if (!planId) throw fail(422, 'NO_RATE_PLAN', 'No public rate plan is set up for walk-ins');
     }
-    const token = await this.rates.issueQuoteToken(trx, propertyId, planId, { roomTypeId: i.roomTypeId, arrival, departure, adults: i.adults, children: i.children, extraBeds: i.extraBeds, channel: 'WALKIN', residency, companyId: i.companyId ?? null });
+    const token = negotiated ?? await this.rates.issueQuoteToken(trx, propertyId, planId, { roomTypeId: i.roomTypeId, arrival, departure, adults: i.adults, children: i.children, extraBeds: i.extraBeds, channel: 'WALKIN', residency, companyId: i.companyId ?? null });
     let roomId = i.roomId;
     if (!roomId) {                                                                         // first clean, vacant room of the type that is free for the whole stay
       const free = await sql<{ id: string }>`SELECT r.id FROM room r

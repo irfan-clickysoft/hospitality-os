@@ -38,7 +38,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   const [hold, setHold] = useState(false); const [holdKind, setHoldKind] = useState<'half' | 'days' | 'date'>('half'); const [holdHalf, setHoldHalf] = useState(4); const [holdDays, setHoldDays] = useState(3); const [holdDate, setHoldDate] = useState(''); const [notes, setNotes] = useState(''); const [ext, setExt] = useState('');
   const holdLast = addDays(arrival, -1) < businessDate ? businessDate : addDays(arrival, -1); const holdUntil = holdDate || holdLast;     // default: keep it until the day before arrival
   const [result, setResult] = useState<{ id: string; confirmationNo: string; guarantee: { atRisk: boolean; depositRequired: Amount; deadline: string | null }; totalExTax: Amount; compliance?: Hit[] } | null>(null);
-  const [discAll, setDiscAll] = useState(''); const [nightPct, setNightPct] = useState<Record<string, string>>({});
+  const [discAll, setDiscAll] = useState(''); const [nightPct, setNightPct] = useState<Record<string, string>>({}); const [agreedStay, setAgreedStay] = useState(''); const [agreedFirst, setAgreedFirst] = useState('');
   const key = useMemo(newKey, []);
   const { busy, problem, run, clear } = useAction();
   const withStepUp = useStepUp();
@@ -55,7 +55,14 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
 
   const pct = (v: string) => Math.min(100, Math.max(0, Number(v) || 0));
   const quoteBody = () => ({ arrival, departure, adults, children, channel: CHANNEL[source], residency: foreign ? 'NON_RESIDENT' : 'RESIDENT', ...(companyId ? { companyId } : {}), ...(initial.roomTypeId ? { roomTypeId: initial.roomTypeId } : {}),
-    discountPct: pct(discAll), nightDiscounts: Object.entries(nightPct).filter(([, v]) => v !== '').map(([date, v]) => ({ date, pct: pct(v) })) });
+    ...agreedBody() });
+  /** An agreed price (for the whole stay, or the first night) replaces any percentage; the server works out the exact figures. */
+  const agreedBody = (): Record<string, unknown> => {
+    const ok = (v: string) => /^\d{1,9}(\.\d{1,2})?$/.test(v.trim()) && Number(v) > 0;
+    if (ok(agreedStay)) return { agreedTotal: agreedStay.trim() };
+    if (ok(agreedFirst)) return { nightPrices: [{ date: arrival, price: agreedFirst.trim() }] };
+    return { discountPct: pct(discAll), nightDiscounts: Object.entries(nightPct).filter(([, v]) => v !== '').map(([date, v]) => ({ date, pct: pct(v) })) };
+  };
   const search = async () => {
     setPicks({});
     const r = await run(() => api<{ options: Option[] }>('POST', `${base}/quotes`, quoteBody()));
@@ -69,7 +76,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
     const h = setTimeout(() => { api<{ options: Option[] }>('POST', `${base}/quotes`, quoteBody()).then((r) => setOptions(r.options)).catch(() => undefined).finally(() => setRepricing(false)); }, 450);
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discAll, nightPct]);
+  }, [discAll, nightPct, agreedStay, agreedFirst]);
   const stayDates = useMemo(() => Array.from({ length: nights }, (_, k) => addDays(arrival, k)), [arrival, nights]);
   useEffect(() => {
     if (step !== 'guest' || q.trim().length < 2) { setHits([]); return; }
@@ -107,6 +114,9 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
           <div className="nightpct">{stayDates.map((d) => (
             <label key={d}>{shortDate(d, locale)}<input type="number" min={0} max={100} step={0.5} inputMode="decimal" dir="ltr" aria-label={`${t('bk.discOn')} ${shortDate(d, locale)} (%)`} value={nightPct[d] ?? ''} placeholder={discAll || '0'} onChange={(e) => setNightPct({ ...nightPct, [d]: e.target.value })} /></label>))}
           </div>
+          <h4>{t('ng.agreedTitle')}</h4><p className="muted small">{t('ng.agreedHint')}</p>
+          <div className="grid2"><label>{t('ng.agreedStay')}<input value={agreedStay} onChange={(e) => { setAgreedStay(e.target.value); if (e.target.value) setAgreedFirst(''); }} inputMode="decimal" dir="ltr" placeholder="60000" /></label>
+            <label>{t('ng.agreedFirst')}<input value={agreedFirst} onChange={(e) => { setAgreedFirst(e.target.value); if (e.target.value) setAgreedStay(''); }} inputMode="decimal" dir="ltr" placeholder="9000" /></label></div>
           {repricing && <p className="muted small" aria-live="polite">{t('bk.repricing')}</p>}
         </fieldset>
         {options.length === 0 && <p className="warnbox">{t('bk.noRooms')}</p>}

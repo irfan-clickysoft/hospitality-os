@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../api/client.js';
+import { api, ApiError } from '../api/client.js';
 import { useT } from '../i18n/index.js';
 import { useAction } from '../lib/action.js';
 import { addDays, money, newKey, nightsBetween, shortDate } from '../lib/format.js';
@@ -10,11 +10,12 @@ import { ErrorLine, Sheet } from '../ui/kit.js';
 import { useStepUp } from '../lib/stepup.js';
 import { ApprovalBox } from './ComplianceBits.js';
 import { PurposeField } from './RegExtras.js';
+import { NegotiateBox, negotiationParams, noNegotiation, type Negotiation } from './Negotiate.js';
 import { blankOccupant, OccupantsForm, occupantBody, type Occupant } from './CheckInSheet.js';
 import type { Matrix } from '../lib/occupants.js';
 import type { Amount, RackData } from './types.js';
 
-interface PlanOption { roomType: { id: string }; plan: { id: string; name: string; mealPlan: string }; totalExTax: Amount; bookable: boolean }
+interface PlanOption { roomType: { id: string }; plan: { id: string; name: string; mealPlan: string }; totalExTax: Amount; subtotal: Amount; bookable: boolean; quoteToken: string | null; discount: { pct: number; amount: string } | null }
 interface Known { id: string; fullName: string; phone: string | null; nationality: string | null; residency: 'RESIDENT' | 'NON_RESIDENT'; vip: boolean; doNotRent: boolean; stays: number; lastStay: string | null; matchedById: boolean }
 
 /** A guest at the desk with no booking: find them if they have stayed before, price it, book it and check them in as one step. */
@@ -26,7 +27,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
   const matrix = useLive<Matrix>(`${base}/registration/requirements`, 600_000).data;
   const key = useMemo(newKey, []);
   const [typeId, setTypeId] = useState(''); const [nights, setNights] = useState(1); const [adults, setAdults] = useState(2); const [children, setChildren] = useState(0); const [extraBeds, setExtraBeds] = useState(0); const [foreign, setForeign] = useState(false);
-  const [planId, setPlanId] = useState('');
+  const [planId, setPlanId] = useState(''); const [neg, setNeg] = useState<Negotiation>(noNegotiation);
   const [purpose, setPurpose] = useState('');
   const [name, setName] = useState(''); const [phone, setPhone] = useState(''); const [occ, setOcc] = useState<Occupant[]>([blankOccupant('', false)]);
   const [options, setOptions] = useState<PlanOption[]>([]); const [done, setDone] = useState<{ id: string; confirmationNo: string } | null>(null);
@@ -51,13 +52,18 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
   const pick = (g: Known) => { setKnown(g); setName(g.fullName); setPhone(g.phone ?? ''); setForeign(g.residency === 'NON_RESIDENT'); setQ(''); setHits([]); if (g.nationality) setOcc((o) => o.map((x, i) => (i === 0 ? { ...x, nationality: g.nationality! } : x))); };
   const clearKnown = () => { setKnown(null); };
 
+  const negQ = JSON.stringify(negotiationParams(neg, businessDate));
+  const quoteBody = () => ({ arrival: businessDate, departure: addDays(businessDate, nights), adults, children, extraBeds, channel: 'WALKIN', residency: foreign ? 'NON_RESIDENT' : 'RESIDENT', roomTypeId: typeId, ...(JSON.parse(negQ) as object) });
   useEffect(() => {
     if (!typeId) return;
     let dead = false;
-    api<{ options: PlanOption[] }>('POST', `${base}/quotes`, { arrival: businessDate, departure: addDays(businessDate, nights), adults, children, extraBeds, channel: 'WALKIN', residency: foreign ? 'NON_RESIDENT' : 'RESIDENT', roomTypeId: typeId })
-      .then((r) => { if (dead) return; const ok = r.options.filter((x) => x.bookable); setOptions(ok); setPlanId((cur) => (ok.some((x) => x.plan.id === cur) ? cur : ok[0]?.plan.id ?? '')); }).catch(() => !dead && setOptions([]));
-    return () => { dead = true; };
-  }, [typeId, nights, adults, children, extraBeds, foreign, base, businessDate]);
+    const h = setTimeout(() => {
+      api<{ options: PlanOption[] }>('POST', `${base}/quotes`, quoteBody())
+        .then((r) => { if (dead) return; setOptions(r.options); setPlanId((cur) => (r.options.some((x) => x.plan.id === cur) ? cur : r.options.find((x) => x.bookable)?.plan.id ?? r.options[0]?.plan.id ?? '')); }).catch(() => !dead && setOptions([]));
+    }, neg.kind === 'none' ? 0 : 400);
+    return () => { dead = true; clearTimeout(h); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typeId, nights, adults, children, extraBeds, foreign, base, businessDate, negQ]);
   const chosen = options.find((x) => x.plan.id === planId) ?? null;
 
   const errors = occ.map((o, i) => checkOccupant(o, i, foreign, businessDate));
@@ -68,7 +74,12 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
     }
     const body = { ...(known ? { guestId: known.id } : { guest: { fullName: name.trim(), ...(phone.trim() ? { phone: phone.trim() } : {}), nationality: foreign ? (occ[0]?.nationality || 'XX') : 'PK' } }),
       roomTypeId: typeId, nights, adults, children, extraBeds, ...(planId ? { ratePlanId: planId } : {}), occupants: occ.map((o, i) => occupantBody(o, i === 0)), ...(purpose.trim() ? { purposeOfVisit: purpose.trim() } : {}), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
-    const call = () => api<{ id: string; confirmationNo: string }>('POST', `${base}/front-desk/walk-ins`, body, { 'idempotency-key': key });
+    // a negotiated price: price it again now (the signed quote lasts only a few minutes) and book at exactly that
+    const call = async () => {
+      let quoteToken: string | undefined;
+      if (negQ !== '{}') { const fresh = await api<{ options: PlanOption[] }>('POST', `${base}/quotes`, quoteBody()); const o = fresh.options.find((x) => x.plan.id === planId) ?? fresh.options[0]; if (!o?.quoteToken) throw new ApiError(403, 'APPROVAL_REQUIRED', t('ng.needsApproval')); quoteToken = o.quoteToken; }
+      return api<{ id: string; confirmationNo: string }>('POST', `${base}/front-desk/walk-ins`, { ...body, ...(quoteToken ? { quoteToken } : {}) }, { 'idempotency-key': key });
+    };
     const r = await run(() => (approval ? withStepUp(call) : call()));
     if (r) setDone(r);
   };
@@ -95,7 +106,10 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
         <p className="muted small">{t('wi.mattressHint')}</p>
         <label className="check"><input type="checkbox" checked={foreign} onChange={(e) => setForeign(e.target.checked)} /> {t('bk.foreign')}</label>
         {options.length > 1 && <label>{t('wi.plan')}<select value={planId} onChange={(e) => setPlanId(e.target.value)}>{options.map((x) => <option key={x.plan.id} value={x.plan.id}>{x.plan.name} — {money(x.totalExTax)}</option>)}</select></label>}
-        <div className="card inner row between"><span>{t('wi.price')}{chosen ? ` · ${chosen.plan.name}` : ''}</span><strong className="big">{chosen ? money(chosen.totalExTax) : '—'}</strong></div>
+        <NegotiateBox value={neg} onChange={setNeg} />
+        <div className="card inner stack"><div className="row between"><span>{t('wi.price')}{chosen ? ` · ${chosen.plan.name}` : ''}</span><strong className="big">{chosen ? money(chosen.totalExTax) : '—'}</strong></div>
+          {chosen && chosen.discount && Number(chosen.discount.amount) > 0 && <p className="small">{t('ng.was')}: <s dir="ltr">{money(chosen.subtotal)}</s> · {t('ng.saves', { amt: money({ amount: chosen.discount.amount, currency: chosen.totalExTax.currency }) })}</p>}
+          {chosen && !chosen.bookable && <p className="warnbox small" role="alert">{t('ng.needsApproval')}</p>}</div>
         <p className="muted small">{t('bk.exTaxNote')}</p>
         {!known && <>
           <label>{t('ci.name')}<input value={name} onChange={(e) => setName(e.target.value)} autoFocus aria-invalid={attempted && name.trim().length < 2 ? true : undefined} /></label>
@@ -108,7 +122,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
         {attempted && hasErrors(errors) && <Banner level="ACTION" title={t('ci.e.fix')} />}
         <ErrorLine code={problem?.code} detail={problem?.detail} />
         <ApprovalBox problem={problem} busy={busy} onApprove={(r) => void submit(r)} />
-        <div className="actions"><button className="primary" disabled={busy || !chosen || known?.doNotRent} onClick={() => void submit()}>{t('wi.go')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>
+        <div className="actions"><button className="primary" disabled={busy || !chosen || !chosen.bookable || known?.doNotRent} onClick={() => void submit()}>{t('wi.go')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>
       </>)}
     </Sheet>
   );
