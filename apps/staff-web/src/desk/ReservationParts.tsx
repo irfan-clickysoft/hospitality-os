@@ -1,3 +1,4 @@
+import { CANCEL_REASONS, INITIATORS, NO_SHOW_REASONS, REASON_INITIATOR, REASON_NOTE, type Initiator, type ReasonCode } from '../lib/cancelReasons.js';
 import { useState } from 'react';
 import { api } from '../api/client.js';
 import { useT } from '../i18n/index.js';
@@ -19,20 +20,25 @@ export function CancelSheet({ r, line, noShow, onDone, onClose }: { r: Reservati
   const { t } = useT();
   const { property, can } = useAuth();
   const withStepUp = useStepUp();
-  const [reason, setReason] = useState(noShow ? t('d.noShowDefault') : ''); const [waive, setWaive] = useState(false);
+  const [code, setCode] = useState<ReasonCode | ''>(noShow ? 'DID_NOT_ARRIVE' : ''); const [initiator, setInitiator] = useState<Initiator>('GUEST'); const [reason, setReason] = useState(''); const [waive, setWaive] = useState(false);
+  const pick = (c: ReasonCode | '') => { setCode(c); if (c) setInitiator(REASON_INITIATOR[c]); };
   const { busy, problem, run } = useAction();
   const go = async () => {
     const base = `/v1/properties/${property!.id}/reservations/${r.id}`;
-    const x = await run(() => withStepUp(() => noShow ? api('POST', `${base}/no-show`, { reason: reason.trim(), waiveFee: waive }) : api('POST', `${base}/cancel`, { reason: reason.trim(), waiveFee: waive, ...(line ? { lineIds: [line.id] } : {}) })));
+    const note = reason.trim() || (code ? REASON_NOTE[code] : '');
+    const body = { reason: note, code, initiator, waiveFee: waive };
+    const x = await run(() => withStepUp(() => noShow ? api('POST', `${base}/no-show`, body) : api('POST', `${base}/cancel`, { ...body, ...(line ? { lineIds: [line.id] } : {}) })));
     if (x) { onDone(); onClose(); }
   };
   return (
     <Sheet title={noShow ? t('d.noShow') : t('d.cancel')} onClose={onClose}>
       <p className="muted">{t('d.cancelNote')}</p>
-      <label>{t('common.reason')}<input value={reason} onChange={(e) => setReason(e.target.value)} autoFocus /></label>
+      <label>{t('cr.reason')}<select value={code} onChange={(e) => pick(e.target.value as ReasonCode | '')} autoFocus><option value="">—</option>{(noShow ? NO_SHOW_REASONS : CANCEL_REASONS).map((c) => <option key={c} value={c}>{t(`cr.${c}` as Key)}</option>)}</select></label>
+      <label>{t('cr.startedBy')}<select value={initiator} onChange={(e) => setInitiator(e.target.value as Initiator)}>{INITIATORS.map((x) => <option key={x} value={x}>{t(`cr.i.${x}` as Key)}</option>)}</select></label>
+      <label>{t('common.note')}{code && code !== 'OTHER' ? ` (${t('common.optional')})` : ''}<input value={reason} onChange={(e) => setReason(e.target.value)} /></label>
       {can('reservation.waive_fee') && <label className="check"><input type="checkbox" checked={waive} onChange={(e) => setWaive(e.target.checked)} /> {t('d.waive')}</label>}
       <ErrorLine code={problem?.code} detail={problem?.detail} />
-      <div className="actions"><button className="primary" disabled={busy || reason.trim().length < 3} onClick={go}>{t('act.confirm')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>
+      <div className="actions"><button className="primary" disabled={busy || !code || (code === 'OTHER' && reason.trim().length < 3)} onClick={go}>{t('act.confirm')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>
     </Sheet>
   );
 }
