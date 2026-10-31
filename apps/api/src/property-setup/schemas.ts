@@ -9,10 +9,13 @@ export const CreateProperty = z.object({
   legalEntityId: uuid, brandId: uuid.nullish(), code: z.string().regex(/^[A-Za-z0-9_-]{2,20}$/), name: z.string().min(2).max(120),
   timezone: tz.default('Asia/Karachi'), currency: z.string().regex(/^[A-Z]{3}$/).default('PKR'), openingBusinessDate: businessDate.optional(),
 });
+export const TimingFeeTiers = z.array(z.object({ upToMinutes: z.number().int().min(1).max(1440), percent: z.number().int().min(0).max(100) })).max(6);
+/** The share of a night to charge for arriving early or leaving late, by how many minutes off the standard time; beyond the last step, the whole night. */
+export const TimingFeeRule = z.object({ early: TimingFeeTiers.default([]), late: TimingFeeTiers.default([]) });
 export const ShortStayRule = z.object({ tiers: z.array(z.object({ upToHours: z.number().int().min(1).max(23), percent: z.number().int().min(0).max(100) })).min(1).max(6) })
   .refine((v) => v.tiers.every((t, i) => i === 0 || (t.upToHours > v.tiers[i - 1]!.upToHours && t.percent >= v.tiers[i - 1]!.percent)), { message: 'Each step must be a longer stay and a larger share than the one before', path: ['tiers'] });
 export const UpdateProperty = z.object({
-  shortStayRule: ShortStayRule.nullable().optional(), name: z.string().min(2).max(120).optional(), timezone: tz.optional(), brandId: uuid.nullish(), weekendDays: z.array(z.number().int().min(1).max(7)).max(7).optional(),
+  shortStayRule: ShortStayRule.nullable().optional(), timingFeeRule: TimingFeeRule.nullable().optional(), name: z.string().min(2).max(120).optional(), timezone: tz.optional(), brandId: uuid.nullish(), weekendDays: z.array(z.number().int().min(1).max(7)).max(7).optional(),
   registrationStrict: z.boolean().optional(), nicopAloneOk: z.boolean().optional(),
   city: z.string().trim().min(2).max(80).nullable().optional(), mapsUrl: z.string().trim().max(500).regex(/^https:\/\//, 'Use the full https:// link from Google Maps').nullable().optional(),
   terms: z.string().trim().max(8000).nullable().optional(), registrationRules: z.string().trim().max(8000).nullable().optional(),

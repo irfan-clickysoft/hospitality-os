@@ -47,6 +47,9 @@ export const CheckOut = z.object({
   /** Let the guest leave with an unpaid or overpaid folio. Needs the checkout-with-balance permission and a fresh second factor. */
   balanceReason: z.string().min(3).max(300).optional(),
 });
+/** Charge or waive an early check-in / late checkout fee. Without an amount, the fee the property's steps suggest is charged. */
+export const TimingFeeDecision = z.object({ kind: z.enum(['EARLY_CHECKIN', 'LATE_CHECKOUT']), action: z.enum(['CHARGE', 'WAIVE']), amount: money.optional(), reason: z.string().trim().max(300).optional() }).strict();
+export const TimingFeeQuery = z.object({ kind: z.enum(['EARLY_CHECKIN', 'LATE_CHECKOUT']) });
 export const UndoCheckIn = z.object({ reason: z.string().min(3).max(300) });
 export const MoveRoom = z.object({ roomId: uuid, reason: z.string().min(3).max(300), allowNotReady: z.boolean().default(false) });
 export const WalkIn = z.object({

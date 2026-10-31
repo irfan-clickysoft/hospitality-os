@@ -20,6 +20,7 @@ import { nextStatus } from '../reservations/state-machine.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { evaluateCard, suggestGuestType, type CardPerson, type DocumentKey, type GuestType } from '../registration/rules.js';
 import { toCsv } from '../reports/csv.js';
+import { TimingFeesService } from './timing-fees.service.js';
 import { DEFAULT_RULES } from './registration-card.js';
 import { idHash, last4, maskId, normaliseIdNumber, type IdType } from './id-documents.js';
 import { parseRule, percentFor, share } from './short-stay.js';
@@ -41,6 +42,7 @@ export class FrontDeskService {
     @Inject(InventoryService) private readonly inv: InventoryService,
     @Inject(IdempotencyService) private readonly idem: IdempotencyService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(TimingFeesService) private readonly timing: TimingFeesService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(ComplianceService) private readonly compliance: ComplianceService,
     @Inject(CLOCK) private readonly clock: ClockLike,
@@ -115,12 +117,13 @@ export class FrontDeskService {
     });
   }
 
-  async checkInIn(trx: Trx, propertyId: string, id: string, lineId: string, userId: string, i: { roomId?: string; occupants: Occupant[]; purposeOfVisit?: string | null; allowNotReady: boolean; complianceApproval?: { reason: string } }) {
+  async checkInIn(trx: Trx, propertyId: string, id: string, lineId: string, userId: string, i: { roomId?: string; occupants: Occupant[]; purposeOfVisit?: string | null; allowNotReady: boolean; complianceApproval?: { reason: string }; walkIn?: boolean }) {
     const p = await this.res.prop(trx, propertyId);
     const { res, lines } = await this.res.load(trx, propertyId, id, true);
     const line = lines.find((l) => l.id === lineId);
     if (!line) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room line not found on this reservation' });
     nextStatus(line.status, 'CHECK_IN');                                                  // 409 INVALID_STATE_TRANSITION unless CONFIRMED
+    if (!i.walkIn) await this.timing.require(trx, propertyId, line as never, 'EARLY_CHECKIN');          // an early arrival the property charges for is charged or waived first (a same-day walk-in is booked as arriving now)
     const bd = p.business_date;
     if (bd < line.arrival) throw fail(422, 'TOO_EARLY', `This booking arrives on ${line.arrival}. Change the arrival date first.`);
     if (bd >= line.departure) throw fail(422, 'STAY_ENDED', `This booking's departure date (${line.departure}) has passed. Extend the stay first.`);
@@ -228,6 +231,7 @@ export class FrontDeskService {
       const line = lines.find((l) => l.id === lineId);
       if (!line) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room line not found on this reservation' });
       nextStatus(line.status, 'CHECK_OUT');
+      await this.timing.require(trx, propertyId, line as never, 'LATE_CHECKOUT');
       if (i.shortStay && !(await this.shortStay(trx, propertyId, line as never, bd)).eligible) throw fail(422, 'SHORT_STAY_NOT_ELIGIBLE', 'A short stay is a guest who checked in today and leaves today, before the booked departure');
       let newDeparture = line.departure, overstayNights = 0;
       if (bd < line.departure) {
@@ -360,7 +364,7 @@ export class FrontDeskService {
       if (!roomId) throw fail(409, 'NO_ROOM_READY', 'No clean, free room of this type is available right now. Check housekeeping, or choose another type.');
     }
     const created = await this.res.createIn(trx, propertyId, userId, { guestId: i.guestId, guest: i.guest, lines: [{ quoteToken: token }], source: 'WALK_IN', complianceApproval: i.complianceApproval, notesInternal: i.notesInternal, specialRequests: i.specialRequests, companyId: i.companyId ?? undefined } as never);
-    const flags = await this.checkInIn(trx, propertyId, created.id, created.lines[0]!.id, userId, { roomId, occupants: i.occupants, purposeOfVisit: i.purposeOfVisit, allowNotReady: i.allowNotReady, complianceApproval: i.complianceApproval });
+    const flags = await this.checkInIn(trx, propertyId, created.id, created.lines[0]!.id, userId, { roomId, occupants: i.occupants, purposeOfVisit: i.purposeOfVisit, allowNotReady: i.allowNotReady, complianceApproval: i.complianceApproval, walkIn: true });
     return { ...(await this.res.detail(trx, propertyId, created.id)), checkIn: flags };
   }
 

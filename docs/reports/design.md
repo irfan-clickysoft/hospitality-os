@@ -38,7 +38,9 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Built with snapshots (migration 0050):** *Booking pace and pickup* (net pickup split into new bookings, cancellations and changes) and *Occupancy and revenue forecast* (on the books + typical pickup at that distance, with samples and confidence shown, no forecast where history is thin).
 
-**Next (needs new capture):** early/late **fees and waivers** (the fee event), cancellation initiator and reason codes, discount reasons and approvals, room-status history.
+**Built with timing fees (migration 0052):** early check-in and late checkout **fees and waivers**: property steps (share of a night by minutes off the standard time), a decision recorded before check-in/out (charged to the bill, a different amount, or waived with a reason), shown in report D.
+
+**Next (needs new capture):** cancellation initiator and reason codes, discount reasons and approvals, room-status history.
 
 **Later:** booking pace and pickup, forecast and forecast accuracy (need nightly snapshots), channel/segment/corporate production, group pickup, payment-gateway and OTA reconciliation, commission payable, housekeeping productivity and inspection, maintenance aging/downtime, F&B and inventory reports, staff productivity, access/export audit reports, multi-property portfolio views, scheduled delivery, custom builder.
 
@@ -66,7 +68,7 @@ Each entry: grain · source · default basis/range · main exclusions · drill-d
 * **A Check-in** — one row per room line checked in; `reservation_room`, history, stay guests, bill. Basis: business date of check-in (or arrival). Expected arrivals are a separate report. Early flag = arrival date and local time before the property's check-in time. Drill: booking. *Gap: early-check-in fee/waiver not recorded.*
 * **B Room move** — one row per `ROOM_MOVED` event on a checked-in line; old/new room and type, reason, actor. Pre-arrival changes are a separate report. A move keeps rates, so no charge. *Gap: guest- vs property-initiated, approvals, housekeeping/maintenance impact, related complaint.*
 * **C Cancellations and no-shows** — one row per lost room line; separate or combined; expected revenue, deposit, fee and whether waived, lost revenue. A no-show is whatever staff confirmed, never inferred from the clock. *Gap: initiator, commission, standard reason codes.*
-* **D Early check-in / late checkout** — timing against the property's standard times, with the guest's request. *Gap: approved time, fee, waiver, next-arrival impact.*
+* **D Early check-in / late checkout** — timing against the property's standard times, the guest's request, and the fee decision: suggested, charged, waived, reason, who decided. *Gap: approved time, next-arrival impact.* Fees follow the property's steps (Administration → Properties); with no steps set nothing is suggested and the desk is never asked. Same-day walk-ins are never asked. A decision is immutable; a wrong charge is reversed on the bill.
 * **E Damage charge** — one row per damage case; suspected and verified kept apart (suspected is never charged); estimate, actual, approved, waived and charged amounts; guest told and their response; who approved and charged; the bill it landed on. Pictures and internal notes stay in the case (permission-gated). *Gap: refunds and payments per charge are handled on the bill.*
 * **F Room rate change** — one row per booking modification with before/after dates and stay totals, reason, actor, revenue impact; the history is the existing immutable booking history. *Gap: per-night before/after, tax impact, approvals, source type.*
 * **G Room status** — snapshot with occupancy, housekeeping and maintenance as three columns and an explicit discrepancy column. *Gap: status history timeline.*

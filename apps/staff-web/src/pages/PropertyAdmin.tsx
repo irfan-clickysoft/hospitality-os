@@ -8,6 +8,7 @@ import { Banner, ConfirmCard, Field, SidePanel, Skeleton, StatusBadge } from '..
 import { Icon } from '../ui/icons.js';
 import { Empty, ErrorLine } from '../ui/kit.js';
 import { Link, navigate, useRoute } from '../shell/router.js';
+import { TimingFeeRule } from './TimingFeeRule.js';
 import { ShortStayRule } from './ShortStayRule.js';
 
 interface Prop { id: string; code: string; name: string; status: string; timezone: string; currency?: string; businessDate?: string; weekendDays?: number[]; version?: number; city?: string | null; mapsUrl?: string | null; terms?: string | null; registrationStrict?: boolean; registrationRules?: string | null; nicopAloneOk?: boolean; checkInTime?: string; checkOutTime?: string }
@@ -152,6 +153,7 @@ function Details({ prop, onSaved }: { prop: Status['property']; onSaved: () => v
       <Field label={t('ps.terms')} hint={t('ps.termsHint')}>{(p) => <textarea {...p} rows={6} maxLength={8000} value={f.terms} onChange={(e) => edit({ terms: e.target.value })} />}</Field>
       <Field label={t('rc.rulesLabel')} hint={t('rc.rulesHint')}>{(p) => <textarea {...p} rows={8} maxLength={8000} value={f.rules} onChange={(e) => edit({ rules: e.target.value })} />}</Field>
       <ShortStayRule prop={prop as never} onSaved={onSaved} />
+      <TimingFeeRule prop={prop as never} onSaved={onSaved} />
       <fieldset className="guestcard"><legend>{t('rg.title')}</legend>
         <label className="check"><input type="checkbox" checked={f.strict} onChange={(e) => edit({ strict: e.target.checked })} /> {t('ps.strict')}</label><p className="hint">{t('ps.strictHint')}</p>
         <label className="check"><input type="checkbox" checked={f.nicop} onChange={(e) => edit({ nicop: e.target.checked })} /> {t('ps.nicop')}</label><p className="hint">{t('ps.nicopHint')}</p>
