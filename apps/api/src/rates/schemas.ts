@@ -53,5 +53,9 @@ export const QuoteRequest = z.object({
   nightDiscounts: z.array(z.object({ date: businessDate, pct: z.number().min(0).max(100) })).max(90).default([]), includeUnavailable: z.boolean().default(false),
   /** A fixed amount off the price of the stay for one room (instead of a percentage), e.g. 5000 off a 70000 stay. */
   discountAmount: z.string().regex(/^\d{1,9}(\.\d{1,2})?$/, 'amount like 2500 or 2500.50').optional(),
+  /** An agreed price for the whole stay of one room (what the guest will pay for all nights), instead of a discount. Never raises the price. */
+  agreedTotal: z.string().regex(/^\d{1,9}(\.\d{1,2})?$/, 'amount like 60000').optional(),
+  /** An agreed price for particular nights (e.g. the first night at 9,000, the others at the normal rate). Never raises a night's price. */
+  nightPrices: z.array(z.object({ date: businessDate, price: z.string().regex(/^\d{1,9}(\.\d{1,2})?$/, 'amount like 9000') })).max(90).default([]),
 }).refine((v) => v.departure > v.arrival, 'departure must be after arrival')
-  .refine((v) => !v.discountAmount || (v.discountPct === 0 && v.nightDiscounts.length === 0), 'Give the discount as a percentage, per night, or an amount — one of them');
+  .refine((v) => [v.discountAmount ? 1 : 0, v.agreedTotal ? 1 : 0, v.nightPrices.length > 0 ? 1 : 0, v.discountPct > 0 || v.nightDiscounts.length > 0 ? 1 : 0].reduce((a, b) => a + b, 0) <= 1, 'Give the discount as a percentage, per night, an amount off, or an agreed price — one of them');

@@ -131,7 +131,8 @@ export class ReservationsService {
       const { quote } = await this.rates.priceOne(trx, propertyId, claims.planId, { roomTypeId: claims.roomTypeId, arrival: claims.arrival, departure: claims.departure, adults: claims.adults,
         children: claims.children, extraBeds: claims.extraBeds, channel: claims.channel, residency: claims.residency as 'RESIDENT' | 'NON_RESIDENT', companyId: claims.companyId });
       if (!quote.sellable) throw new HttpException({ code: 'NOT_SELLABLE', message: 'This rate is no longer available for these dates', reasons: quote.reasons }, 409);
-      const nightCuts = claims.nightBp && claims.nightBp.length === quote.nights.length ? perNightDiscounts(quote.nights.map((n) => n.totalMinor), claims.nightBp) : null;
+      const exact = claims.nightCutsMinor && claims.nightCutsMinor.length === quote.nights.length ? claims.nightCutsMinor.map((c, k) => (BigInt(c) > quote.nights[k]!.totalMinor ? quote.nights[k]!.totalMinor : BigInt(c))) : null;
+      const nightCuts = exact ?? (claims.nightBp && claims.nightBp.length === quote.nights.length ? perNightDiscounts(quote.nights.map((n) => n.totalMinor), claims.nightBp) : null);
       const fixedCut = claims.discountAmountMinor ? (BigInt(claims.discountAmountMinor) > quote.subtotalMinor ? quote.subtotalMinor : BigInt(claims.discountAmountMinor)) : 0n;
       const discountMinor = fixedCut > 0n ? fixedCut : nightCuts ? nightCuts.reduce((a, b) => a + b, 0n) : (quote.subtotalMinor * BigInt(Math.round(claims.discountPct * 100))) / 10000n;
       if (quote.subtotalMinor - discountMinor !== BigInt(claims.subtotalMinor)) {
