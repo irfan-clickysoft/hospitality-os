@@ -1,3 +1,4 @@
+import { CANCEL_CODES, INITIATORS } from './cancel-reasons.js';
 import { z } from 'zod';
 import { businessDate, uuid } from '../property-setup/schemas.js';
 import { CreateGuest } from '../guests/schemas.js';
@@ -32,8 +33,10 @@ export const ModifyLine = z.object({
   /** Keep the originally quoted nightly prices (e.g. a complimentary upgrade). Needs the rate-override permission. */
   keepRate: z.boolean().default(false), reason: z.string().min(3).max(300), version: z.number().int(),
 });
-export const CancelReservation = z.object({ reason: z.string().min(3).max(300), waiveFee: z.boolean().default(false), lineIds: z.array(uuid).max(10).optional() });
-export const NoShow = z.object({ reason: z.string().min(3).max(300).default('Guest did not arrive'), waiveFee: z.boolean().default(false) });
+/** `code` is the standard reason and `initiator` who started it (worked out from the reason when not given); the reason text is the note. */
+const initiator = z.enum(INITIATORS);
+export const CancelReservation = z.object({ reason: z.string().min(3).max(300), code: z.enum(CANCEL_CODES).optional(), initiator: initiator.optional(), waiveFee: z.boolean().default(false), lineIds: z.array(uuid).max(10).optional() });
+export const NoShow = z.object({ reason: z.string().min(3).max(300).default('Guest did not arrive'), code: z.enum(CANCEL_CODES).optional(), initiator: initiator.optional(), waiveFee: z.boolean().default(false) });
 export const Reinstate = z.object({ reason: z.string().min(3).max(300) });
 export const Confirm = z.object({ reason: z.string().max(300).nullish() });
 export const AssignRoom = z.object({ roomId: uuid });

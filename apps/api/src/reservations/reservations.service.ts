@@ -1,3 +1,4 @@
+import { CANCEL_REASONS, type CancelCode, type Initiator } from './cancel-reasons.js';
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { sql, type Transaction } from 'kysely';
 import type { z } from 'zod';
@@ -301,8 +302,9 @@ export class ReservationsService {
 
   // ───────────── lifecycle ─────────────
   /** Applies a state-machine action to the given lines (all active lines by default), moving inventory accordingly. */
-  async transition(trx: Trx, propertyId: string, id: string, action: ResAction, o: { reason: string; lineIds?: string[]; waive?: boolean; userId: string }) {
+  async transition(trx: Trx, propertyId: string, id: string, action: ResAction, o: { reason: string; lineIds?: string[]; waive?: boolean; userId: string; code?: CancelCode; initiator?: Initiator }) {
     const p = await this.prop(trx, propertyId);
+    const cancelCode: CancelCode | null = action === 'EXPIRE' ? 'OPTION_EXPIRED' : o.code ?? null; const cancelInitiator: Initiator | null = o.initiator ?? (cancelCode ? CANCEL_REASONS[cancelCode] : null);
     const { res, lines } = await this.load(trx, propertyId, id, true);
     const targets = o.lineIds ? lines.filter((l) => o.lineIds!.includes(l.id)) : lines.filter((l) => (action === 'REINSTATE' ? l.status === 'CANCELLED' || l.status === 'NO_SHOW' : isActive(l.status)));
     if (o.lineIds && targets.length !== o.lineIds.length) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room line not found on this reservation' });
@@ -324,8 +326,9 @@ export class ReservationsService {
       if (was) await this.giveBackInventory(trx, propertyId, l, was);
       if (will) await this.takeInventory(trx, propertyId, l, will);               // REINSTATE / CONFIRM: may throw AvailabilityError
       if (!will) await this.endAssignment(trx, l.id, action);
-      await trx.updateTable('reservation_room').set({ status: to, version: sql`version + 1` as never }).where('id', '=', l.id).execute();
-      await this.history(trx, propertyId, id, { lineId: l.id, action, from: l.status, to, reason: o.reason });
+      const gone = action === 'CANCEL' || action === 'NO_SHOW' || action === 'EXPIRE';
+      await trx.updateTable('reservation_room').set({ status: to, ...(gone ? { cancel_code: cancelCode, cancel_initiator: cancelInitiator } : action === 'REINSTATE' ? { cancel_code: null, cancel_initiator: null } : {}), version: sql`version + 1` as never } as never).where('id', '=', l.id).execute();
+      await this.history(trx, propertyId, id, { lineId: l.id, action, from: l.status, to, reason: o.reason, ...(gone && cancelCode ? { details: { code: cancelCode, initiator: cancelInitiator } } : {}) });
     }
     const status = await this.syncHeader(trx, id);
     const set: Record<string, unknown> = {};
@@ -356,11 +359,11 @@ export class ReservationsService {
   }
   async cancel(propertyId: string, id: string, userId: string, i: z.infer<typeof S.CancelReservation>) {
     if (i.waiveFee) { await this.requirePermission(userId, 'reservation.waive_fee', propertyId); await this.requireFreshMfa(); }
-    return this.tdb.tx(async (trx) => { const r = await this.transition(trx, propertyId, id, 'CANCEL', { reason: i.reason, lineIds: i.lineIds, waive: i.waiveFee, userId }); return { ...r, reservation: await this.detail(trx, propertyId, id) }; });
+    return this.tdb.tx(async (trx) => { const r = await this.transition(trx, propertyId, id, 'CANCEL', { reason: i.reason, lineIds: i.lineIds, waive: i.waiveFee, userId, code: i.code, initiator: i.initiator }); return { ...r, reservation: await this.detail(trx, propertyId, id) }; });
   }
   async noShow(propertyId: string, id: string, userId: string, i: z.infer<typeof S.NoShow>) {
     if (i.waiveFee) { await this.requirePermission(userId, 'reservation.waive_fee', propertyId); await this.requireFreshMfa(); }
-    return this.tdb.tx(async (trx) => { const r = await this.transition(trx, propertyId, id, 'NO_SHOW', { reason: i.reason, waive: i.waiveFee, userId }); return { ...r, reservation: await this.detail(trx, propertyId, id) }; });
+    return this.tdb.tx(async (trx) => { const r = await this.transition(trx, propertyId, id, 'NO_SHOW', { reason: i.reason, waive: i.waiveFee, userId, code: i.code ?? 'DID_NOT_ARRIVE', initiator: i.initiator }); return { ...r, reservation: await this.detail(trx, propertyId, id) }; });
   }
   async reinstate(propertyId: string, id: string, userId: string, i: z.infer<typeof S.Reinstate>) {
     return this.tdb.tx(async (trx) => { await this.transition(trx, propertyId, id, 'REINSTATE', { reason: i.reason, userId }); return this.detail(trx, propertyId, id); });
