@@ -1,3 +1,4 @@
+import { DISCOUNT_CODES } from '../discounts/reasons.js';
 import { z } from 'zod';
 import { businessDate } from '../property-setup/schemas.js';
 import { MANUAL_CODES } from './txn-codes.js';
@@ -9,7 +10,7 @@ export const ManualCharge = z.object({
   txnCode: z.enum(MANUAL_CODES), amount: money, quantity: z.number().min(0.001).max(9999).default(1),
   description: z.string().trim().min(2).max(120), note: z.string().max(300).nullish(),
 });
-export const DiscountPosting = z.object({ pct: z.number().min(0.01).max(100), reason });
+export const DiscountPosting = z.object({ pct: z.number().min(0.01).max(100), reason, code: z.enum(DISCOUNT_CODES).optional() });
 export const ReversePosting = z.object({ reason });
 export const RecordPayment = z.object({
   kind: z.enum(['PAYMENT', 'DEPOSIT']).default('PAYMENT'), method: z.enum(['CASH', 'BANK_TRANSFER', 'CARD_SLIP', 'WALLET']), amount: money,

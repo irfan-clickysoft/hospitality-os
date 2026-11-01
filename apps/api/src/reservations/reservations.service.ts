@@ -1,4 +1,5 @@
 import { CANCEL_REASONS, type CancelCode, type Initiator } from './cancel-reasons.js';
+import { consumeApproval } from '../discounts/approval-store.js';
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { sql, type Transaction } from 'kysely';
 import type { z } from 'zod';
@@ -141,6 +142,7 @@ export class ReservationsService {
       }
       verified.push({ claims, quote, discountMinor, nightCuts });
     }
+    if (verified.some((v) => v.discountMinor > 0n && !v.claims.approvalId) && !i.discountReason) throw new UnprocessableEntityException({ code: 'DISCOUNT_REASON_REQUIRED', message: 'Say why the discount is given.' });
     const first = verified[0]!.claims;
     if (verified.some((v) => v.claims.channel !== first.channel || v.claims.residency !== first.residency || (v.claims.companyId ?? null) !== (first.companyId ?? null))) {
       throw new UnprocessableEntityException({ code: 'MIXED_QUOTES', message: 'All rooms in one reservation must come from the same channel, residency and company' });
@@ -186,11 +188,21 @@ export class ReservationsService {
     let lineNo = 0;
     for (const v of verified) {
       const q = v.quote, c = v.claims;
+      let disc: { code: string | null; note: string | null; approvedBy: string | null; approvedAt: Date | null; approvalId: string | null } = { code: null, note: null, approvedBy: null, approvedAt: null, approvalId: null };
+      if (v.discountMinor > 0n) {
+        disc = { code: i.discountReason?.code ?? null, note: i.discountReason?.note ?? null, approvedBy: null, approvedAt: null, approvalId: null };
+        if (c.approvalId) {
+          const ap = await consumeApproval(trx, c.approvalId, userId);
+          if (!ap) throw new HttpException({ code: 'APPROVAL_INVALID', message: 'The manager’s approval for this discount can no longer be used (used up, expired or withdrawn). Ask again.' }, 409);
+          disc = { code: i.discountReason?.code ?? ap.code, note: i.discountReason?.note ?? ap.note, approvedBy: ap.decided_by, approvedAt: ap.decided_at, approvalId: ap.id };
+        }
+      }
       const lineId = (await trx.insertInto('reservation_room').values({
         tenant_id: currentTenant().tenantId, property_id: propertyId, reservation_id: res.id, line_no: ++lineNo, room_type_id: c.roomTypeId, rate_plan_id: c.planId, arrival: c.arrival, departure: c.departure,
         adults: c.adults, children: c.children, extra_beds: c.extraBeds, status, subtotal_minor: q.subtotalMinor.toString(), discount_pct: String(v.nightCuts && q.subtotalMinor > 0n ? Number((v.discountMinor * 10000n) / q.subtotalMinor) / 100 : c.discountPct), discount_minor: v.discountMinor.toString(),
         total_minor: (q.subtotalMinor - v.discountMinor).toString(), deposit_due_minor: q.depositDueMinor.toString(),
         policy: JSON.stringify(q.policy),                                             // snapshot: later policy edits never change this booking
+        ...(v.discountMinor > 0n ? { discount_code: disc.code, discount_note: disc.note, discount_given_by: userId, discount_approved_by: disc.approvedBy, discount_approved_at: disc.approvedAt, discount_approval_id: disc.approvalId } : {}),
       } as never).returning('id').executeTakeFirstOrThrow()).id;
       await this.insertNights(trx, propertyId, lineId, q.nights.map((n) => ({ date: n.date, source: n.source, room: n.roomMinor, extras: n.totalMinor - n.roomMinor })), v.discountMinor, v.nightCuts);
       await this.history(trx, propertyId, res.id, { lineId, action: 'CREATE', from: null, to: status, details: { roomTypeId: c.roomTypeId, arrival: c.arrival, departure: c.departure, total: fmt(q.subtotalMinor - v.discountMinor, p.currency).amount } });

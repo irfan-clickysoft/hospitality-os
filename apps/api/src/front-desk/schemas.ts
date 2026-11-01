@@ -1,3 +1,4 @@
+import { DiscountReason } from '../discounts/schemas.js';
 import { z } from 'zod';
 import { money } from '../folio/schemas.js';
 import { DOCUMENT_KEYS, GUEST_TYPES } from '../registration/rules.js';
@@ -59,7 +60,7 @@ export const WalkIn = z.object({
   ratePlanId: uuid.optional(), companyId: uuid.nullish(), roomId: uuid.optional(),
   occupants: Occupants, purposeOfVisit: z.string().trim().max(80).nullish(),
   /** A signed quote for this room with a negotiated discount or agreed price (from the quotes search). Without it the walk-in rate is charged. */
-  quoteToken: z.string().max(2000).optional(),
+  quoteToken: z.string().max(2000).optional(), discountReason: DiscountReason.optional(),
   allowNotReady: z.boolean().default(false), complianceApproval: z.object({ reason: z.string().trim().min(3).max(300) }).optional(),
   notesInternal: z.string().max(2000).nullish(), specialRequests: z.string().max(2000).nullish(),
 }).refine((v) => (v.guestId ? 1 : 0) + (v.guest ? 1 : 0) === 1, { message: 'provide either guestId or guest' });

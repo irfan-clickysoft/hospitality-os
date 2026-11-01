@@ -576,7 +576,7 @@ describe('short stays', () => {
 });
 
 describe('negotiated walk-in prices', () => {
-  const walk = (w: W, o: Record<string, unknown>, h = O) => call('POST', `/v1/properties/${w.pid}/front-desk/walk-ins`, h, { guest: { fullName: `Neg ${++n}`, phone: `0314${String(6000000 + n).slice(-7)}`, nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 1, adults: 2, children: 0, ...o }, { 'idempotency-key': `neg-${++n}-${Date.now()}` });
+  const walk = (w: W, o: Record<string, unknown>, h = O) => call('POST', `/v1/properties/${w.pid}/front-desk/walk-ins`, h, { guest: { fullName: `Neg ${++n}`, phone: `0314${String(6000000 + n).slice(-7)}`, nationality: 'PK' }, roomTypeId: w.rt.STD, nights: 1, adults: 2, children: 0, ...(o.quoteToken ? { discountReason: { code: 'NEGOTIATED', note: 'Walk-in haggled' } } : {}), ...o }, { 'idempotency-key': `neg-${++n}-${Date.now()}` });
   const quote = (w: W, body: Record<string, unknown>, h = O) => call('POST', `/v1/properties/${w.pid}/quotes`, h, { arrival: '2026-11-05', departure: '2026-11-08', adults: 2, channel: 'WALKIN', roomTypeId: w.rt.STD, ...body });
   const optionOf = async (w: W, body: Record<string, unknown>, h = O) => (await ok(quote(w, body, h), 200)).options[0];
   const ok = async (r: Promise<any>, status = 200) => { const x = await r; expect(x.statusCode, x.body).toBe(status); return x.json(); };
