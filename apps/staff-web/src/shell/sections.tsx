@@ -22,6 +22,7 @@ export const SECTIONS: Section[] = [
     { id: 'ota', label: 'nav.ota', show: any('ota.claim'), Page: L(() => import('../desk/OtaClaims.js'), 'OtaTab') },
     { id: 'proposals', label: 'nav.rateProposals', show: any('company.view'), Page: L(() => import('../desk/RateProposals.js'), 'RateProposals') },
     { id: 'quotes', label: 'nav.quotes', show: any('reservation.view'), Page: L(() => import('../desk/Quotations.js'), 'Quotations') },
+    { id: 'discounts', label: 'nav.discounts', show: any('reservation.create'), Page: L(() => import('../desk/DiscountApprovals.js'), 'DiscountApprovals') },
     { id: 'requests', label: 'nav.requests', show: any('reservation.view'), Page: L(() => import('../desk/GuestRequests.js'), 'GuestRequests') },
     { id: 'spaces', label: 'nav.spaces', show: any('space.view'), Page: L(() => import('../desk/Spaces.js'), 'Spaces') },
   ] },

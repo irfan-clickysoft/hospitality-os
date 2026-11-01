@@ -1,3 +1,4 @@
+import { DiscountReason } from '../discounts/schemas.js';
 import { z } from 'zod';
 import { businessDate, uuid } from '../property-setup/schemas.js';
 import { CreateGuest } from '../guests/schemas.js';
@@ -13,6 +14,8 @@ export const CreateReservation = z.object({
   guest: CreateGuest.optional(),
   lines: z.array(z.object({ quoteToken: z.string().min(40).max(4000) })).min(1).max(10),
   source: z.enum(SOURCES),
+  /** Why a discount on any of the rooms was given. Required when a room carries a discount (an approved discount brings its own). */
+  discountReason: DiscountReason.optional(),
   marketSegment: z.string().max(40).nullish(), externalRef: z.string().max(80).nullish(), companyId: uuid.nullish(),
   /** Hold the rooms as an OPTION (no payment yet) for half-hour steps, whole days, or until the end of a date — never past the arrival day. Omit to confirm now. */
   hold: z.object({

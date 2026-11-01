@@ -1,3 +1,4 @@
+import { canonical, sameRequest, usableApproval, type PricedRequest } from '../discounts/approval-store.js';
 import { ForbiddenException, HttpException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { sql, type Transaction } from 'kysely';
 import type { z } from 'zod';
@@ -344,6 +345,13 @@ export class RatesService {
     if (discount.effect === 'DENY') throw new ForbiddenException({ code: 'PERMISSION_DENIED', message: 'You may not create quotes for this property' });
     return this.tdb.tx(async (trx) => {
       const p = await this.prop(trx, propertyId); const cur = p.currency;
+      let approval = null as Awaited<ReturnType<typeof usableApproval>>;
+      if (i.approvalId) {
+        approval = await usableApproval(trx, i.approvalId, userId);
+        if (!approval) throw new UnprocessableEntityException({ code: 'APPROVAL_INVALID', message: 'This approval cannot be used: it is not yours, was not approved, has expired, or has been used.' });
+        const want = approval.request as PricedRequest; const have = canonical({ ...i, roomTypeId: want.roomTypeId, nightDiscounts: i.nightDiscounts, discountAmount: i.discountAmount ?? null, agreedTotal: i.agreedTotal ?? null });
+        if (!sameRequest(want, have)) throw new UnprocessableEntityException({ code: 'APPROVAL_MISMATCH', message: 'This approval was for different dates, guests, room or discount. Ask for approval again.' });
+      }
       if (p.status !== 'LIVE') throw new UnprocessableEntityException({ code: 'PROPERTY_NOT_LIVE', message: 'This property is not live yet' });
       if (i.arrival < p.business_date) throw new UnprocessableEntityException({ code: 'DATE_IN_PAST', message: `Arrival cannot be before the business date (${p.business_date})` });
       nightsOf(i.arrival, i.departure, 90);
@@ -375,7 +383,8 @@ export class RatesService {
           const fixedCut = fixedMinor > q.subtotalMinor ? q.subtotalMinor : fixedMinor;
           const exactTop = exactCuts ? Math.max(0, ...exactCuts.map((c, k) => (q.nights[k]!.totalMinor > 0n ? Number((c * 10000n) / q.nights[k]!.totalMinor) / 100 : 0))) : 0;
           const optPct = fixedCut > 0n ? (q.subtotalMinor > 0n ? Number((fixedCut * 10000n) / q.subtotalMinor) / 100 : 0) : exactCuts ? exactTop : null;
-          const optDecision = optPct !== null && optPct > 0 ? await this.authz.check(userId, { permission: 'reservation.create', scope: { propertyId }, discountPct: optPct }) : discount;
+          const approvedHere = !!approval && (approval.request as PricedRequest).roomTypeId === t.id && (approval.request as PricedRequest).planId === pr.id;
+          const optDecision = approvedHere ? { effect: 'ALLOW' as const } : optPct !== null && optPct > 0 ? await this.authz.check(userId, { permission: 'reservation.create', scope: { propertyId }, discountPct: optPct }) : discount;
           if (optDecision.effect === 'DENY') throw new ForbiddenException({ code: 'PERMISSION_DENIED', message: 'You may not give this discount' });
           const nightCuts = exactCuts ?? (perNight ? perNightDiscounts(q.nights.map((n) => n.totalMinor), nightBp) : null);
           const discounted = fixedCut > 0n ? q.subtotalMinor - fixedCut : nightCuts ? q.subtotalMinor - nightCuts.reduce((a, b) => a + b, 0n) : i.discountPct > 0 ? q.subtotalMinor - (q.subtotalMinor * BigInt(Math.round(i.discountPct * 100))) / 10000n : q.subtotalMinor;
@@ -401,7 +410,7 @@ export class RatesService {
             taxes: [...taxByCode.values()].map((e) => ({ code: e.code, ratePercent: e.rateBp / 100, taxable: fmt(e.taxableMinor, cur), tax: fmt(e.taxMinor, cur) })), taxTotal: fmt(taxTotal, cur), totalIncTax: fmt(discounted + taxTotal, cur),
             depositDue: fmt(q.depositDueMinor, cur), policy: q.policy,
             quoteToken: bookable ? this.signer.sign({ propertyId, planId: pr.id, roomTypeId: t.id, arrival: i.arrival, departure: i.departure, adults: i.adults, children: i.children, extraBeds: i.extraBeds,
-              channel: i.channel, residency: i.residency, companyId: i.companyId ?? null, currency: cur, subtotalMinor: discounted.toString(), discountPct: optPct ?? i.discountPct, discountApproved: optDecision.effect === 'ALLOW', ...(exactCuts ? { nightCutsMinor: exactCuts.map((c) => c.toString()) } : perNight ? { nightBp } : {}), ...(fixedCut > 0n ? { discountAmountMinor: fixedCut.toString() } : {}),
+              channel: i.channel, residency: i.residency, companyId: i.companyId ?? null, currency: cur, subtotalMinor: discounted.toString(), discountPct: optPct ?? i.discountPct, discountApproved: optDecision.effect === 'ALLOW', ...(approvedHere ? { approvalId: approval!.id } : {}), ...(exactCuts ? { nightCutsMinor: exactCuts.map((c) => c.toString()) } : perNight ? { nightBp } : {}), ...(fixedCut > 0n ? { discountAmountMinor: fixedCut.toString() } : {}),
               depositDueMinor: q.depositDueMinor.toString(), nightsHash }, 900, this.clock.now()) : null,
           });
         }

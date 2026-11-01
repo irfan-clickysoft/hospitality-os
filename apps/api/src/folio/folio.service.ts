@@ -186,7 +186,7 @@ export class FolioService {
       if (amount <= 0n) throw fail(422, 'AMOUNT_INVALID', 'That discount rounds to nothing');
       if (prior + amount > BigInt(orig.amount_minor)) throw fail(422, 'DISCOUNT_TOO_LARGE', 'Discounts on this charge would exceed the charge');
       const id = await this.post(trx, { folioId, propertyId, currency: f.currency, type: 'DISCOUNT', txnCode: 'DISCOUNT', amount: -amount, businessDate: p.business_date, sourceType: 'MANUAL', parentId: postingId,
-        description: `Discount ${i.pct}% on ${orig.description ?? orig.txn_code}`, reasonCode: 'DISCOUNT', note: i.reason, userId, taxAs: taxAs(orig.txn_code) });
+        description: `Discount ${i.pct}% on ${orig.description ?? orig.txn_code}`, reasonCode: i.code ?? 'DISCOUNT', note: i.reason, userId, taxAs: taxAs(orig.txn_code) });
       await this.audit.record(trx, { action: 'folio.discount', resourceType: 'folio', resourceId: folioId, propertyId, after: { postingId: id, parent: postingId, pct: i.pct, amount: amount.toString() }, reasonCode: 'DISCOUNT', note: i.reason });
       return { postingId: id, discount: fmt(amount, f.currency), balance: fmt((await this.folioRow(trx, propertyId, folioId)).balance_minor, f.currency) };
     });

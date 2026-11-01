@@ -40,7 +40,9 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Built with timing fees (migration 0052):** early check-in and late checkout **fees and waivers**: property steps (share of a night by minutes off the standard time), a decision recorded before check-in/out (charged to the bill, a different amount, or waived with a reason), shown in report D.
 
-**Next (needs new capture):** cancellation initiator and reason codes, discount reasons and approvals, room-status history.
+**Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
+
+**Next (needs new capture):** cancellation initiator and reason codes, room-status history.
 
 **Later:** booking pace and pickup, forecast and forecast accuracy (need nightly snapshots), channel/segment/corporate production, group pickup, payment-gateway and OTA reconciliation, commission payable, housekeeping productivity and inspection, maintenance aging/downtime, F&B and inventory reports, staff productivity, access/export audit reports, multi-property portfolio views, scheduled delivery, custom builder.
 
@@ -74,7 +76,7 @@ Each entry: grain · source · default basis/range · main exclusions · drill-d
 * **G Room status** — snapshot with occupancy, housekeeping and maintenance as three columns and an explicit discrepancy column. *Gap: status history timeline.*
 * **H Collection and cashier** — one row per shift; cash and non-cash apart; blind-close respected. *Gap: paid-outs, gateway/OTA batches, sign-off steps.*
 * **I Due and outstanding** — open bills split in-house / departed / company; aged from departure (or bill opening). A card pre-authorization is not a payment. *Gap: disputes, promises, write-offs, credit limits, collection owner.*
-* **J Discounts and complimentary** — booking discounts, zero-charge lines (complimentary) and bill discounts, separate types. *Gap: reason, requested/approved-by, category.*
+* **J Discounts and complimentary** — booking discounts, zero-charge lines (complimentary) and bill discounts, separate types. *Reason, given-by, approved-by and category are now captured.*
 * **K Complaints and incidents** — one row per case: type (complaint, service failure, safety, security, medical, internal), severity, owner, SLA target and overdue flag, resolution and time to resolve, root/corrective/preventive action, compensation. Restricted cases (safety, security, medical, confidential) are filtered out for anyone without `case.restricted`, and the text of a restricted report is not copied into its history.
 * **L Lost and found** — one row per item with status, storage, age and retention flag. Photos and handover signatures live on the item.
 

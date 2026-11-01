@@ -50,7 +50,7 @@ async function quoteOpt(w: W, room: string, plan: string, o: Record<string, unkn
 async function book(w: W, o: { room?: string; plan?: string; quote?: Record<string, unknown>; body?: Record<string, unknown>; h?: Record<string, string>; key?: string; guestId?: string } = {}) {
   const opt = await quoteOpt(w, o.room ?? 'STD', o.plan ?? 'BAR', o.quote ?? {}, o.h ?? O);
   const guestId = o.guestId ?? await newGuest({}, o.h ?? O);
-  return call('POST', `/v1/properties/${w.pid}/reservations`, o.h ?? O, { guestId, source: 'PHONE', lines: [{ quoteToken: opt.quoteToken }], ...(o.body ?? {}) }, { 'idempotency-key': o.key ?? `key-${++n}-${Date.now()}` });
+  return call('POST', `/v1/properties/${w.pid}/reservations`, o.h ?? O, { guestId, source: 'PHONE', lines: [{ quoteToken: opt.quoteToken }], ...(Object.keys(o.quote ?? {}).some((k) => k.startsWith('discount') || k === 'nightDiscounts') ? { discountReason: { code: 'NEGOTIATED' } } : {}), ...(o.body ?? {}) }, { 'idempotency-key': o.key ?? `key-${++n}-${Date.now()}` });
 }
 const avail = async (w: W, code: string, d: string) => {
   const r = (await call('GET', `/v1/properties/${w.pid}/availability?from=${d}&to=${d.slice(0, 8)}${String(Number(d.slice(8)) + 1).padStart(2, '0')}`, O)).json();
@@ -203,7 +203,7 @@ describe('booking', () => {
     const q = (await call('POST', `/v1/properties/${w.pid}/quotes`, lim, { arrival: '2026-11-05', departure: '2026-11-07', adults: 2, discountPct: 15 })).json();
     expect(q.options.find((o: any) => o.roomType.code === 'STD').quoteToken).toBeNull();
     const okq = await quoteOpt(w, 'STD', 'BAR', { discountPct: 10 }, lim);
-    const r = await ok(call('POST', `/v1/properties/${w.pid}/reservations`, lim, { guestId: await newGuest({}, lim), source: 'PHONE', lines: [{ quoteToken: okq.quoteToken }] }, { 'idempotency-key': `d-${++n}-${Date.now()}` }), 201);
+    const r = await ok(call('POST', `/v1/properties/${w.pid}/reservations`, lim, { guestId: await newGuest({}, lim), source: 'PHONE', discountReason: { code: 'LOYALTY' }, lines: [{ quoteToken: okq.quoteToken }] }, { 'idempotency-key': `d-${++n}-${Date.now()}` }), 201);
     expect(r.lines[0]).toMatchObject({ subtotal: { amount: '27000.00' }, discount: { pct: 10, amount: { amount: '2700.00' } }, total: { amount: '24300.00' } });
     expect(r.lines[0].nightPrices.reduce((a: number, x: any) => a + Number(x.total.replace(/,/g, '')), 0)).toBe(24300);          // the discount is split across nights exactly
   });
