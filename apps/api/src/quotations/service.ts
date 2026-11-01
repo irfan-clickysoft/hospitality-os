@@ -313,7 +313,7 @@ export class QuotationsService {
     for (let c = done.length * 10; c < tokens.length; c += 10) {
       let res: { id: string };
       try {
-        res = await this.reservations.create(propertyId, userId, `quotation-${id}-${c / 10}`, { guestId, source: cur.q.company_id ? 'CORPORATE' : 'PHONE', companyId: cur.q.company_id, lines: tokens.slice(c, c + 10).map((quoteToken) => ({ quoteToken })),
+        res = await this.reservations.create(propertyId, userId, `quotation-${id}-${c / 10}`, { guestId, source: cur.q.company_id ? 'CORPORATE' : 'PHONE', companyId: cur.q.company_id, lines: tokens.slice(c, c + 10).map((quoteToken) => ({ quoteToken })), discountReason: { code: cur.q.company_id ? 'CORPORATE' : 'NEGOTIATED', note: (cur.q.discount_reason ?? 'Agreed in quotation').slice(0, 300) },
         specialRequests: cur.q.special_requests, notesInternal: `From quotation ${cur.q.number}`, ...(cur.q.title ? { externalRef: cur.q.number } : {}) } as never) as { id: string };
       } catch (e) {
         const code = (e as { getResponse?: () => { code?: string } }).getResponse?.()?.code;

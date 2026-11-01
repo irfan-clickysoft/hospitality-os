@@ -11,6 +11,8 @@ export interface QuoteClaims {
   discountAmountMinor?: string;
   /** The exact amount off each night (minor units, in stay order), when the guest was given an agreed price for particular nights. */
   nightCutsMinor?: string[];
+  /** The manager's approval this discount rests on, used up when the booking is made. */
+  approvalId?: string;
   depositDueMinor: string; nightsHash: string; exp: number;
 }
 

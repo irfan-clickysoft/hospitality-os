@@ -363,7 +363,7 @@ export class FrontDeskService {
       roomId = free.rows[0]?.id;
       if (!roomId) throw fail(409, 'NO_ROOM_READY', 'No clean, free room of this type is available right now. Check housekeeping, or choose another type.');
     }
-    const created = await this.res.createIn(trx, propertyId, userId, { guestId: i.guestId, guest: i.guest, lines: [{ quoteToken: token }], source: 'WALK_IN', complianceApproval: i.complianceApproval, notesInternal: i.notesInternal, specialRequests: i.specialRequests, companyId: i.companyId ?? undefined } as never);
+    const created = await this.res.createIn(trx, propertyId, userId, { guestId: i.guestId, guest: i.guest, lines: [{ quoteToken: token }], source: 'WALK_IN', discountReason: i.discountReason, complianceApproval: i.complianceApproval, notesInternal: i.notesInternal, specialRequests: i.specialRequests, companyId: i.companyId ?? undefined } as never);
     const flags = await this.checkInIn(trx, propertyId, created.id, created.lines[0]!.id, userId, { roomId, occupants: i.occupants, purposeOfVisit: i.purposeOfVisit, allowNotReady: i.allowNotReady, complianceApproval: i.complianceApproval, walkIn: true });
     return { ...(await this.res.detail(trx, propertyId, created.id)), checkIn: flags };
   }

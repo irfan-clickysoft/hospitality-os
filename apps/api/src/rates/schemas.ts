@@ -57,5 +57,7 @@ export const QuoteRequest = z.object({
   agreedTotal: z.string().regex(/^\d{1,9}(\.\d{1,2})?$/, 'amount like 60000').optional(),
   /** An agreed price for particular nights (e.g. the first night at 9,000, the others at the normal rate). Never raises a night's price. */
   nightPrices: z.array(z.object({ date: businessDate, price: z.string().regex(/^\d{1,9}(\.\d{1,2})?$/, 'amount like 9000') })).max(90).default([]),
+  /** A manager's approval for a discount above what you may give; it only fits the same dates, guests, room and discount. */
+  approvalId: uuid.optional(),
 }).refine((v) => v.departure > v.arrival, 'departure must be after arrival')
   .refine((v) => [v.discountAmount ? 1 : 0, v.agreedTotal ? 1 : 0, v.nightPrices.length > 0 ? 1 : 0, v.discountPct > 0 || v.nightDiscounts.length > 0 ? 1 : 0].reduce((a, b) => a + b, 0) <= 1, 'Give the discount as a percentage, per night, an amount off, or an agreed price — one of them');
