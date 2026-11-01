@@ -42,6 +42,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Built with cancellation reasons (migration 0053):** a standard reason and who started it (guest, property, booking channel, company, system) on every cancelled or no-show room line; the cancellations report shows them and can be grouped by reason, initiator or source.
 
+**More finance built:** guest ledger (in-house balances) · receivables ledger and ageing (by company or by billing) · guest bill detail (every posting).
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.
