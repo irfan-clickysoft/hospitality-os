@@ -104,7 +104,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
           </div>
         )}
         <label>{t('wi.type')}<select value={typeId} onChange={(e) => setTypeId(e.target.value)}>{types.map((x) => <option key={x.id} value={x.id} disabled={free(x.id) <= 0}>{x.name} ({t('bk.left', { n: free(x.id) })})</option>)}</select></label>
-        <label>{t('bk.departure')}<input type="date" value={addDays(businessDate, nights)} min={addDays(businessDate, 1)} max={addDays(businessDate, 30)} onChange={(e) => { if (e.target.value) setNights(Math.min(30, Math.max(1, nightsBetween(businessDate, e.target.value)))); }} dir="ltr" /></label>
+        <div className="grid2"><label>{t('bk.arrival')}<input type="date" value={businessDate} readOnly disabled dir="ltr" /></label><label>{t('bk.departure')}<input type="date" value={addDays(businessDate, nights)} min={addDays(businessDate, 1)} max={addDays(businessDate, 30)} onChange={(e) => { if (e.target.value) setNights(Math.min(30, Math.max(1, nightsBetween(businessDate, e.target.value)))); }} dir="ltr" /></label></div>
         <div className="grid2">{stepper(t('bk.nights'), nights, setNights, 1, 30)}{stepper(t('d.adults'), adults, setAdults, 1, 6)}{stepper(t('d.children'), children, setChildren, 0, 6)}{stepper(t('wi.mattress'), extraBeds, setExtraBeds, 0, 3)}</div>
         <p className="muted small">{t('wi.mattressHint')}</p>
         <label className="check"><input type="checkbox" checked={foreign} onChange={(e) => setForeign(e.target.checked)} /> {t('bk.foreign')}</label>
