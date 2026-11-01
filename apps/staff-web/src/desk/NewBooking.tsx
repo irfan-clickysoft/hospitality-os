@@ -10,6 +10,7 @@ import { GuestMessage } from './GuestMessage.js';
 import { ApprovalBox, ComplianceNotes, type Hit } from './ComplianceBits.js';
 import { Badge, ErrorLine, Sheet, Spinner } from '../ui/kit.js';
 import { policyLines } from './policy.js';
+import { ApprovalAsk, DiscountReasonField, noWhy, whyBody, type Approval, type DiscountWhy } from './DiscountApproval.js';
 import type { Amount } from './types.js';
 
 interface Option {
@@ -39,6 +40,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   const holdLast = addDays(arrival, -1) < businessDate ? businessDate : addDays(arrival, -1); const holdUntil = holdDate || holdLast;     // default: keep it until the day before arrival
   const [result, setResult] = useState<{ id: string; confirmationNo: string; guarantee: { atRisk: boolean; depositRequired: Amount; deadline: string | null }; totalExTax: Amount; compliance?: Hit[] } | null>(null);
   const [discAll, setDiscAll] = useState(''); const [nightPct, setNightPct] = useState<Record<string, string>>({}); const [agreedStay, setAgreedStay] = useState(''); const [agreedFirst, setAgreedFirst] = useState('');
+  const [why, setWhy] = useState<DiscountWhy>(noWhy); const [discApproval, setDiscApproval] = useState<Approval | null>(null);
   const key = useMemo(newKey, []);
   const { busy, problem, run, clear } = useAction();
   const withStepUp = useStepUp();
@@ -54,8 +56,10 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   const bump = (o: Option, d: number) => setPicks((p) => { const k = optKey(o); const next = Math.max(0, Math.min(o.roomsLeft, (p[k] ?? 0) + d)); const total = Object.values({ ...p, [k]: next }).reduce((a, b) => a + b, 0); return total > MAX_ROOMS ? p : { ...p, [k]: next }; });
 
   const pct = (v: string) => Math.min(100, Math.max(0, Number(v) || 0));
-  const quoteBody = () => ({ arrival, departure, adults, children, channel: CHANNEL[source], residency: foreign ? 'NON_RESIDENT' : 'RESIDENT', ...(companyId ? { companyId } : {}), ...(initial.roomTypeId ? { roomTypeId: initial.roomTypeId } : {}),
+  const quoteCore = () => ({ arrival, departure, adults, children, channel: CHANNEL[source], residency: foreign ? 'NON_RESIDENT' : 'RESIDENT', ...(companyId ? { companyId } : {}), ...(initial.roomTypeId ? { roomTypeId: initial.roomTypeId } : {}),
     ...agreedBody() });
+  const quoteBody = () => ({ ...quoteCore(), ...(discApproval?.status === 'APPROVED' ? { approvalId: discApproval.id } : {}) });
+  const discountOn = rooms.some((r) => Number(r.o.discount ? (r.o.discount as { amount?: string }).amount ?? 0 : 0) > 0);
   /** An agreed price (for the whole stay, or the first night) replaces any percentage; the server works out the exact figures. */
   const agreedBody = (): Record<string, unknown> => {
     const ok = (v: string) => /^\d{1,9}(\.\d{1,2})?$/.test(v.trim()) && Number(v) > 0;
@@ -73,10 +77,10 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   useEffect(() => {
     if (step !== 'options') return;
     setRepricing(true);
-    const h = setTimeout(() => { api<{ options: Option[] }>('POST', `${base}/quotes`, quoteBody()).then((r) => setOptions(r.options)).catch(() => undefined).finally(() => setRepricing(false)); }, 450);
+    const h = setTimeout(() => { api<{ options: Option[] }>('POST', `${base}/quotes`, quoteBody()).then((r) => setOptions(r.options)).catch(() => setDiscApproval((a) => (a?.status === 'APPROVED' ? null : a))).finally(() => setRepricing(false)); }, 450);
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discAll, nightPct, agreedStay, agreedFirst]);
+  }, [discAll, nightPct, agreedStay, agreedFirst, discApproval?.status === 'APPROVED' ? discApproval.id : '']);
   const stayDates = useMemo(() => Array.from({ length: nights }, (_, k) => addDays(arrival, k)), [arrival, nights]);
   useEffect(() => {
     if (step !== 'guest' || q.trim().length < 2) { setHits([]); return; }
@@ -86,7 +90,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
 
   const book = async (g: { guestId?: string; guest?: Record<string, unknown> }, approval?: string) => {
     lastBook[1]({ g });
-    const body = { ...g, source, lines: rooms.flatMap(({ o, n }) => Array.from({ length: n }, () => ({ quoteToken: o.quoteToken! }))), ...(hold ? { hold: holdKind === 'half' ? { minutes: holdHalf * 30 } : holdKind === 'days' ? { days: holdDays } : { untilDate: holdUntil } } : {}), ...(notes.trim() ? { notesInternal: notes.trim() } : {}), ...(ext.trim() ? { externalRef: ext.trim() } : {}), ...(eta ? { expectedArrival: eta } : {}), ...(approval ? { complianceApproval: { reason: approval } } : {}) };
+    const body = { ...g, source, lines: rooms.flatMap(({ o, n }) => Array.from({ length: n }, () => ({ quoteToken: o.quoteToken! }))), ...(hold ? { hold: holdKind === 'half' ? { minutes: holdHalf * 30 } : holdKind === 'days' ? { days: holdDays } : { untilDate: holdUntil } } : {}), ...(notes.trim() ? { notesInternal: notes.trim() } : {}), ...(ext.trim() ? { externalRef: ext.trim() } : {}), ...(eta ? { expectedArrival: eta } : {}), ...(approval ? { complianceApproval: { reason: approval } } : {}), ...(discountOn ? { discountReason: whyBody(why) } : {}) };
     const call = () => api<NonNullable<typeof result>>('POST', `${base}/reservations`, body, { 'idempotency-key': key });
     const r = await run(() => (approval ? withStepUp(call) : call()));
     if (r) { setResult(r); setStep('done'); }
@@ -118,6 +122,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
           <div className="grid2"><label>{t('ng.agreedStay')}<input value={agreedStay} onChange={(e) => { setAgreedStay(e.target.value); if (e.target.value) setAgreedFirst(''); }} inputMode="decimal" dir="ltr" placeholder="60000" /></label>
             <label>{t('ng.agreedFirst')}<input value={agreedFirst} onChange={(e) => { setAgreedFirst(e.target.value); if (e.target.value) setAgreedStay(''); }} inputMode="decimal" dir="ltr" placeholder="9000" /></label></div>
           {repricing && <p className="muted small" aria-live="polite">{t('bk.repricing')}</p>}
+          {(discAll !== '' || agreedStay !== '' || agreedFirst !== '' || Object.values(nightPct).some((v) => v !== '')) && <DiscountReasonField value={why} onChange={setWhy} />}
         </fieldset>
         {options.length === 0 && <p className="warnbox">{t('bk.noRooms')}</p>}
         {options.map((o) => (
@@ -126,7 +131,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
             <div className="row between"><span className="big">{money(o.totalExTax)}</span><Badge tone="neutral">{t('bk.left', { n: o.roomsLeft })}</Badge></div>
             <table className="nighttable small"><thead><tr><th scope="col">{t('bk.night')}</th><th scope="col">{t('bk.rate')}</th><th scope="col">{t('bk.discount')}</th><th scope="col">{t('bk.youCharge')}</th></tr></thead>
               <tbody>{o.nights.map((n) => <tr key={n.date}><th scope="row">{shortDate(n.date, locale)}</th><td dir="ltr">{money({ amount: n.total, currency: o.totalExTax.currency })}</td><td dir="ltr">{n.discountPct > 0 ? `−${n.discountPct}%` : '—'}</td><td dir="ltr"><strong>{money({ amount: n.payable, currency: o.totalExTax.currency })}</strong></td></tr>)}</tbody></table>
-            {!o.bookable && <p className="warnbox small">{t('bk.needsApproval')}</p>}
+            {!o.bookable && Number((o.discount as { amount?: string } | null)?.amount ?? 0) > 0 ? <ApprovalAsk quote={quoteCore()} roomTypeId={o.roomType.id} planId={o.plan.id} rooms={Math.max(1, picks[optKey(o)] ?? 1)} why={why} approval={discApproval} onChange={setDiscApproval} /> : !o.bookable && <p className="warnbox small">{t('bk.needsApproval')}</p>}
             {o.taxes && o.taxes.length > 0 && o.taxTotal && o.totalIncTax && <div className="small">{o.taxes.map((x) => <div key={x.code + x.ratePercent} className="row between muted"><span>{x.code} {x.ratePercent}%</span><span dir="ltr">{money(x.tax)}</span></div>)}<div className="row between"><strong>{t('bk.totalIncTax')}</strong><strong>{money(o.totalIncTax)}</strong></div></div>}
             {o.depositDue.amount !== '0.00' && <p className="small">{t('bk.deposit')}: {money(o.depositDue)}</p>}
             <ul className="small muted">{policyLines(t, o.policy).map((l) => <li key={l}>{l}</li>)}</ul>
@@ -137,7 +142,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
             </div>
           </div>
         ))}
-        {roomCount > 0 && <div className="card inner row between"><span><strong>{roomsLabel}</strong><br /><span className="muted small">{money(totalMoney)} {t('d.exTax')}</span></span><button className="primary" disabled={repricing} onClick={() => { setStep('guest'); clear(); }}>{t('bk.continueN', { n: roomCount })}</button></div>}
+        {roomCount > 0 && <div className="card inner row between"><span><strong>{roomsLabel}</strong><br /><span className="muted small">{money(totalMoney)} {t('d.exTax')}</span></span><button className="primary" disabled={repricing || (discountOn && !why.code)} onClick={() => { setStep('guest'); clear(); }}>{t('bk.continueN', { n: roomCount })}</button></div>}
         {options.length > 0 && <p className="muted small">{t('bk.groupHint', { max: MAX_ROOMS })}</p>}
         <div className="actions"><button onClick={() => setStep('search')}>{t('common.back')}</button></div>
       </>)}
