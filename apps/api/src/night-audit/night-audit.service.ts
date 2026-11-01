@@ -192,7 +192,7 @@ export class NightAuditService {
           const { lines: ls } = await this.res.load(trx, propertyId, r.reservation_id, true);
           const ids = ls.filter((l) => l.status === 'CONFIRMED' && l.arrival <= bd).map((l) => l.id);
           if (!ids.length) return;
-          await this.res.transition(trx, propertyId, r.reservation_id, 'NO_SHOW', { reason: 'Night audit: did not arrive', lineIds: ids, userId });
+          await this.res.transition(trx, propertyId, r.reservation_id, 'NO_SHOW', { reason: 'Night audit: did not arrive', lineIds: ids, userId, code: 'DID_NOT_ARRIVE', initiator: 'SYSTEM' });
           lines += ids.length;
         });
       }
