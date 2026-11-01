@@ -1,3 +1,5 @@
+import { ScheduledReportsService } from '../insights/scheduled.service.js';
+import { takeBookingSnapshot } from '../insights/snapshots.js';
 import { ForbiddenException, HttpException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { sql, type Transaction } from 'kysely';
 import type { z } from 'zod';
@@ -46,6 +48,7 @@ export class NightAuditService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
     @Inject(CLOCK) private readonly clock: ClockLike,
+    @Inject(ScheduledReportsService) private readonly scheduled: ScheduledReportsService,
   ) {}
 
   private async prop(trx: Trx, id: string, lock = false) {
@@ -176,6 +179,7 @@ export class NightAuditService {
         throw fail(500, 'AUDIT_STEP_FAILED', `The audit stopped at "${key}". Fix the cause and start it again — it continues from this step.`, { runId, step: key, reason: message });
       }
     }
+    await this.scheduled.onDayClosed(propertyId, bd);                                              // scheduled reports go out once the day has closed; a problem there never undoes the close
     return this.runView(propertyId, runId);
   }
 
@@ -222,6 +226,7 @@ export class NightAuditService {
       const run = await trx.selectFrom('night_audit_run').select('started_at').where('id', '=', runId).executeTakeFirstOrThrow();
       const since = prev?.completed_at ?? new Date(new Date(run.started_at).getTime() - 24 * 3_600_000);
       const snap = await this.snapshot(trx, propertyId, p.currency, bd, runId, since);
+      await takeBookingSnapshot(trx, currentTenant().tenantId, propertyId, bd, 'NIGHT_AUDIT', userId);        // the books as they stood when the day closed: pace, pickup and forecast are built from these
       const next = addDays(bd, 1);
       const rolled = await trx.updateTable('property').set({ business_date: next, version: sql`version + 1` as never }).where('id', '=', propertyId).where('business_date', '=', bd).returning('id').executeTakeFirst();   // compare-and-set
       if (!rolled) throw fail(409, 'STALE_BUSINESS_DATE', 'The business date has already moved on.');

@@ -15,7 +15,7 @@ const code = async (r: Promise<any>, status: number, c: string) => { const x = a
 const key = () => ({ 'idempotency-key': `na-${++n}-${Date.now()}` });
 const at = (date: string, time: string) => testClock.set(zonedToUtcMs(date, time, 'Asia/Karachi'));
 
-beforeAll(async () => { app = await createTestApp(); T = await provision(app, 'rep'); O = as(T.tenantId, T.ownerUserId); OM = as(T.tenantId, T.ownerUserId, { mfa: true }); });
+beforeAll(async () => { app = await createTestApp(); T = await provision(app, 'ins'); O = as(T.tenantId, T.ownerUserId); OM = as(T.tenantId, T.ownerUserId, { mfa: true }); });
 afterAll(async () => { await app.close(); testClock.reset(); });
 beforeEach(() => testClock.reset());
 
@@ -34,7 +34,7 @@ type W = Awaited<ReturnType<typeof sunset>>;
 const u = (w: W, tail: string) => `/v1/properties/${w.pid}/${tail}`;
 const setBd = (w: W, d: string) => adminDb.updateTable('property').set({ business_date: d }).where('id', '=', w.pid).execute();
 const bdOf = async (w: W) => (await adminDb.selectFrom('property').select('business_date').where('id', '=', w.pid).executeTakeFirstOrThrow()).business_date;
-const staff = async (w: W, role: string) => { const id = await addUser(T.tenantId, `${role}${++n}@rep.test`); await assignRole(T.tenantId, id, role, 'PROPERTY', w.pid); return { id, h: as(T.tenantId, id), hm: as(T.tenantId, id, { mfa: true }) }; };
+const staff = async (w: W, role: string) => { const id = await addUser(T.tenantId, `${role}${++n}@ins.test`); await assignRole(T.tenantId, id, role, 'PROPERTY', w.pid); return { id, h: as(T.tenantId, id), hm: as(T.tenantId, id, { mfa: true }) }; };
 
 async function book(w: W, o: { arrival?: string; departure?: string; hold?: number } = {}) {
   const q = (await call('POST', u(w, 'quotes'), O, { arrival: o.arrival ?? '2026-11-05', departure: o.departure ?? '2026-11-07', adults: 2, channel: 'PHONE' })).json();
@@ -86,7 +86,7 @@ describe('Reporting Center', () => {
   });
 
   it('keeps reports away from people without the permission, and limits the period', async () => {
-    const w = await sunset(); const ro = await staff(w, 'read_only'); const nobody = as(T.tenantId, await addUser(T.tenantId, `nobody${++n}@rep.test`));
+    const w = await sunset(); const ro = await staff(w, 'read_only'); const nobody = as(T.tenantId, await addUser(T.tenantId, `nobody${++n}@ins.test`));
     expect((await ok(call('GET', u(w, 'insights'), nobody))).items).toHaveLength(0);
     await code(call('GET', u(w, 'insights/cashier'), nobody), 403, 'PERMISSION_DENIED');
     await code(call('GET', u(w, 'insights/nope'), O), 404, 'NOT_FOUND');

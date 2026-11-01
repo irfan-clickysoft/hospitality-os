@@ -10,6 +10,7 @@ import { blankOccupant, occupantBody } from '../desk/CheckInSheet.js';
 import { checkOccupant, formatId, gapsFor, type Matrix, type OccErrors, type Occupant } from '../lib/occupants.js';
 import { PurposeField, RelationshipField } from '../desk/RegExtras.js';
 import { OccupantDocs } from '../desk/OccupantDocs.js';
+import { TimingFeeBox } from '../desk/TimingFee.js';
 import { RoomPicker } from '../desk/RoomPicker.js';
 import type { ReservationDetail } from '../desk/types.js';
 import { Banner, Field, RoomState, SaveState, StatusBadge, type SaveStatus } from '../ui/ds.js';
@@ -60,7 +61,8 @@ export function CheckIn({ stay }: { stay: Stay }) {
   const conflict = stay.changes.length > 0;
   const needsOverride = notReady && !override;
   const reasons = [...(roomProblems.length ? [t('ci.m.room')] : []), ...(blocked ? [t('ci.m.blocked')] : []), ...(needsOverride ? [t('ci.m.notReady')] : []), ...(missing.length ? [t('ci.m.missing', { n: missing.length })] : []), ...(offline ? [t('ci.m.offline')] : []), ...(conflict ? [t('ci.m.conflict')] : []), ...(flagged ? [t('ci.m.flagged')] : [])];
-  const canSubmit = can('frontdesk.check_in') && reasons.length === 0 && !busy;
+  const [feeBlocked, setFeeBlocked] = useState(false);
+  const canSubmit = can('frontdesk.check_in') && reasons.length === 0 && !busy && !feeBlocked;
 
   // autosave the draft on this device
   useEffect(() => {
@@ -138,6 +140,7 @@ export function CheckIn({ stay }: { stay: Stay }) {
       </section>
 
       <section className="step" aria-labelledby="s-confirm"><h3 id="s-confirm"><span className="stepno">3</span> {t('ci.step.confirm')}</h3>
+        <TimingFeeBox kind="EARLY_CHECKIN" reservationId={res.id} lineId={ln.id} onState={setFeeBlocked} onDecided={() => stay.refresh()} />
         <dl className="summary">
           <div><dt>{t('ws.guest')}</dt><dd>{res.guest.fullName}</dd></div>
           <div><dt>{t('d.room')}</dt><dd>{roomNumber ?? (picked ? '✓' : t('d.noRoom'))}</dd></div>

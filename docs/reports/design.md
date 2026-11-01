@@ -36,7 +36,11 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Built with the registers (migration 0049):** E *Damage charges* and K *Complaints and incidents*, with the damage and case registers behind them (Tasks → Damage, Tasks → Complaints).
 
-**Next (needs new capture):** early/late **fees and waivers** (the fee event), cancellation initiator and reason codes, discount reasons and approvals, room-status history.
+**Built with snapshots (migration 0050):** *Booking pace and pickup* (net pickup split into new bookings, cancellations and changes) and *Occupancy and revenue forecast* (on the books + typical pickup at that distance, with samples and confidence shown, no forecast where history is thin).
+
+**Built with timing fees (migration 0052):** early check-in and late checkout **fees and waivers**: property steps (share of a night by minutes off the standard time), a decision recorded before check-in/out (charged to the bill, a different amount, or waived with a reason), shown in report D.
+
+**Next (needs new capture):** cancellation initiator and reason codes, discount reasons and approvals, room-status history.
 
 **Later:** booking pace and pickup, forecast and forecast accuracy (need nightly snapshots), channel/segment/corporate production, group pickup, payment-gateway and OTA reconciliation, commission payable, housekeeping productivity and inspection, maintenance aging/downtime, F&B and inventory reports, staff productivity, access/export audit reports, multi-property portfolio views, scheduled delivery, custom builder.
 
@@ -64,7 +68,7 @@ Each entry: grain · source · default basis/range · main exclusions · drill-d
 * **A Check-in** — one row per room line checked in; `reservation_room`, history, stay guests, bill. Basis: business date of check-in (or arrival). Expected arrivals are a separate report. Early flag = arrival date and local time before the property's check-in time. Drill: booking. *Gap: early-check-in fee/waiver not recorded.*
 * **B Room move** — one row per `ROOM_MOVED` event on a checked-in line; old/new room and type, reason, actor. Pre-arrival changes are a separate report. A move keeps rates, so no charge. *Gap: guest- vs property-initiated, approvals, housekeeping/maintenance impact, related complaint.*
 * **C Cancellations and no-shows** — one row per lost room line; separate or combined; expected revenue, deposit, fee and whether waived, lost revenue. A no-show is whatever staff confirmed, never inferred from the clock. *Gap: initiator, commission, standard reason codes.*
-* **D Early check-in / late checkout** — timing against the property's standard times, with the guest's request. *Gap: approved time, fee, waiver, next-arrival impact.*
+* **D Early check-in / late checkout** — timing against the property's standard times, the guest's request, and the fee decision: suggested, charged, waived, reason, who decided. *Gap: approved time, next-arrival impact.* Fees follow the property's steps (Administration → Properties); with no steps set nothing is suggested and the desk is never asked. Same-day walk-ins are never asked. A decision is immutable; a wrong charge is reversed on the bill.
 * **E Damage charge** — one row per damage case; suspected and verified kept apart (suspected is never charged); estimate, actual, approved, waived and charged amounts; guest told and their response; who approved and charged; the bill it landed on. Pictures and internal notes stay in the case (permission-gated). *Gap: refunds and payments per charge are handled on the bill.*
 * **F Room rate change** — one row per booking modification with before/after dates and stay totals, reason, actor, revenue impact; the history is the existing immutable booking history. *Gap: per-night before/after, tax impact, approvals, source type.*
 * **G Room status** — snapshot with occupancy, housekeeping and maintenance as three columns and an explicit discrepancy column. *Gap: status history timeline.*
@@ -91,12 +95,13 @@ View is per report and per property (above). Export is audited (`report.export`:
 
 ## 12. Export and scheduling
 
-Built: screen, print view, CSV with a header block (report, property, date basis and range, filters, currency and tax basis, time zone and business date, generated time and user, data-as-of, definition version) and a totals row. Later: Excel, branded PDF, expiring authenticated links, scheduled delivery after business-day close, threshold alerts.
+Built: screen, print view, **scheduled delivery** (below), CSV with a header block (report, property, date basis and range, filters, currency and tax basis, time zone and business date, generated time and user, data-as-of, definition version) and a totals row. **Scheduled delivery (built, migration 0051).** A schedule names a report, its filters, which dates it covers (the day that closed, last 7/30 days, month to date, previous month, next 7/30/90), how often (every day, weekly on a day, monthly on a day or at period end) and who receives it. It runs **when the night audit closes the business day**, so figures are final. The report is generated then and **stored as a snapshot** (so the link, the screen and the CSV always match), and each recipient gets an **email with a link and no figures**. The link needs sign-in, works for 7 days (the stored copy is then removed), and is **checked again on every opening**: the person must be a recipient and must still be allowed to open that report. The schedule is re-authorized each time it runs: if its owner is inactive or can no longer open the report, it is paused and the log says why; recipients who lost access are skipped. **Threshold alerts**: a schedule can be limited to days when a key figure crosses a limit; otherwise nothing is sent and the log says it was skipped. Complaints and incidents are generated without restricted cases, so a scheduled copy never carries them. Each delivery is audited (generated, opened, exported). Permission `report.schedule` (separate from viewing).
+Later: Excel, branded PDF (the screen is printable now), delivery of reports that include sensitive fields with unmasking and a reason, and shared (manager-published) views.
 
 ## 13. Event and snapshot data model
 
 Existing and used: booking history, room assignments, payments, cashier shifts, folio postings, night-audit runs and daily statistics, stay nights, lost-and-found events.
-To add as needed: `booking_snapshot` (daily on-the-books by stay date, for pace/pickup/forecast); cancellation initiator and reason code; fee/waiver events for early/late; damage cases; complaint/incident cases; room-status history; discount reason and approval; collection follow-up (promise, dispute); report schedules and delivery log.
+To add as needed: `booking_snapshot` — **built**: daily on-the-books by stay date, room type and channel, saved in the transaction that closes the business day (and on demand); cancellation initiator and reason code; fee/waiver events for early/late; damage cases; complaint/incident cases; room-status history; discount reason and approval; collection follow-up (promise, dispute); report schedules and delivery log.
 
 ## 14. Layouts
 
@@ -112,7 +117,7 @@ Desktop: dense sticky-header table with column chooser, sortable columns, totals
 
 1. **Done:** engine, catalog, shell, components, sixteen reports above.
 2. Capture slices that unlock the registers: damage cases (E), complaints/incidents (K), early/late fees, cancellation reason codes, discount approvals.
-3. Daily snapshots → booking pace, pickup, forecast, forecast accuracy.
+3. **Done:** daily snapshots → booking pace, pickup, forecast. Still to add: forecast accuracy (needs forecasts saved over time), pace by channel/segment, same-date-last-year pace.
 4. Scheduling and delivery (expiring links), Excel/PDF, shared views.
 5. Reconciliation reports (gateway, OTA, bank), channel/segment/corporate, housekeeping and maintenance analytics.
 6. Portfolio (multi-property, currency conversion with stated FX), owner pack.

@@ -4,6 +4,7 @@ import { RequirePermission } from '../authz/decorators.js';
 import { parse } from '../common/validate.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { FrontDeskService } from './front-desk.service.js';
+import { TimingFeesService } from './timing-fees.service.js';
 import { renderRegistrationCard } from './registration-card.js';
 import * as S from './schemas.js';
 import { z } from 'zod';
@@ -20,13 +21,19 @@ const me = () => currentTenant().actorId!;
 
 @Controller('v1/properties/:propertyId')
 export class FrontDeskController {
-  constructor(@Inject(FrontDeskService) private readonly svc: FrontDeskService) {}
+  constructor(@Inject(FrontDeskService) private readonly svc: FrontDeskService, @Inject(TimingFeesService) private readonly timing: TimingFeesService) {}
 
   @Get('rack') @RequirePermission('reservation.view', P)
   rack(@Param('propertyId', uuid()) pid: string, @Query() q: unknown) { return this.svc.rack(pid, parse(S.RackQuery, q)); }
 
   @Post('reservations/:id/rooms/:lineId/check-in') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
   checkIn(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Body() body: unknown) { return this.svc.checkIn(pid, id, line, me(), parse(S.CheckIn, body)); }
+  @Get('reservations/:id/rooms/:lineId/timing-fee') @RequirePermission('reservation.view', P)
+  timingFee(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Query() q: unknown) { return this.timing.get(pid, id, line, parse(S.TimingFeeQuery, q).kind); }
+  @Post('reservations/:id/rooms/:lineId/timing-fee') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
+  decideTimingFee(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Body() body: unknown) {
+    const b = parse(S.TimingFeeDecision, body); return this.timing.decide(pid, id, line, me(), b);
+  }
   @Post('reservations/:id/rooms/:lineId/undo-check-in') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
   undo(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Body() body: unknown) { return this.svc.undoCheckIn(pid, id, line, me(), parse(S.UndoCheckIn, body).reason); }
   @Get('reservations/:id/rooms/:lineId/check-out-preview') @RequirePermission('frontdesk.check_out', P)

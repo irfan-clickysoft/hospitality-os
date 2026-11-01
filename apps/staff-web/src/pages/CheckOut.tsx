@@ -1,3 +1,4 @@
+import { TimingFeeBox } from '../desk/TimingFee.js';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { useT } from '../i18n/index.js';
@@ -79,7 +80,8 @@ export function CheckOut({ stay }: { stay: Stay }) {
     else stay.refresh();
   };
   const primaryIsPay = owes && can('payment.take');
-  const canOut = can('frontdesk.check_out') && !offline && !busy && !lock && !needReason && !customBad && !closedBy && settled;
+  const [feeBlocked, setFeeBlocked] = useState(false);
+  const canOut = can('frontdesk.check_out') && !offline && !busy && !lock && !needReason && !customBad && !closedBy && settled && !feeBlocked;
 
   if (closedBy) return <Banner level="INFO" title={t('co.already')} action={<Link className="button" to={`/reservations/${res.id}`}>{t('common.back')}</Link>}>{t('co.alreadyText')}</Banner>;
   return (
@@ -140,6 +142,7 @@ export function CheckOut({ stay }: { stay: Stay }) {
         {(problem?.code === 'network' || problem?.code === 'SERVER_ERROR') && <Banner level="BLOCKER" title={t('ci.outageTitle')} action={<button onClick={() => void finish()}>{t('common.retry')}</button>}>{t('co.outageText')}</Banner>}
       </>)}
 
+      {!closedBy && ln.status === 'CHECKED_IN' && <TimingFeeBox kind="LATE_CHECKOUT" reservationId={res.id} lineId={ln.id} onState={setFeeBlocked} onDecided={() => { mine.current = true; stay.refresh(); folio.reload?.(); }} />}
       <StepUpSlot />
       <div className="actionbar" role="region" aria-label={t('co.title')}>
         <div className="ab-msg" role="status" aria-live="polite">
@@ -148,7 +151,7 @@ export function CheckOut({ stay }: { stay: Stay }) {
         <Link className="button" to={`/reservations/${res.id}`}>{t('common.cancel')}</Link>
         {primaryIsPay ? (<>
           <button disabled aria-disabled="true" title={t('co.msg.owes')}>{t('co.confirm')}</button>
-          <button className="primary" disabled={offline || lock} onClick={() => setPaying(true)}>{t('co.settleAndOut', { amount: final ? money(final) : '' })}</button>
+          <button className="primary" disabled={offline || lock || feeBlocked} onClick={() => setPaying(true)}>{t('co.settleAndOut', { amount: final ? money(final) : '' })}</button>
         </>) : (
           <button className={`primary${canOut ? '' : ' is-disabled'}`} aria-disabled={!canOut} disabled={busy} onClick={() => { if (canOut) void finish(); }}>{busy ? t('common.loading') : t('co.confirm')}</button>)}
       </div>

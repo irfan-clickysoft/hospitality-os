@@ -105,6 +105,7 @@ Guest messages and company statements can be sent by email from the staff app. I
    MAIL_FROM=guestcare@sunsetbb.com
    MAIL_REPLY_TO=guestcare@sunsetbb.com
    SES_REGION=ap-south-1
+   PUBLIC_BASE_URL=https://pms.sunsetbb.com   # the address staff open the app at; scheduled-report emails link to it
    AWS_ACCESS_KEY_ID=...
    AWS_SECRET_ACCESS_KEY=...
    ```
