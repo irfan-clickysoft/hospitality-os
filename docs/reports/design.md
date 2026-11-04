@@ -54,6 +54,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Food and beverage and inventory built (two new groups in the Reporting Center):** F&B revenue by outlet or day with average order value · sales by item, size or category · orders and timing (prepare/deliver minutes, open, delayed, cancelled) · recipe cost and food margin (costed through sub-recipes, same rules as the recipe screen) · stock on hand and reorder · stock movement, waste and count variance. Not yet: modifier performance, laundry/transfer/rent-a-car (not recorded as services), ancillary revenue per stay and upsell conversion, purchase orders, goods received, expiry and batches, vendor performance, stock transfers, theoretical vs actual consumption, F&B departmental P&L.
 
+**Audit and staff built (two more groups):** user activity log · reservation audit · folio and payment audit · discount, refund and override approvals · sensitive-data access and export · scheduled-report delivery history · cashier variance by employee · approval and review queue. Not yet: room-rate/room-move/room-status audit as their own reports (rate changes and moves have reports; room-status history is not recorded), guest ID compliance and government reporting status, tax-invoice sequence exceptions, integration failures, missing or invalid data, shift handover, task volume and aging, SLA performance, workload and staffing forecast, training and quality (need new capture).
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.
