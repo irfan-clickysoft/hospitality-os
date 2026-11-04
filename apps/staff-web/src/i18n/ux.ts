@@ -438,7 +438,7 @@ export const uxEn = {
   'ins.recent': 'Recently viewed',
   'ins.cat.management': 'Management',
   'ins.cat.frontdesk': 'Front desk and reservations',
-  'ins.cat.rooms': 'Rooms and housekeeping',
+  'ins.cat.rooms': 'Rooms, housekeeping and maintenance',
   'ins.cat.finance': 'Finance and night audit',
   'ins.cat.sales': 'Sales and performance',
   'ins.cat.risk': 'Guest experience and risk',

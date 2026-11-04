@@ -48,6 +48,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Sales built:** booking source and channel · market segment · corporate-account production · room type · rate plan (each with nights, room revenue, ADR, share and cancel rate) · booking window, length of stay and day of week · tentative bookings. Not yet: group block pickup, promotions, lost business and denials, forecast accuracy, budget (need new capture), channel commission and net revenue.
 
+**Rooms, housekeeping and maintenance built:** open and overdue work orders · maintenance response and resolution time · repeat faults · out-of-order rooms and lost sellable nights · rooms not ready for arrival · housekeeping progress, turnaround and inspections (failed inspections and re-cleans). Not yet: room-status history and discrepancies over time, linen/amenity/minibar use, preventive maintenance due, downtime revenue impact, asset lifecycle cost, vendor performance, utilities (need new capture).
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.
