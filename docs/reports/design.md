@@ -44,6 +44,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Finance ledgers built:** payment receipts and methods (by receipt, method, deposit/payment/refund or cashier) · refunds, voids and adjustments · daily revenue summary (posted revenue by charge type or day, before tax) · taxes and service charges · financial exceptions (bills that do not add up, closed with balance, cash outside a shift, receipts waiting to be verified, cash differences). Deposits and advances are the *Deposits* view of the payments report.
 
+**More finance built:** guest ledger (in-house balances) · receivables ledger and ageing (by company or by billing) · guest bill detail (every posting).
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.
