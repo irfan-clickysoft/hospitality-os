@@ -46,6 +46,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **More finance built:** guest ledger (in-house balances) · receivables ledger and ageing (by company or by billing) · guest bill detail (every posting).
 
+**Sales built:** booking source and channel · market segment · corporate-account production · room type · rate plan (each with nights, room revenue, ADR, share and cancel rate) · booking window, length of stay and day of week · tentative bookings. Not yet: group block pickup, promotions, lost business and denials, forecast accuracy, budget (need new capture), channel commission and net revenue.
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.
