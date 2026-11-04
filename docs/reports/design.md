@@ -50,6 +50,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Rooms, housekeeping and maintenance built:** open and overdue work orders · maintenance response and resolution time · repeat faults · out-of-order rooms and lost sellable nights · rooms not ready for arrival · housekeeping progress, turnaround and inspections (failed inspections and re-cleans). Not yet: room-status history and discrepancies over time, linen/amenity/minibar use, preventive maintenance due, downtime revenue impact, asset lifecycle cost, vendor performance, utilities (need new capture).
 
+**Guest experience and risk built:** guest requests and response time · service recovery and compensation · repeat guests · guest preferences and notes · messaging delivery (email) · safety and security trends (plus the existing complaints, damage and lost-and-found registers). Not yet: guest feedback and satisfaction (no survey captured), structured preferences, WhatsApp delivery and reply times, request response targets (need new capture).
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.
