@@ -56,6 +56,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Audit and staff built (two more groups):** user activity log · reservation audit · folio and payment audit · discount, refund and override approvals · sensitive-data access and export · scheduled-report delivery history · cashier variance by employee · approval and review queue. Not yet: room-rate/room-move/room-status audit as their own reports (rate changes and moves have reports; room-status history is not recorded), guest ID compliance and government reporting status, tax-invoice sequence exceptions, integration failures, missing or invalid data, shift handover, task volume and aging, SLA performance, workload and staffing forecast, training and quality (need new capture).
 
+**Portfolio built (group “All properties”, shown to people who can see reports at two or more properties):** portfolio daily flash · property comparison with consolidated occupancy, ADR and RevPAR · cash and receivables · revenue mix · cross-property channel and company performance · operational risk overview. Each property is included only where the person holds the report permission; mixed currencies are shown per property and never added. Not yet: consolidated forecast, budget variance and the owner/investor pack (need budgets recorded).
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.

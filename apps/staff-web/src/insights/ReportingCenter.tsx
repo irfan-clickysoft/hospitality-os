@@ -10,7 +10,7 @@ import { DeliveryView } from './Delivery.js';
 import { ReportView } from './ReportView.js';
 import type { CatalogItem, Planned } from './types.js';
 
-const CATS = ['management', 'frontdesk', 'rooms', 'finance', 'sales', 'risk', 'fnb', 'inventory', 'staff', 'audit'] as const;
+const CATS = ['management', 'frontdesk', 'rooms', 'finance', 'sales', 'risk', 'fnb', 'inventory', 'staff', 'audit', 'portfolio'] as const;
 const read = (k: string): string[] => { try { return JSON.parse(localStorage.getItem(k) ?? '[]') as string[]; } catch { return []; } };
 const write = (k: string, v: string[]) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* not saved */ } };
 
@@ -20,7 +20,7 @@ export function ReportingCenter() {
   const pid = property!.id; const persona = personaOf(can);
   const [items, setItems] = useState<CatalogItem[] | null>(null); const [planned, setPlanned] = useState<Planned[]>([]); const [problem, setProblem] = useState<{ code: string; detail?: string } | null>(null);
   const [q, setQ] = useState(''); const [fav, setFav] = useState<string[]>(() => read(`hos.ins.fav.${pid}`)); const [recent, setRecent] = useState<string[]>(() => read(`hos.ins.recent.${pid}`));
-  useEffect(() => { let dead = false; api<{ items: CatalogItem[]; planned: Planned[] }>('GET', `/v1/properties/${pid}/insights`).then((r) => { if (!dead) { setItems(r.items); setPlanned(r.planned); } }).catch((e) => { if (!dead) setProblem(problemOf(e)); }); return () => { dead = true; }; }, [pid]);
+  useEffect(() => { let dead = false; Promise.all([api<{ items: CatalogItem[]; planned: Planned[] }>('GET', `/v1/properties/${pid}/insights`), api<{ items: CatalogItem[] }>('GET', '/v1/insights/portfolio').catch(() => ({ items: [] as CatalogItem[] }))]).then(([r, pf]) => { if (!dead) { setItems([...r.items, ...pf.items]); setPlanned(r.planned); } }).catch((e) => { if (!dead) setProblem(problemOf(e)); }); return () => { dead = true; }; }, [pid]);
   const open = route.query.get('r'); const delivery = route.query.get('d');
   const current = items?.find((x) => x.id === open) ?? null;
   useEffect(() => { if (current) { const next = [current.id, ...recent.filter((x) => x !== current.id)].slice(0, 6); setRecent(next); write(`hos.ins.recent.${pid}`, next); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [current?.id]);
