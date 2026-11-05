@@ -3,7 +3,7 @@ import type { DB } from '@hos/db';
 
 export type Trx = Transaction<DB>;
 export type Persona = 'manager' | 'frontdesk' | 'housekeeping' | 'maintenance' | 'accounts' | 'staff';
-export type Category = 'management' | 'frontdesk' | 'rooms' | 'finance' | 'sales' | 'risk';
+export type Category = 'management' | 'frontdesk' | 'rooms' | 'finance' | 'sales' | 'risk' | 'fnb' | 'inventory';
 /** How the report is meant to be read: a worklist, a trend, a ledger, a history, a case register or a summary. */
 export type Kind = 'operational' | 'analytical' | 'financial' | 'audit' | 'register' | 'executive';
 export type ColType = 'text' | 'int' | 'money' | 'date' | 'datetime' | 'time' | 'pct' | 'badge';

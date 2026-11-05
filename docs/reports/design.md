@@ -52,6 +52,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Guest experience and risk built:** guest requests and response time · service recovery and compensation · repeat guests · guest preferences and notes · messaging delivery (email) · safety and security trends (plus the existing complaints, damage and lost-and-found registers). Not yet: guest feedback and satisfaction (no survey captured), structured preferences, WhatsApp delivery and reply times, request response targets (need new capture).
 
+**Food and beverage and inventory built (two new groups in the Reporting Center):** F&B revenue by outlet or day with average order value · sales by item, size or category · orders and timing (prepare/deliver minutes, open, delayed, cancelled) · recipe cost and food margin (costed through sub-recipes, same rules as the recipe screen) · stock on hand and reorder · stock movement, waste and count variance. Not yet: modifier performance, laundry/transfer/rent-a-car (not recorded as services), ancillary revenue per stay and upsell conversion, purchase orders, goods received, expiry and batches, vendor performance, stock transfers, theoretical vs actual consumption, F&B departmental P&L.
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.
