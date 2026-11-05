@@ -82,7 +82,7 @@ cd ~/hospitality-os          # the folder you cloned; every command below must b
 git pull                     # get the latest
 bash scripts/start-local.sh  # first run takes a few minutes; Ctrl-C stops it; run it again any time to start (your data is kept)
 ```
-Needs Node 22+ and Docker Desktop (open and running). If another PostgreSQL already uses port 5432 on your computer, the script moves the project's own database to 5433 (or the next free port) by itself and records it in `.env`; you do not need to edit `docker-compose.yml`. Do not run `pnpm` commands from your home folder: pnpm must be run inside the project (it also picks the right pnpm version from the project, `pnpm@10`). The manual steps are below if you prefer them.
+Needs Node 22+ and Docker Desktop (open and running). If another program already uses port 5432 (a PostgreSQL), 3000 or 3001 (another project's dev server), the script takes the next free ports by itself and records them in `.env`; it prints the address to open, which is not always `localhost:3001`. You never need to edit `docker-compose.yml`. Do not run `pnpm` commands from your home folder: pnpm must be run inside the project (it also picks the right pnpm version from the project, `pnpm@10`). The manual steps are below if you prefer them.
 
 Requires Node 22+, pnpm 10 (`corepack enable`), and Docker Desktop (or a local PostgreSQL 16). `psql` need not be installed: the scripts fall back to the one inside the database container.
 ```bash
