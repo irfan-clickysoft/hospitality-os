@@ -26,6 +26,7 @@ check('an agreed price for the whole stay is shown exactly', (await price()) ===
 const stamp = Date.now().toString().slice(-6);
 await sheet.getByLabel('Full name').first().fill(`Negotiator ${stamp}`); await sheet.getByLabel('Phone').fill(`0301${stamp}9`);
 const id = sheet.getByLabel('ID number').first(); await id.fill(`35202${stamp}1`.slice(0, 13).padEnd(13, '1')); await id.press('Tab');
+await sheet.getByLabel(/Reason for discount/).selectOption('NEGOTIATED');
 await sheet.getByRole('button', { name: /check in|book|walk/i }).last().click();
 await sheet.getByText(/BLVD-/).first().waitFor({ timeout: 20000 }); check('the walk-in is booked', true);
 const s = await session('hira@sunset.local'); const pid = (await s.get('/v1/me/properties')).items.find((p) => p.name.endsWith('Boulevard')).id;

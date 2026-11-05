@@ -10,7 +10,7 @@ import { DeliveryView } from './Delivery.js';
 import { ReportView } from './ReportView.js';
 import type { CatalogItem, Planned } from './types.js';
 
-const CATS = ['management', 'frontdesk', 'rooms', 'finance', 'sales', 'risk'] as const;
+const CATS = ['management', 'frontdesk', 'rooms', 'finance', 'sales', 'risk', 'fnb', 'inventory'] as const;
 const read = (k: string): string[] => { try { return JSON.parse(localStorage.getItem(k) ?? '[]') as string[]; } catch { return []; } };
 const write = (k: string, v: string[]) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* not saved */ } };
 

@@ -1,3 +1,5 @@
+import { CANCEL_CODES, INITIATORS } from './cancel-reasons.js';
+import { DiscountReason } from '../discounts/schemas.js';
 import { z } from 'zod';
 import { businessDate, uuid } from '../property-setup/schemas.js';
 import { CreateGuest } from '../guests/schemas.js';
@@ -13,6 +15,8 @@ export const CreateReservation = z.object({
   guest: CreateGuest.optional(),
   lines: z.array(z.object({ quoteToken: z.string().min(40).max(4000) })).min(1).max(10),
   source: z.enum(SOURCES),
+  /** Why a discount on any of the rooms was given. Required when a room carries a discount (an approved discount brings its own). */
+  discountReason: DiscountReason.optional(),
   marketSegment: z.string().max(40).nullish(), externalRef: z.string().max(80).nullish(), companyId: uuid.nullish(),
   /** Hold the rooms as an OPTION (no payment yet) for half-hour steps, whole days, or until the end of a date — never past the arrival day. Omit to confirm now. */
   hold: z.object({
@@ -32,8 +36,10 @@ export const ModifyLine = z.object({
   /** Keep the originally quoted nightly prices (e.g. a complimentary upgrade). Needs the rate-override permission. */
   keepRate: z.boolean().default(false), reason: z.string().min(3).max(300), version: z.number().int(),
 });
-export const CancelReservation = z.object({ reason: z.string().min(3).max(300), waiveFee: z.boolean().default(false), lineIds: z.array(uuid).max(10).optional() });
-export const NoShow = z.object({ reason: z.string().min(3).max(300).default('Guest did not arrive'), waiveFee: z.boolean().default(false) });
+/** `code` is the standard reason and `initiator` who started it (worked out from the reason when not given); the reason text is the note. */
+const initiator = z.enum(INITIATORS);
+export const CancelReservation = z.object({ reason: z.string().min(3).max(300), code: z.enum(CANCEL_CODES).optional(), initiator: initiator.optional(), waiveFee: z.boolean().default(false), lineIds: z.array(uuid).max(10).optional() });
+export const NoShow = z.object({ reason: z.string().min(3).max(300).default('Guest did not arrive'), code: z.enum(CANCEL_CODES).optional(), initiator: initiator.optional(), waiveFee: z.boolean().default(false) });
 export const Reinstate = z.object({ reason: z.string().min(3).max(300) });
 export const Confirm = z.object({ reason: z.string().max(300).nullish() });
 export const AssignRoom = z.object({ roomId: uuid });

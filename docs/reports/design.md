@@ -40,7 +40,23 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Built with timing fees (migration 0052):** early check-in and late checkout **fees and waivers**: property steps (share of a night by minutes off the standard time), a decision recorded before check-in/out (charged to the bill, a different amount, or waived with a reason), shown in report D.
 
-**Next (needs new capture):** cancellation initiator and reason codes, discount reasons and approvals, room-status history.
+**Built with cancellation reasons (migration 0053):** a standard reason and who started it (guest, property, booking channel, company, system) on every cancelled or no-show room line; the cancellations report shows them and can be grouped by reason, initiator or source.
+
+**Finance ledgers built:** payment receipts and methods (by receipt, method, deposit/payment/refund or cashier) · refunds, voids and adjustments · daily revenue summary (posted revenue by charge type or day, before tax) · taxes and service charges · financial exceptions (bills that do not add up, closed with balance, cash outside a shift, receipts waiting to be verified, cash differences). Deposits and advances are the *Deposits* view of the payments report.
+
+**More finance built:** guest ledger (in-house balances) · receivables ledger and ageing (by company or by billing) · guest bill detail (every posting).
+
+**Sales built:** booking source and channel · market segment · corporate-account production · room type · rate plan (each with nights, room revenue, ADR, share and cancel rate) · booking window, length of stay and day of week · tentative bookings. Not yet: group block pickup, promotions, lost business and denials, forecast accuracy, budget (need new capture), channel commission and net revenue.
+
+**Rooms, housekeeping and maintenance built:** open and overdue work orders · maintenance response and resolution time · repeat faults · out-of-order rooms and lost sellable nights · rooms not ready for arrival · housekeeping progress, turnaround and inspections (failed inspections and re-cleans). Not yet: room-status history and discrepancies over time, linen/amenity/minibar use, preventive maintenance due, downtime revenue impact, asset lifecycle cost, vendor performance, utilities (need new capture).
+
+**Guest experience and risk built:** guest requests and response time · service recovery and compensation · repeat guests · guest preferences and notes · messaging delivery (email) · safety and security trends (plus the existing complaints, damage and lost-and-found registers). Not yet: guest feedback and satisfaction (no survey captured), structured preferences, WhatsApp delivery and reply times, request response targets (need new capture).
+
+**Food and beverage and inventory built (two new groups in the Reporting Center):** F&B revenue by outlet or day with average order value · sales by item, size or category · orders and timing (prepare/deliver minutes, open, delayed, cancelled) · recipe cost and food margin (costed through sub-recipes, same rules as the recipe screen) · stock on hand and reorder · stock movement, waste and count variance. Not yet: modifier performance, laundry/transfer/rent-a-car (not recorded as services), ancillary revenue per stay and upsell conversion, purchase orders, goods received, expiry and batches, vendor performance, stock transfers, theoretical vs actual consumption, F&B departmental P&L.
+
+**Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
+
+**Next (needs new capture):** room-status history, channel commission.
 
 **Later:** booking pace and pickup, forecast and forecast accuracy (need nightly snapshots), channel/segment/corporate production, group pickup, payment-gateway and OTA reconciliation, commission payable, housekeeping productivity and inspection, maintenance aging/downtime, F&B and inventory reports, staff productivity, access/export audit reports, multi-property portfolio views, scheduled delivery, custom builder.
 
@@ -67,14 +83,14 @@ Each entry: grain · source · default basis/range · main exclusions · drill-d
 
 * **A Check-in** — one row per room line checked in; `reservation_room`, history, stay guests, bill. Basis: business date of check-in (or arrival). Expected arrivals are a separate report. Early flag = arrival date and local time before the property's check-in time. Drill: booking. *Gap: early-check-in fee/waiver not recorded.*
 * **B Room move** — one row per `ROOM_MOVED` event on a checked-in line; old/new room and type, reason, actor. Pre-arrival changes are a separate report. A move keeps rates, so no charge. *Gap: guest- vs property-initiated, approvals, housekeeping/maintenance impact, related complaint.*
-* **C Cancellations and no-shows** — one row per lost room line; separate or combined; expected revenue, deposit, fee and whether waived, lost revenue. A no-show is whatever staff confirmed, never inferred from the clock. *Gap: initiator, commission, standard reason codes.*
+* **C Cancellations and no-shows** — one row per lost room line; separate or combined; expected revenue, deposit, fee and whether waived, lost revenue. A no-show is whatever staff confirmed, never inferred from the clock. Reason and initiator are chosen when cancelling or marking a no-show (the night audit and expired holds record the system). *Gap: commission; bookings cancelled before this was kept show “Not recorded”.*
 * **D Early check-in / late checkout** — timing against the property's standard times, the guest's request, and the fee decision: suggested, charged, waived, reason, who decided. *Gap: approved time, next-arrival impact.* Fees follow the property's steps (Administration → Properties); with no steps set nothing is suggested and the desk is never asked. Same-day walk-ins are never asked. A decision is immutable; a wrong charge is reversed on the bill.
 * **E Damage charge** — one row per damage case; suspected and verified kept apart (suspected is never charged); estimate, actual, approved, waived and charged amounts; guest told and their response; who approved and charged; the bill it landed on. Pictures and internal notes stay in the case (permission-gated). *Gap: refunds and payments per charge are handled on the bill.*
 * **F Room rate change** — one row per booking modification with before/after dates and stay totals, reason, actor, revenue impact; the history is the existing immutable booking history. *Gap: per-night before/after, tax impact, approvals, source type.*
 * **G Room status** — snapshot with occupancy, housekeeping and maintenance as three columns and an explicit discrepancy column. *Gap: status history timeline.*
 * **H Collection and cashier** — one row per shift; cash and non-cash apart; blind-close respected. *Gap: paid-outs, gateway/OTA batches, sign-off steps.*
 * **I Due and outstanding** — open bills split in-house / departed / company; aged from departure (or bill opening). A card pre-authorization is not a payment. *Gap: disputes, promises, write-offs, credit limits, collection owner.*
-* **J Discounts and complimentary** — booking discounts, zero-charge lines (complimentary) and bill discounts, separate types. *Gap: reason, requested/approved-by, category.*
+* **J Discounts and complimentary** — booking discounts, zero-charge lines (complimentary) and bill discounts, separate types. *Reason, given-by, approved-by and category are now captured.*
 * **K Complaints and incidents** — one row per case: type (complaint, service failure, safety, security, medical, internal), severity, owner, SLA target and overdue flag, resolution and time to resolve, root/corrective/preventive action, compensation. Restricted cases (safety, security, medical, confidential) are filtered out for anyone without `case.restricted`, and the text of a restricted report is not copied into its history.
 * **L Lost and found** — one row per item with status, storage, age and retention flag. Photos and handover signatures live on the item.
 

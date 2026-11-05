@@ -5,6 +5,12 @@ import { TenantDb } from '../db/tenant-db.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { toCsv } from '../reports/csv.js';
 import * as FD from './frontdesk.js';
+import * as L2 from './ledger2.js';
+import * as LG from './ledger.js';
+import * as SL from './sales.js';
+import * as UP from './upkeep.js';
+import * as GX from './guests.js';
+import * as FB from './fnb.js';
 import * as FIN from './finance.js';
 import * as RM from './rooms.js';
 import * as MG from './management.js';
@@ -15,7 +21,7 @@ import type { Col, Def, Envelope, Row } from './types.js';
 import { addDays, dec, ymd } from './util.js';
 
 const fail = (status: number, code: string, message: string) => new HttpException({ code, message }, status);
-export const REGISTRY: Def[] = [MG.flash, FD.expectedArrivals, FD.checkins, FD.roomMoves, FD.roomReassignments, FD.cancellations, FD.earlyLate, FD.rateChanges, RM.roomStatus, FIN.cashier, FIN.outstanding, FIN.discounts, RM.lostFound, CS.damageCharges, CS.complaints, MG.nightAudit, MG.futureBookings, PC.bookingPace, PC.forecast, MG.historical];
+export const REGISTRY: Def[] = [MG.flash, FD.expectedArrivals, FD.checkins, FD.roomMoves, FD.roomReassignments, FD.cancellations, FD.earlyLate, FD.rateChanges, RM.roomStatus, FIN.cashier, FIN.outstanding, FIN.discounts, RM.lostFound, CS.damageCharges, CS.complaints, MG.nightAudit, MG.futureBookings, PC.bookingPace, PC.forecast, MG.historical, LG.payments, LG.refunds, LG.revenueSummary, LG.taxes, LG.exceptions, L2.receivables, L2.guestLedger, L2.folioDetail, SL.channel, SL.segment, SL.corporate, SL.roomType, SL.ratePlan, SL.behaviour, SL.tentative, UP.openOrders, UP.orderTimes, UP.repeatFaults, UP.downtime, UP.notReady, UP.hkProgress, GX.requests, GX.recovery, GX.repeat, GX.preferences, GX.messaging, GX.safety, FB.sales, FB.items, FB.orders, FB.margin, FB.stock, FB.movements];
 /** Reports in the plan that need new information to be captured first. Listed so nobody wonders where they are. */
 export const PLANNED: ReadonlyArray<{ id: string; name: string; category: string; purpose: string; needs: string }> = [];
 const MAX_DAYS = 400;

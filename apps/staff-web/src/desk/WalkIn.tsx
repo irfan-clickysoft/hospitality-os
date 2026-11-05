@@ -10,6 +10,7 @@ import { ErrorLine, Sheet } from '../ui/kit.js';
 import { useStepUp } from '../lib/stepup.js';
 import { ApprovalBox } from './ComplianceBits.js';
 import { PurposeField } from './RegExtras.js';
+import { ApprovalAsk, DiscountReasonField, noWhy, whyBody, type Approval, type DiscountWhy } from './DiscountApproval.js';
 import { NegotiateBox, negotiationParams, noNegotiation, type Negotiation } from './Negotiate.js';
 import { blankOccupant, OccupantsForm, occupantBody, type Occupant } from './CheckInSheet.js';
 import type { Matrix } from '../lib/occupants.js';
@@ -27,7 +28,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
   const matrix = useLive<Matrix>(`${base}/registration/requirements`, 600_000).data;
   const key = useMemo(newKey, []);
   const [typeId, setTypeId] = useState(''); const [nights, setNights] = useState(1); const [adults, setAdults] = useState(2); const [children, setChildren] = useState(0); const [extraBeds, setExtraBeds] = useState(0); const [foreign, setForeign] = useState(false);
-  const [planId, setPlanId] = useState(''); const [neg, setNeg] = useState<Negotiation>(noNegotiation);
+  const [planId, setPlanId] = useState(''); const [neg, setNeg] = useState<Negotiation>(noNegotiation); const [why, setWhy] = useState<DiscountWhy>(noWhy); const [approval, setApproval] = useState<Approval | null>(null);
   const [purpose, setPurpose] = useState('');
   const [name, setName] = useState(''); const [phone, setPhone] = useState(''); const [occ, setOcc] = useState<Occupant[]>([blankOccupant('', false)]);
   const [options, setOptions] = useState<PlanOption[]>([]); const [done, setDone] = useState<{ id: string; confirmationNo: string } | null>(null);
@@ -53,18 +54,20 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
   const clearKnown = () => { setKnown(null); };
 
   const negQ = JSON.stringify(negotiationParams(neg, businessDate));
-  const quoteBody = () => ({ arrival: businessDate, departure: addDays(businessDate, nights), adults, children, extraBeds, channel: 'WALKIN', residency: foreign ? 'NON_RESIDENT' : 'RESIDENT', roomTypeId: typeId, ...(JSON.parse(negQ) as object) });
+  const quoteCore = () => ({ arrival: businessDate, departure: addDays(businessDate, nights), adults, children, extraBeds, channel: 'WALKIN', residency: foreign ? 'NON_RESIDENT' : 'RESIDENT', roomTypeId: typeId, ...(JSON.parse(negQ) as object) });
+  const quoteBody = () => ({ ...quoteCore(), ...(approval?.status === 'APPROVED' ? { approvalId: approval.id } : {}) });
   useEffect(() => {
     if (!typeId) return;
     let dead = false;
     const h = setTimeout(() => {
       api<{ options: PlanOption[] }>('POST', `${base}/quotes`, quoteBody())
-        .then((r) => { if (dead) return; setOptions(r.options); setPlanId((cur) => (r.options.some((x) => x.plan.id === cur) ? cur : r.options.find((x) => x.bookable)?.plan.id ?? r.options[0]?.plan.id ?? '')); }).catch(() => !dead && setOptions([]));
+        .then((r) => { if (dead) return; setOptions(r.options); setPlanId((cur) => (r.options.some((x) => x.plan.id === cur) ? cur : r.options.find((x) => x.bookable)?.plan.id ?? r.options[0]?.plan.id ?? '')); }).catch(() => { if (!dead) { setOptions([]); setApproval((a) => (a?.status === 'APPROVED' ? null : a)); } });
     }, neg.kind === 'none' ? 0 : 400);
     return () => { dead = true; clearTimeout(h); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typeId, nights, adults, children, extraBeds, foreign, base, businessDate, negQ]);
+  }, [typeId, nights, adults, children, extraBeds, foreign, base, businessDate, negQ, approval?.status === 'APPROVED' ? approval.id : '']);
   const chosen = options.find((x) => x.plan.id === planId) ?? null;
+  const discountOn = !!chosen && Number(chosen.discount?.amount ?? 0) > 0;
 
   const errors = occ.map((o, i) => checkOccupant(o, i, foreign, businessDate));
   const submit = async (approval?: string) => {
@@ -78,7 +81,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
     const call = async () => {
       let quoteToken: string | undefined;
       if (negQ !== '{}') { const fresh = await api<{ options: PlanOption[] }>('POST', `${base}/quotes`, quoteBody()); const o = fresh.options.find((x) => x.plan.id === planId) ?? fresh.options[0]; if (!o?.quoteToken) throw new ApiError(403, 'APPROVAL_REQUIRED', t('ng.needsApproval')); quoteToken = o.quoteToken; }
-      return api<{ id: string; confirmationNo: string }>('POST', `${base}/front-desk/walk-ins`, { ...body, ...(quoteToken ? { quoteToken } : {}) }, { 'idempotency-key': key });
+      return api<{ id: string; confirmationNo: string }>('POST', `${base}/front-desk/walk-ins`, { ...body, ...(quoteToken ? { quoteToken } : {}), ...(discountOn ? { discountReason: whyBody(why) } : {}) }, { 'idempotency-key': key });
     };
     const r = await run(() => (approval ? withStepUp(call) : call()));
     if (r) setDone(r);
@@ -101,7 +104,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
           </div>
         )}
         <label>{t('wi.type')}<select value={typeId} onChange={(e) => setTypeId(e.target.value)}>{types.map((x) => <option key={x.id} value={x.id} disabled={free(x.id) <= 0}>{x.name} ({t('bk.left', { n: free(x.id) })})</option>)}</select></label>
-        <label>{t('bk.departure')}<input type="date" value={addDays(businessDate, nights)} min={addDays(businessDate, 1)} max={addDays(businessDate, 30)} onChange={(e) => { if (e.target.value) setNights(Math.min(30, Math.max(1, nightsBetween(businessDate, e.target.value)))); }} dir="ltr" /></label>
+        <div className="grid2"><label>{t('bk.arrival')}<input type="date" value={businessDate} readOnly disabled dir="ltr" /></label><label>{t('bk.departure')}<input type="date" value={addDays(businessDate, nights)} min={addDays(businessDate, 1)} max={addDays(businessDate, 30)} onChange={(e) => { if (e.target.value) setNights(Math.min(30, Math.max(1, nightsBetween(businessDate, e.target.value)))); }} dir="ltr" /></label></div>
         <div className="grid2">{stepper(t('bk.nights'), nights, setNights, 1, 30)}{stepper(t('d.adults'), adults, setAdults, 1, 6)}{stepper(t('d.children'), children, setChildren, 0, 6)}{stepper(t('wi.mattress'), extraBeds, setExtraBeds, 0, 3)}</div>
         <p className="muted small">{t('wi.mattressHint')}</p>
         <label className="check"><input type="checkbox" checked={foreign} onChange={(e) => setForeign(e.target.checked)} /> {t('bk.foreign')}</label>
@@ -109,7 +112,8 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
         <NegotiateBox value={neg} onChange={setNeg} />
         <div className="card inner stack"><div className="row between"><span>{t('wi.price')}{chosen ? ` · ${chosen.plan.name}` : ''}</span><strong className="big">{chosen ? money(chosen.totalExTax) : '—'}</strong></div>
           {chosen && chosen.discount && Number(chosen.discount.amount) > 0 && <p className="small">{t('ng.was')}: <s dir="ltr">{money(chosen.subtotal)}</s> · {t('ng.saves', { amt: money({ amount: chosen.discount.amount, currency: chosen.totalExTax.currency }) })}</p>}
-          {chosen && !chosen.bookable && <p className="warnbox small" role="alert">{t('ng.needsApproval')}</p>}</div>
+          {chosen && !chosen.bookable && discountOn && <ApprovalAsk quote={quoteCore()} roomTypeId={typeId} planId={chosen.plan.id} rooms={1} why={why} approval={approval} onChange={setApproval} />}</div>
+        {discountOn && <DiscountReasonField value={why} onChange={setWhy} />}
         <p className="muted small">{t('bk.exTaxNote')}</p>
         {!known && <>
           <label>{t('ci.name')}<input value={name} onChange={(e) => setName(e.target.value)} autoFocus aria-invalid={attempted && name.trim().length < 2 ? true : undefined} /></label>
@@ -122,7 +126,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
         {attempted && hasErrors(errors) && <Banner level="ACTION" title={t('ci.e.fix')} />}
         <ErrorLine code={problem?.code} detail={problem?.detail} />
         <ApprovalBox problem={problem} busy={busy} onApprove={(r) => void submit(r)} />
-        <div className="actions"><button className="primary" disabled={busy || !chosen || !chosen.bookable || known?.doNotRent} onClick={() => void submit()}>{t('wi.go')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>
+        <div className="actions"><button className="primary" disabled={busy || !chosen || !chosen.bookable || (discountOn && !why.code) || known?.doNotRent} onClick={() => void submit()}>{t('wi.go')}</button><button onClick={onClose}>{t('common.cancel')}</button></div>
       </>)}
     </Sheet>
   );
