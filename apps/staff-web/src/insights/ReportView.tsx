@@ -15,7 +15,7 @@ const loadViews = (pid: string, id: string): Saved[] => { try { return JSON.pars
 /** One report: purpose, scope and date basis up front, KPIs with their definitions, an optional chart, the table, and the ways out (export, print, share, saved views). */
 export function ReportView({ item }: { item: CatalogItem }) {
   const { t, locale } = useT(); const { property, can } = useAuth(); const route = useRoute(); const setQuery = useSetQuery();
-  const pid = property!.id; const bd = property!.businessDate;
+  const pid = property!.id; const bd = property!.businessDate; const root = item.portfolio ? '/v1/insights/portfolio' : `/v1/properties/${pid}/insights`;
   const qp = route.query; const basis = qp.get('basis') ?? item.basis[0]!.id;
   const quick = useMemo(() => ({ today: [bd, bd], mtd: [`${bd.slice(0, 8)}01`, bd], last7: [addDays(bd, -6), bd], last30: [addDays(bd, -29), bd], next7: [bd, addDays(bd, 6)], next30: [bd, addDays(bd, 29)], next90: [bd, addDays(bd, 89)] } as Record<string, [string, string]>), [bd]);
   const [data, setData] = useState<Envelope | null>(null); const [problem, setProblem] = useState<{ code: string; detail?: string } | null>(null); const [loading, setLoading] = useState(true);
@@ -23,12 +23,12 @@ export function ReportView({ item }: { item: CatalogItem }) {
   const search = useMemo(() => { const p = new URLSearchParams(); for (const k of ['basis', 'from', 'to', 'view', 'group', 'compare']) { const v = qp.get(k); if (v) p.set(k, v); } return p.toString(); }, [qp]);
   useEffect(() => {
     let dead = false; setLoading(true); setProblem(null);
-    api<Envelope>('GET', `/v1/properties/${pid}/insights/${item.id}${search ? `?${search}` : ''}`).then((r) => { if (!dead) { setData(r); setLoading(false); } }).catch((e) => { if (!dead) { setProblem(problemOf(e)); setData(null); setLoading(false); } });
+    api<Envelope>('GET', `${root}/${item.id}${search ? `?${search}` : ''}`).then((r) => { if (!dead) { setData(r); setLoading(false); } }).catch((e) => { if (!dead) { setProblem(problemOf(e)); setData(null); setLoading(false); } });
     return () => { dead = true; };
   }, [pid, item.id, search]);
   const m = data?.meta; const from = m?.from ?? ''; const to = m?.to ?? '';
   const cur = m?.currency ?? 'PKR';
-  const csvHref = `/v1/properties/${pid}/insights/${item.id}?${new URLSearchParams([...new URLSearchParams(search).entries(), ['format', 'csv']]).toString()}`;
+  const csvHref = `${root}/${item.id}?${new URLSearchParams([...new URLSearchParams(search).entries(), ['format', 'csv']]).toString()}`;
   const saveView = () => { const name = window.prompt(t('ins.viewName')); if (!name?.trim()) return; const next = [...views.filter((v) => v.name !== name.trim()), { name: name.trim(), q: search }]; setViews(next); try { localStorage.setItem(viewsKey(pid, item.id), JSON.stringify(next)); } catch { /* not saved */ } };
   const applyView = (q: string) => { const p = new URLSearchParams(q); const patch: Record<string, string | null> = { basis: null, from: null, to: null, view: null, group: null }; p.forEach((v, k) => { patch[k] = v; }); setQuery(patch); };
   const asOf = m ? new Date(m.asOf).toLocaleString(locale === 'ur' ? 'ur-PK-u-nu-latn' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: m.timezone }) : '';
@@ -60,7 +60,7 @@ export function ReportView({ item }: { item: CatalogItem }) {
           <button type="button" onClick={() => window.print()}>{t('ins.print')}</button>
           <button type="button" onClick={() => { void navigator.clipboard?.writeText(window.location.href); }}>{t('ins.copyLink')}</button>
           <button type="button" onClick={saveView}>{t('ins.saveView')}</button>
-          {can('report.schedule') && <button type="button" onClick={() => navigate(`/reports?tab=schedules&new=${item.id}`)}>{t('sch.scheduleThis')}</button>}
+          {can('report.schedule') && !item.portfolio && <button type="button" onClick={() => navigate(`/reports?tab=schedules&new=${item.id}`)}>{t('sch.scheduleThis')}</button>}
           {views.length > 0 && <label className="inline">{t('ins.savedViews')}<select value="" onChange={(e) => { const v = views.find((x) => x.name === e.target.value); if (v) applyView(v.q); }}><option value="">—</option>{views.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)}</select></label>}
         </div>
         <p className="muted small">{t('ins.laterPhase')}</p>
