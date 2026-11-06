@@ -51,7 +51,7 @@ describe('audit and staff reports', () => {
     const sess = await ok(call('POST', u(w, 'cashier/sessions'), O, { openingFloat: '1000' }), 201);
     await ok(call('POST', u(w, `reservations/${b.id}/payments`), O, { method: 'CASH', amount: '5000' }, key()), 201);
     await ok(call('POST', u(w, `cashier/sessions/${sess.id}/close`), O, { counted: '5800' }));
-    const q = '?from=2026-11-05&to=2026-11-05';
+    const q = '?from=2026-11-01&to=2027-06-30';      // audit rows are stamped by the database clock, not the test clock
     const ua = await ok(call('GET', u(w, `insights/user-activity${q}`), O)); expect(ua.rows.length).toBeGreaterThan(0); expect(ua.rows[0].what).toBe('aud owner');
     const ul = await ok(call('GET', u(w, `insights/user-activity${q}&group=list`), O)); expect(ul.rows.some((x: any) => x.action === 'Payment record')).toBe(true);
     const ra = await ok(call('GET', u(w, `insights/reservation-audit${q}`), O)); expect(ra.rows.length).toBeGreaterThan(1); expect(ra.rows.every((x: any) => x.conf === ra.rows[0].conf)).toBe(true);

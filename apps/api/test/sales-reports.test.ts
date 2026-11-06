@@ -58,6 +58,6 @@ describe('sales reports', () => {
     const win = await ok(call('GET', u(w, `insights/booking-behaviour${q}&group=window`), O)); expect(win.rows.map((x: any) => x.what)).toContain('4–7 days');
     const los = await ok(call('GET', u(w, `insights/booking-behaviour${q}&group=los`), O)); expect(los.rows[0]).toMatchObject({ what: '2 nights', lines: 1, nights: 2 });
     const dow = await ok(call('GET', u(w, `insights/booking-behaviour${q}&group=dow`), O)); expect(dow.rows.reduce((s: number, x: any) => s + x.nights, 0)).toBe(2);
-    const te = await ok(call('GET', u(w, `insights/tentative-bookings${q}`), O)); expect(te.rows).toHaveLength(1); expect(te.rows[0]).toMatchObject({ arrival: '2026-11-20', nights: 1, state: 'Holding' });
+    const te = await ok(call('GET', u(w, `insights/tentative-bookings${q}`), O)); expect(te.rows).toHaveLength(1); expect(te.rows[0]).toMatchObject({ arrival: '2026-11-20', nights: 1 }); expect(['Holding', 'Past its time']).toContain(te.rows[0].state);   // lateness uses the database clock, which the test cannot set
   });
 });
