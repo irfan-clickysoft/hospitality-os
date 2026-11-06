@@ -60,6 +60,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **More front desk built:** in-house guests and expected departures (due out, overdue) · checkouts, extensions and early departures · walk-ins · unassigned rooms · overbooking risk · missing deposits and guarantees · group rooming lists · guest identification compliance. Not yet: government guest-reporting status and lost business and denials (not recorded), group blocks and allotments (not recorded separately).
 
+**Executive, compliance and upkeep additions built:** property scorecard (month and year to date beside last month and last year) · tax-invoice sequence exceptions · missing or invalid data · quotation pipeline · preventive maintenance due · maintenance vendor performance. Not yet: budget, forecast accuracy, owner/investor pack (need budgets and saved forecasts), integration failures list, asset history and lifecycle cost, utilities, linen and minibar use, training and quality, shift handover (need new capture).
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.
