@@ -58,6 +58,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Portfolio built (group “All properties”, shown to people who can see reports at two or more properties):** portfolio daily flash · property comparison with consolidated occupancy, ADR and RevPAR · cash and receivables · revenue mix · cross-property channel and company performance · operational risk overview. Each property is included only where the person holds the report permission; mixed currencies are shown per property and never added. Not yet: consolidated forecast, budget variance and the owner/investor pack (need budgets recorded).
 
+**More front desk built:** in-house guests and expected departures (due out, overdue) · checkouts, extensions and early departures · walk-ins · unassigned rooms · overbooking risk · missing deposits and guarantees · group rooming lists · guest identification compliance. Not yet: government guest-reporting status and lost business and denials (not recorded), group blocks and allotments (not recorded separately).
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.
