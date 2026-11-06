@@ -1,6 +1,7 @@
 import { type CanActivate, type ExecutionContext, ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { SENSITIVE_PERMISSIONS } from '@hos/auth';
+import { CLOCK, type ClockLike } from '../common/clock.js';
 import { loadIdentityConfig } from '../identity/identity.config.js';
 import { safeEqual } from '../identity/tokens.js';
 import { tryCurrentTenant } from '../tenancy/tenant-context.js';
@@ -16,7 +17,7 @@ const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
 @Injectable()
 export class PermissionGuard implements CanActivate {
   private readonly cfg = loadIdentityConfig();
-  constructor(@Inject(Reflector) private readonly reflector: Reflector, @Inject(AuthorizationService) private readonly authz: AuthorizationService) {}
+  constructor(@Inject(Reflector) private readonly reflector: Reflector, @Inject(AuthorizationService) private readonly authz: AuthorizationService, @Inject(CLOCK) private readonly clock: ClockLike) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest();
@@ -45,7 +46,7 @@ export class PermissionGuard implements CanActivate {
     if (!meta) return true; // authenticated-only route
 
     if (SENSITIVE_PERMISSIONS.has(meta.permission)) {
-      const fresh = tenant.mfaVerifiedAt && Date.now() - tenant.mfaVerifiedAt.getTime() <= this.cfg.stepUpMinutes * 60_000;
+      const fresh = tenant.mfaVerifiedAt && this.clock.now() - tenant.mfaVerifiedAt.getTime() <= this.cfg.stepUpMinutes * 60_000;
       if (!fresh) throw new ForbiddenException({ code: 'MFA_REQUIRED', message: 'Verify your second factor (step-up) to perform this action' });
     }
 
