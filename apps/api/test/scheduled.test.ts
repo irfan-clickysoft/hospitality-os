@@ -121,8 +121,8 @@ describe('scheduled report delivery', () => {
   });
 
   it('pauses when its owner can no longer open the report, and never carries restricted cases', async () => {
-    // cases are stamped by the database clock (today); the period ends on the day before the business date
-    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10); const w = await sunset(); at(tomorrow, '10:00'); await setBd(w, tomorrow); const mgr = await staff(w, 'group_gm'); const acct = await staff(w, 'accountant');
+    // cases are stamped by the database clock (today); the period ends on the day before the business date; "tomorrow" is the hotel's (Karachi) tomorrow
+    const tomorrow = new Date(Date.now() + 5 * 3_600_000 + 86_400_000).toISOString().slice(0, 10); const w = await sunset(); at(tomorrow, '10:00'); await setBd(w, tomorrow); const mgr = await staff(w, 'group_gm'); const acct = await staff(w, 'accountant');
     await ok(call('POST', u(w, 'cases'), O, { type: 'SECURITY', severity: 'HIGH', description: 'Restricted: side gate left open' }), 201);
     await ok(call('POST', u(w, 'cases'), O, { type: 'GUEST_COMPLAINT', severity: 'LOW', description: 'Ordinary complaint about towels' }), 201);
     const s = await ok(call('POST', u(w, 'insights/schedules'), mgr.h, sched({ reportId: 'complaints-incidents', name: 'Cases', period: 'LAST_30', recipientIds: [mgr.id] })), 201);

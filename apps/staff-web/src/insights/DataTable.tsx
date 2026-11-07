@@ -7,7 +7,7 @@ import type { Cell, Col, Row } from './types.js';
 const minor = (v: string): string => { const n = BigInt(v); const neg = n < 0n; const a = neg ? -n : n; return `${neg ? '-' : ''}${a / 100n}.${(a % 100n).toString().padStart(2, '0')}`; };
 export function fmt(col: Col, v: Cell, row: Row | null, currency: string, locale: 'en' | 'ur'): string {
   if (v === null || v === undefined || v === '') return '';
-  if (row?._fmt && (col.key === 'today' || col.key === 'mtd')) return row._fmt === 'money' ? money(String(v), currency) : row._fmt === 'pct' ? `${v}%` : String(v);
+  if (row?._fmt && (col.key === 'today' || col.key === 'mtd' || col.key === 'lm' || col.key === 'y' || col.key === 'ly')) return row._fmt === 'money' ? money(String(v), currency) : row._fmt === 'pct' ? `${v}%` : String(v);
   switch (col.type) {
     case 'money': return money(minor(String(v)), currency);
     case 'pct': return `${v}%`;
