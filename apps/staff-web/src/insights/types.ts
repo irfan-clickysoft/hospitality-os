@@ -1,5 +1,5 @@
 export type ColType = 'text' | 'int' | 'money' | 'date' | 'datetime' | 'time' | 'pct' | 'badge';
-export interface Col { key: string; label: string; type?: ColType; total?: boolean; hidden?: boolean }
+export interface Col { key: string; label: string; type?: ColType; rowFmt?: boolean; total?: boolean; hidden?: boolean }
 export type Cell = string | number | boolean | null;
 export type Row = Record<string, Cell> & { _res?: string | null; _fmt?: string };
 export interface Kpi { key: string; label: string; value: string | number; type?: 'int' | 'money' | 'pct' | 'text'; definition: string; compare?: Array<{ label: string; value: string | number }>; tone?: 'ok' | 'warn' | 'bad' }

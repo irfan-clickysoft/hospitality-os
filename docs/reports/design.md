@@ -62,6 +62,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Executive, compliance and upkeep additions built:** property scorecard (month and year to date beside last month and last year) · tax-invoice sequence exceptions · missing or invalid data · quotation pipeline · preventive maintenance due · maintenance vendor performance. Not yet: budget, forecast accuracy, owner/investor pack (need budgets and saved forecasts), integration failures list, asset history and lifecycle cost, utilities, linen and minibar use, training and quality, shift handover (need new capture).
 
+**Budgets built (migration 0055):** monthly budgets per property (room revenue, food and beverage revenue, occupancy), entered under Reports → Budgets by someone who manages rates (permission rate.manage). New reports: budget versus actual versus forecast (month to date, forecast = actual + on the books), portfolio budget variance, and the owner and investor pack (scorecard + budget + what is owed on one page). Not yet: forecast accuracy (needs saved forecasts), departmental profit, cash flow and capital spending (not recorded).
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.
