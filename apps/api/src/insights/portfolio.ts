@@ -137,5 +137,6 @@ export const risk: PDef = {
   },
 };
 
-export const PORTFOLIO: PDef[] = [flash, comparison, cash, mix, channels, risk];
+import { portfolioVariance } from './budget.js';
+export const PORTFOLIO: PDef[] = [flash, comparison, cash, mix, channels, risk, portfolioVariance];
 export type { Col, Kpi };

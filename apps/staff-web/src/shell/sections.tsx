@@ -49,6 +49,7 @@ export const SECTIONS: Section[] = [
     { id: 'center', label: 'ins.nav', show: any('management.view', 'report.view', 'reservation.view', 'housekeeping.view', 'cashier.review', 'nightaudit.run'), Page: L(() => import('../insights/ReportingCenter.js'), 'ReportingCenter') },
     { id: 'schedules', label: 'sch.nav', show: any('management.view', 'report.view', 'reservation.view', 'housekeeping.view', 'cashier.review', 'report.schedule'), Page: L(() => import('../insights/Scheduled.js'), 'Scheduled') },
     { id: 'overview', label: 'nav.management', show: any('management.view'), Page: L(() => import('../desk/Management.js'), 'Management') },
+    { id: 'budgets', label: 'bg.nav', show: any('rate.manage', 'management.view', 'report.view'), Page: L(() => import('../insights/Budgets.js'), 'Budgets') },
     { id: 'downloads', label: 'nav.downloads', show: any('report.view'), Page: L(() => import('../desk/Reports.js'), 'Reports') },
     { id: 'nightaudit', label: 'nav.audit', show: any('nightaudit.run'), Page: L(() => import('../desk/NightAudit.js'), 'NightAudit') },
     { id: 'trail', label: 'nav.audit2', show: any('audit.view'), Page: L(() => import('../desk/AuditLog.js'), 'AuditLog') },
