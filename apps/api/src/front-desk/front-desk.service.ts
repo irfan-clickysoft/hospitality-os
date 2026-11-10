@@ -398,14 +398,15 @@ export class FrontDeskService {
   }
 
   // ───────────── registration card ─────────────
-  async occupants(propertyId: string, id: string, lineId: string, userId: string, reveal: boolean) {
-    if (reveal) { await this.res.requirePermission(userId, 'frontdesk.view_id', propertyId); await this.res.requireFreshMfa(); }
+  /** `onCard`: the registration card, which the law requires to show the full ID number. People who hold the view-ID right get it without a second-factor prompt each time (the desk prints a card for every guest); each printing is recorded. */
+  async occupants(propertyId: string, id: string, lineId: string, userId: string, reveal: boolean, onCard = false) {
+    if (reveal) { await this.res.requirePermission(userId, 'frontdesk.view_id', propertyId); if (!onCard) await this.res.requireFreshMfa(); }
     return this.tdb.tx(async (trx) => {
       await this.res.prop(trx, propertyId);
       const { lines } = await this.res.load(trx, propertyId, id);
       if (!lines.find((l) => l.id === lineId)) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room line not found on this reservation' });
       const rows = await trx.selectFrom('stay_guest').selectAll().where('reservation_room_id', '=', lineId).where('voided_at', 'is', null).orderBy('is_primary', 'desc').orderBy('created_at').execute();
-      if (reveal) await this.audit.record(trx, { action: 'frontdesk.view_id', resourceType: 'reservation', resourceId: id, propertyId, note: `${rows.length} document(s) revealed` });
+      if (reveal) await this.audit.record(trx, { action: 'frontdesk.view_id', resourceType: 'reservation', resourceId: id, propertyId, note: onCard ? `${rows.length} document(s) printed on the registration card` : `${rows.length} document(s) revealed` });
       return { items: rows.map((r) => ({ id: r.id, fullName: r.full_name, isPrimary: r.is_primary, ageGroup: r.age_group, idType: r.id_type, idNumber: !r.id_type || !r.id_number_sealed ? null : reveal ? this.box.open(r.id_number_sealed, this.aad(lineId)) : maskId(r.id_type as IdType, r.id_last4!),
         nationality: r.nationality, idExpiry: r.id_expiry, guestType: r.guest_type, documents: r.documents ?? {}, foreign: r.foreign_details ?? null, guardianId: r.guardian_id, relationship: r.relationship })), registration: await this.registrationOf(trx, propertyId, id, rows) };
     });
@@ -498,8 +499,10 @@ export class FrontDeskService {
   }
 
   /** Everything the printed registration card shows. The full document numbers need the same permission and fresh second factor as seeing them on screen; the print is recorded either way by that rule. */
-  async registrationCard(propertyId: string, id: string, lineId: string, userId: string, reveal: boolean) {
-    const occ = await this.occupants(propertyId, id, lineId, userId, reveal);
+  /** Full ID numbers are printed for everyone who holds the view-ID right; anyone else who may see the booking gets the card with the numbers masked. */
+  async registrationCard(propertyId: string, id: string, lineId: string, userId: string) {
+    const full = await this.res.requirePermission(userId, 'frontdesk.view_id', propertyId).then(() => true, () => false);
+    const occ = await this.occupants(propertyId, id, lineId, userId, full, true);
     return this.tdb.tx(async (trx) => {
       const tenantId = currentTenant().tenantId;
       const p = await trx.selectFrom('property').select(['name', 'business_date', 'legal_entity_id', 'currency', 'check_in_time', 'check_out_time', 'registration_rules']).where('id', '=', propertyId).executeTakeFirstOrThrow();
@@ -519,7 +522,7 @@ export class FrontDeskService {
         SELECT COALESCE(sum(CASE WHEN py.kind = 'REFUND' THEN -py.amount_minor ELSE py.amount_minor END), 0)::text AS advance
         FROM payment py JOIN folio f ON f.id = py.folio_id WHERE py.tenant_id = ${tenantId} AND f.reservation_id = ${id} AND py.status = 'CAPTURED'`.execute(trx);
       const totalNights = nights.rows.reduce((t, x) => t + x.n, 0) || nightsOf(row.arrival, row.departure, 366).length;
-      return { company: le.name, property: p.name, confirmationNo: row.confirmation_no, room: row.room, roomType: row.type, arrival: row.arrival, departure: row.departure, adults: row.adults, children: row.children, printedOn: p.business_date, idRevealed: reveal,
+      return { company: le.name, property: p.name, confirmationNo: row.confirmation_no, room: row.room, roomType: row.type, arrival: row.arrival, departure: row.departure, adults: row.adults, children: row.children, printedOn: p.business_date, idRevealed: full,
         guestName: row.guest_name, guestPhone: row.guest_phone, purpose: row.purpose, checkInTime: p.check_in_time, checkOutTime: p.check_out_time, checkedInAt: row.checked_in_at,
         rent: { currency: p.currency, nights: totalNights, bands: nights.rows.map((x) => ({ nights: x.n, rateMinor: x.rate })), subtotalMinor: row.subtotal, discountMinor: row.discount, totalMinor: row.total, advanceMinor: paid.rows[0]?.advance ?? '0' },
         rules: row.signature ? (row.signed_rules ?? p.registration_rules ?? DEFAULT_RULES) : (p.registration_rules?.trim() || DEFAULT_RULES),

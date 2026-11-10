@@ -88,7 +88,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
   };
   const stepper = (label: string, value: number, set: (n: number) => void, min: number, max: number) => <label>{label}<input type="number" min={min} max={max} value={value} onChange={(e) => set(Math.min(max, Math.max(min, Math.floor(Number(e.target.value)) || min)))} dir="ltr" /></label>;
   return (
-    <Sheet title={t('wi.title')} onClose={onClose}>
+    <Sheet title={t('wi.title')} onClose={onClose} sticky>
       {done ? (<><p className="ok big" role="status">✓ {done.confirmationNo}</p><div className="actions"><button className="primary" onClick={() => onOpenReservation(done.id)}>{t('bk.open')}</button><button onClick={onClose}>{t('common.close')}</button></div></>) : (<>
         {known ? (
           <div className="card inner stack" role="status">

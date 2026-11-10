@@ -66,6 +66,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Returning guests and bookings:** a returning guest's ID (the newest main-guest document that has not expired) is offered masked at check-in and at the walk-in desk and used with one tap; the server copies the stored number to the new stay and refuses it for a different name or an expired document. New bookings now have the same special-price controls as the walk-in desk (a percentage off, an amount off or an agreed price, for the whole stay or the first night), with a percentage for particular nights as the alternative.
 
+**Shift handover built (migration 0056):** a Handover tab under Reservations where one shift leaves a note and open items for the next, the next person marks it read and ticks items off. New reports (Staff group): shift handover (written, read, open items, days with none), front-desk workload (check-ins, check-outs, bookings, payments, moves, cancellations and charges per person or day, from the audit trail) and SLA performance (complaints and incidents against their response target, maintenance jobs against their due date). Not yet: task volume and aging beyond the approval queue, staffing forecast (needs a roster), training and quality trends.
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.

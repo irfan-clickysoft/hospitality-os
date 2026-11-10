@@ -80,18 +80,19 @@ describe('the gate', () => {
     expect(trail.map((x) => x.action).sort()).toEqual(['gate.in', 'gate.out']);
   });
 
-  it('a printable registration card with signature lines: ID numbers masked unless revealed, which needs the right and a fresh second factor', async () => {
+  it('a printable registration card with signature lines: the full ID number is printed (the law requires it) for anyone who may see IDs, every printing is recorded, and others get it masked', async () => {
     const w = await sunset(); at('2026-11-05', '10:00'); await setBd(w, '2026-11-05');
     const b = await book(w, { arrival: '2026-11-05', departure: '2026-11-07' }); await checkIn(w, b, '101');
-    const url = (reveal = false) => u(w, `reservations/${b.id}/rooms/${b.line}/registration-card${reveal ? '?reveal=true' : ''}`);
-    const r = await call('GET', url(), O);
+    const url = u(w, `reservations/${b.id}/rooms/${b.line}/registration-card`);
+    const r = await call('GET', url, O);
     expect(r.statusCode).toBe(200); expect(r.headers['content-type']).toContain('text/html'); expect(r.headers['content-security-policy']).toContain("default-src 'none'");
     expect(r.body).toContain('GUEST REGISTRATION CARD'); expect(r.body).toContain('Guest signature'); expect(r.body).toContain('Front desk'); expect(r.body).toContain('<strong>101</strong>'); expect(r.body).toContain('CNIC');
-    expect(r.body).not.toContain('35202-1234567'); expect(r.body).toContain('*****-*******-1');
-    await code(call('GET', url(true), O), 403, 'MFA_REQUIRED');
-    const full = await call('GET', url(true), OM); expect(full.statusCode, full.body).toBe(200); expect(full.body).toContain('35202-1234567-1');
-    const hk = await staff(w, 'housekeeper'); await code(call('GET', url(), hk.h), 403, 'PERMISSION_DENIED');
-    const audit = await adminDb.selectFrom('audit_log').select('action').where('action', '=', 'frontdesk.view_id').execute(); expect(audit.length).toBeGreaterThanOrEqual(1);   // revealing is recorded
+    expect(r.body).toContain('35202-1234567-1'); expect(r.body).not.toContain('*****-*******-1');          // full number, with no second-factor prompt per card
+    const desk = await staff(w, 'front_desk_agent'); const full = await call('GET', url, desk.h); expect(full.statusCode, full.body).toBe(200); expect(full.body).toContain('35202-1234567-1');
+    const ro = await staff(w, 'read_only'); const masked = await call('GET', url, ro.h); expect(masked.statusCode).toBe(200); expect(masked.body).not.toContain('35202-1234567-1'); expect(masked.body).toContain('*****-*******-1'); expect(masked.body).toContain('does not hold the right');
+    const hk = await staff(w, 'housekeeper'); await code(call('GET', url, hk.h), 403, 'PERMISSION_DENIED');
+    const audit = await adminDb.selectFrom('audit_log').select(['action', 'note']).where('action', '=', 'frontdesk.view_id').execute(); expect(audit.some((x) => /registration card/.test(x.note ?? ''))).toBe(true);        // each printing is recorded
+    expect(audit.length).toBeGreaterThanOrEqual(2);
   });
 
   it('a visitor staying the night is registered as a guest by someone who may manage guests, once, and the guest can then be found', async () => {
