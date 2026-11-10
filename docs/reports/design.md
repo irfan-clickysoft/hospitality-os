@@ -64,6 +64,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Budgets built (migration 0055):** monthly budgets per property (room revenue, food and beverage revenue, occupancy), entered under Reports → Budgets by someone who manages rates (permission rate.manage). New reports: budget versus actual versus forecast (month to date, forecast = actual + on the books), portfolio budget variance, and the owner and investor pack (scorecard + budget + what is owed on one page). Not yet: forecast accuracy (needs saved forecasts), departmental profit, cash flow and capital spending (not recorded).
 
+**Shift handover built (migration 0056):** a Handover tab under Reservations where one shift leaves a note and open items for the next, the next person marks it read and ticks items off. New reports (Staff group): shift handover (written, read, open items, days with none), front-desk workload (check-ins, check-outs, bookings, payments, moves, cancellations and charges per person or day, from the audit trail) and SLA performance (complaints and incidents against their response target, maintenance jobs against their due date). Not yet: task volume and aging beyond the approval queue, staffing forecast (needs a roster), training and quality trends.
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.
