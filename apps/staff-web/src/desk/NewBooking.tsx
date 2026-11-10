@@ -97,7 +97,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   };
   const name = guest?.fullName ?? nf.fullName;
   return (
-    <Sheet title={t('bk.new')} onClose={onClose}>
+    <Sheet title={t('bk.new')} onClose={onClose} sticky>
       {step === 'search' && (<>
         <div className="grid2"><label>{t('bk.arrival')}<input type="date" value={arrival} min={businessDate} onChange={(e) => setArrival(e.target.value)} dir="ltr" /></label><label>{t('bk.departure')}<input type="date" value={departure} min={addDays(arrival, 1)} onChange={(e) => { if (e.target.value) setNights(Math.min(60, Math.max(1, nightsBetween(arrival, e.target.value)))); }} dir="ltr" /></label></div>
         <div className="grid2"><label>{t('bk.nights')}<input type="number" min={1} max={60} value={nights} onChange={(e) => setNights(Math.max(1, Number(e.target.value) || 1))} dir="ltr" /></label></div>

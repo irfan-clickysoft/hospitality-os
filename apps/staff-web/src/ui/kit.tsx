@@ -20,13 +20,13 @@ export const hkTone = (s: string) => (s === 'DIRTY' ? 'dirty' : s === 'CLEANING'
 export const HkBadge = ({ status }: { status: string }) => { const { t } = useT(); return <Badge tone={hkTone(status)}>{t(`hk.${status}` as Key)}</Badge>; };
 export const PriorityBadge = ({ p }: { p: number }) => { const { t } = useT(); return p <= 2 ? <Badge tone={p === 1 ? 'urgent' : 'high'}>{t(`priority.${p}` as Key)}</Badge> : null; };
 
-/** Bottom sheet (full width on a phone). Escape and the backdrop close it. */
-export function Sheet({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
+/** Bottom sheet (full width on a phone). Escape and the backdrop close it. With `sticky` (forms that take a while to fill in) only the ✕ closes it, so a stray click or key press outside cannot throw the form away. */
+export function Sheet({ title, onClose, children, wide, sticky }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean; sticky?: boolean }) {
   const { t } = useT();
-  useEffect(() => { const f = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', f); return () => window.removeEventListener('keydown', f); }, [onClose]);
+  useEffect(() => { if (sticky) return; const f = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', f); return () => window.removeEventListener('keydown', f); }, [onClose, sticky]);
   return (
     <div className="sheet-wrap" role="dialog" aria-modal="true" aria-label={title}>
-      <button className="sheet-backdrop" aria-label={t('common.close')} onClick={onClose} />
+      {sticky ? <div className="sheet-backdrop" aria-hidden="true" /> : <button className="sheet-backdrop" aria-label={t('common.close')} onClick={onClose} />}
       <div className={`sheet${wide ? ' wide' : ''}`}><div className="sheet-head"><h2>{title}</h2><button className="icon" onClick={onClose} aria-label={t('common.close')}>✕</button></div>{children}</div>
     </div>
   );
