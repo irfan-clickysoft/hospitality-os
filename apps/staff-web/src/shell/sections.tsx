@@ -23,6 +23,7 @@ export const SECTIONS: Section[] = [
     { id: 'proposals', label: 'nav.rateProposals', show: any('company.view'), Page: L(() => import('../desk/RateProposals.js'), 'RateProposals') },
     { id: 'quotes', label: 'nav.quotes', show: any('reservation.view'), Page: L(() => import('../desk/Quotations.js'), 'Quotations') },
     { id: 'discounts', label: 'nav.discounts', show: any('reservation.create'), Page: L(() => import('../desk/DiscountApprovals.js'), 'DiscountApprovals') },
+    { id: 'handover', label: 'ho.nav', show: any('reservation.view'), Page: L(() => import('../desk/Handover.js'), 'Handover') },
     { id: 'requests', label: 'nav.requests', show: any('reservation.view'), Page: L(() => import('../desk/GuestRequests.js'), 'GuestRequests') },
     { id: 'spaces', label: 'nav.spaces', show: any('space.view'), Page: L(() => import('../desk/Spaces.js'), 'Spaces') },
   ] },
