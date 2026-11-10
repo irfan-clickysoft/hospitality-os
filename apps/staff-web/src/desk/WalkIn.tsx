@@ -121,7 +121,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
         </>}
         <h3>{t('ci.guests')}</h3>
         <p className="muted small">{t('wi.idNote')}</p>
-        <OccupantsForm occupants={occ} onChange={setOcc} foreign={foreign} businessDate={businessDate} attempted={attempted} matrix={matrix} />
+        <OccupantsForm guestId={known?.id ?? null} occupants={occ} onChange={setOcc} foreign={foreign} businessDate={businessDate} attempted={attempted} matrix={matrix} />
         <PurposeField value={purpose} onChange={setPurpose} />
         {attempted && hasErrors(errors) && <Banner level="ACTION" title={t('ci.e.fix')} />}
         <ErrorLine code={problem?.code} detail={problem?.detail} />

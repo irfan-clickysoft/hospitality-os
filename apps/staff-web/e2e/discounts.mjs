@@ -21,7 +21,7 @@ await page.getByRole('button', { name: 'New booking' }).click();
 const sheet = page.locator('.sheet').last();
 await sheet.getByLabel(/^Nights/).fill('3');
 await sheet.getByRole('button', { name: 'Check availability' }).click();
-const card = sheet.locator('.card.inner').first();
+const card = sheet.locator('.card.inner:has(tbody)').first();
 await card.waitFor();
 const rows = card.locator('tbody tr');
 check('each of the three nights is listed with its rate', await rows.count() === 3);
@@ -37,12 +37,14 @@ const pay0b = num(await card.locator('tbody tr').nth(0).locator('td').nth(2).inn
 const pay1b = num(await card.locator('tbody tr').nth(1).locator('td').nth(2).innerText());
 check('40% off the first night only', Math.abs(pay0b - rate0 * 0.6) < 1 && pay1b > 0 && (await card.locator('tbody tr').nth(1).locator('td').nth(1).innerText()).trim() === '—');
 
-await sheet.getByLabel(/^Discount on every night/).fill('10');
+await sheet.locator('.nightpct input').nth(1).fill('10'); await sheet.locator('.nightpct input').nth(2).fill('10');          // the other nights
 await page.waitForTimeout(900);
 const t1 = await card.locator('tbody tr').nth(1).locator('td').nth(1).innerText();
 check('10% on the other nights, 40% kept on the first', t1.includes('10') && (await card.locator('tbody tr').nth(0).locator('td').nth(1).innerText()).includes('40'));
 
-await card.getByRole('button', { name: 'Choose' }).click();
+await card.getByRole('button', { name: 'One room more' }).click();
+await sheet.getByLabel(/Reason for discount/).selectOption('NEGOTIATED');
+await sheet.getByRole('button', { name: /^Continue with 1 room/ }).click();
 await sheet.getByLabel('Full name').fill(`Late Walkin ${stamp}`);
 await sheet.getByLabel('Phone', { exact: true }).fill(`0346${stamp}1`);
 await sheet.getByRole('button', { name: 'Continue with this guest' }).click();
