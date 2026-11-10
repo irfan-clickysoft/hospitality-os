@@ -129,7 +129,7 @@ export class FrontDeskService {
     if (bd >= line.departure) throw fail(422, 'STAY_ENDED', `This booking's departure date (${line.departure}) has passed. Extend the stay first.`);
     const guest = await this.guestOf(trx, res.guest_id);
     if (guest.do_not_rent) throw fail(422, 'GUEST_BLOCKED', 'This guest is flagged "do not rent". Ask a manager.');
-    const occupants = this.checkOccupants(i.occupants, line, res.residency, p.business_date);
+    const occupants = this.checkOccupants(await this.applyIdOnFile(trx, res.guest_id, p.business_date, i.occupants), line, res.residency, p.business_date);
     const registration = this.evaluateRegistration(occupants, !!res.company_id, p.nicop_alone_ok);
     if (p.registration_strict && !registration.complete) throw fail(422, 'REGISTRATION_INCOMPLETE', `The registration card is incomplete: ${registration.people.filter((x) => x.missing.length).map((x) => x.name).join(', ')}. Complete it, or ask a manager to switch off strict registration.`, { registration });
 
@@ -175,6 +175,35 @@ export class FrontDeskService {
     await this.audit.record(trx, { action: 'frontdesk.check_in', resourceType: 'reservation', resourceId: id, propertyId, after: { room: room.number, occupants: occupants.length, early, lateArrival, notReadyOverride: room.hk_status === 'DIRTY' } });
     const complianceHits = await this.compliance.record(trx, cctx, userId, id, enforced);
     return { room: { id: room.id, number: room.number }, earlyCheckIn: early, lateArrival, occupants: occupants.length, compliance: complianceHits, registration };
+  }
+
+  /** The ID this guest showed on a recent stay and that has not expired: the newest main-guest document of their earlier bookings. */
+  private async idOnFileRow(trx: Trx, guestId: string, businessDate: string) {
+    return sql<{ stay_guest_id: string; line_id: string; full_name: string; id_type: IdType; sealed: string; expiry: string | null; nationality: string | null; last4: string }>`
+      SELECT s.id AS stay_guest_id, l.id AS line_id, s.full_name, s.id_type, s.id_number_sealed AS sealed, s.id_expiry::text AS expiry, s.nationality, s.id_last4 AS last4
+      FROM stay_guest s JOIN reservation_room l ON l.tenant_id = s.tenant_id AND l.id = s.reservation_room_id JOIN reservation r ON r.tenant_id = l.tenant_id AND r.id = l.reservation_id
+      WHERE r.tenant_id = ${currentTenant().tenantId} AND r.guest_id = ${guestId} AND s.is_primary AND s.voided_at IS NULL AND s.id_type IS NOT NULL AND s.id_number_sealed IS NOT NULL AND (s.id_expiry IS NULL OR s.id_expiry >= ${businessDate}::date)
+      ORDER BY s.created_at DESC LIMIT 1`.execute(trx).then((x) => x.rows[0] ?? null);
+  }
+  /** For the check-in screen: whether there is an ID on file for a returning guest, shown masked (the number itself never leaves the server until it is used). */
+  async idOnFile(propertyId: string, guestId: string) {
+    return this.tdb.tx(async (trx) => {
+      const p = await this.res.prop(trx, propertyId); const r = await this.idOnFileRow(trx, guestId, p.business_date);
+      return r ? { found: true, fullName: r.full_name, idType: r.id_type, masked: maskId(r.id_type, r.last4), expiry: r.expiry, nationality: r.nationality } : { found: false };
+    });
+  }
+  /** Replaces "use the ID on file" with the stored document, after checking it is the same person's and has not expired. */
+  private async applyIdOnFile(trx: Trx, guestId: string, businessDate: string, occupants: Occupant[]): Promise<Occupant[]> {
+    if (!occupants.some((o) => o.useIdOnFile)) return occupants;
+    const row = await this.idOnFileRow(trx, guestId, businessDate);
+    return Promise.all(occupants.map(async (o, k) => {
+      if (!o.useIdOnFile) return o;
+      const main = o.isPrimary || (k === 0 && !occupants.some((x) => x.isPrimary));
+      if (!main) throw fail(422, 'ID_ON_FILE_MAIN_ONLY', 'Only the main guest’s ID on file can be used.');
+      if (!row) throw fail(422, 'ID_ON_FILE_NOT_FOUND', 'There is no valid ID on file for this guest (it may have expired). Enter the ID.');
+      if (row.full_name.trim().toLowerCase() !== o.fullName.trim().toLowerCase()) throw fail(422, 'ID_ON_FILE_NAME', `The ID on file belongs to ${row.full_name}. Use the same name, or enter this guest’s own ID.`);
+      return { ...o, idType: row.id_type, idNumber: this.box.open(row.sealed, this.aad(row.line_id)), idExpiry: o.idExpiry ?? row.expiry, nationality: o.nationality ?? row.nationality } as Occupant;
+    }));
   }
 
   private async guestOf(trx: Trx, guestId: string) {

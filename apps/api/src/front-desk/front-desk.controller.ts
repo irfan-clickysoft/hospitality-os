@@ -28,6 +28,9 @@ export class FrontDeskController {
 
   @Post('reservations/:id/rooms/:lineId/check-in') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
   checkIn(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Body() body: unknown) { return this.svc.checkIn(pid, id, line, me(), parse(S.CheckIn, body)); }
+  /** The ID a returning guest showed before and that is still valid, masked, so the desk can use it instead of asking again. */
+  @Get('guests/:guestId/id-on-file') @RequirePermission('reservation.view', P)
+  idOnFile(@Param('propertyId', uuid()) pid: string, @Param('guestId', uuid()) guestId: string) { return this.svc.idOnFile(pid, guestId); }
   @Get('reservations/:id/rooms/:lineId/timing-fee') @RequirePermission('reservation.view', P)
   timingFee(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Query() q: unknown) { return this.timing.get(pid, id, line, parse(S.TimingFeeQuery, q).kind); }
   @Post('reservations/:id/rooms/:lineId/timing-fee') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)

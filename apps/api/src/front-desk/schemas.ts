@@ -28,6 +28,8 @@ export const Occupant = z.object({
   guardianIndex: z.number().int().min(0).max(11).nullish(),
   /** How a companion is related to the main guest (spouse, child, friend…). */
   relationship: z.string().trim().max(40).nullish(),
+  /** Use the identity document this guest showed on an earlier stay (the main guest only; it must not have expired). Send no type or number with it. */
+  useIdOnFile: z.boolean().default(false),
 });
 export const Occupants = z.array(Occupant.refine((o) => !!o.idNumber === !!o.idType, { message: 'Give both the type and the number of the ID, or neither', path: ['idNumber'] })).min(1).max(12);
 
