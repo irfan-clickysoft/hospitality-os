@@ -43,10 +43,10 @@ export class FrontDeskController {
   @Post('reservations/:id/rooms/:lineId/move') @RequirePermission('frontdesk.check_in', P) @HttpCode(200)
   move(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Body() body: unknown) { return this.svc.moveRoom(pid, id, line, me(), parse(S.MoveRoom, body)); }
   /** `?reveal=true` shows full document numbers: needs the view-ID permission and a fresh second factor, and is audited. */
-  /** A printable registration card with signature lines. ?reveal=true prints full ID numbers (needs the same permission and fresh second factor as seeing them). */
+  /** A printable registration card with signature lines. The law requires the full ID number on it, so it is printed in full for anyone who holds the view-ID right (no second-factor prompt per card) and every printing is recorded; others get it masked. */
   @Get('reservations/:id/rooms/:lineId/registration-card') @RequirePermission('reservation.view', P)
   async card(@Param('propertyId', uuid()) pid: string, @Param('id', uuid()) id: string, @Param('lineId', uuid()) line: string, @Query() q: unknown, @Res() reply: FastifyReply) {
-    const v = await this.svc.registrationCard(pid, id, line, me(), parse(S.OccupantsQuery, q).reveal === 'true');
+    void q; const v = await this.svc.registrationCard(pid, id, line, me());
     reply.header('content-type', 'text/html; charset=utf-8').header('content-security-policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'").header('x-content-type-options', 'nosniff').send(renderRegistrationCard(v));
   }
   @Get('registration-rules') @RequirePermission('reservation.view', P)

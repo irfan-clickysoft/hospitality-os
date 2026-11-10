@@ -55,7 +55,7 @@ ${v.rent ? (() => { const r = v.rent, c = r.currency, bal = BigInt(r.totalMinor)
 ${BigInt(r.discountMinor) > 0n ? `<tr><td>Discount</td><td class="num">− ${esc(money(r.discountMinor, c))}</td></tr>` : ''}<tr><td><strong>Total rent (${esc(r.nights)} night(s))</strong> <span class="muted">· taxes as applicable</span></td><td class="num"><strong>${esc(money(r.totalMinor, c))}</strong></td></tr>
 <tr><td>Advance received</td><td class="num">${esc(money(r.advanceMinor, c))}</td></tr><tr><td><strong>Balance</strong></td><td class="num"><strong>${esc(money(bal > 0n ? bal : 0n, c))}</strong></td></tr></tbody></table>`; })() : ''}
 ${v.complete === false ? '<p class="muted"><strong>Registration incomplete:</strong> some required documents were not seen. See the front desk.</p>' : ''}
-${v.idRevealed ? '' : '<p class="muted">Identity numbers are shown with only the last digits. Anyone with permission can print the full numbers, which needs the second factor and is recorded.</p>'}
+${v.idRevealed ? '' : '<p class="muted">Identity numbers are shown with only the last digits because the person who printed this card does not hold the right to print them in full. Ask the front desk for a full copy.</p>'}
 <h2>Rules &amp; policies</h2><div class="rules">${esc(v.rules ?? DEFAULT_RULES)}</div>
 <p>I have read and accept the rules and policies above, and the details on this card are correct.</p>
 <div class="sign"><div>${v.signature ? `<img class="sigimg" alt="Guest signature" src="${esc(v.signature.image)}">` : ''}<div class="line">Guest signature${v.signature ? ` — ${esc(v.signature.name ?? '')}<br><span class="muted">signed on screen ${esc((v.signature.signedAt ?? '').slice(0, 16))}</span>` : ''}</div></div><div class="line">Front desk</div></div>

@@ -67,11 +67,12 @@ export class DocumentsService {
     const guest = gid ? await trx.selectFrom('guest').select('full_name').where('id', '=', gid).executeTakeFirst() : undefined;
     const co = f.company_id ? await trx.selectFrom('company').select('name').where('id', '=', f.company_id).executeTakeFirst() : undefined;
     const original = p.refund_of_payment_id ? await trx.selectFrom('payment').select('receipt_no').where('id', '=', p.refund_of_payment_id).executeTakeFirst() : undefined;
+    const tz = (await trx.selectFrom('property').select('timezone').where('id', '=', propertyId).executeTakeFirst())?.timezone ?? 'UTC'; const time = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: tz }).format(new Date(p.created_at)).toUpperCase();      // when it was entered, in the hotel's own time
     const refund = p.kind === 'REFUND'; const amt = { amount: Money.ofMinor(BigInt(p.amount_minor), p.currency).toDecimalString(), currency: p.currency };
     const status = p.status === 'CAPTURED' ? { text: refund ? 'REFUNDED' : 'PAID', tone: 'ok' as const } : p.status === 'PENDING_VERIFICATION' ? { text: 'RECEIVED — AWAITING BANK CONFIRMATION', tone: 'warn' as const } : p.status === 'VOIDED' ? { text: 'VOID', tone: 'bad' as const } : { text: 'NOT ACCEPTED', tone: 'bad' as const };
     return {
       title: refund ? 'REFUND VOUCHER' : p.kind === 'DEPOSIT' ? 'RECEIPT — ADVANCE DEPOSIT' : 'RECEIPT', number: p.receipt_no, status,
-      meta: [[refund ? 'Paid to' : 'Received from', guest?.full_name ?? co?.name ?? null], ['Booking', res?.confirmation_no ?? null], ['Bill', f.folio_no], ['Date', day(p.business_date)], ['Method', METHOD[p.method] ?? p.method],
+      meta: [[refund ? 'Paid to' : 'Received from', guest?.full_name ?? co?.name ?? null], ['Booking', res?.confirmation_no ?? null], ['Bill', f.folio_no], ['Date', day(p.business_date)], ['Time', time], ['Method', METHOD[p.method] ?? p.method],
         ['Reference', p.reference], ['Bank', p.counterparty], ['Card', p.card_last4 ? `•••• ${p.card_last4}` : null], ['Refund of receipt', original?.receipt_no ?? null], ['Note', p.status === 'VOIDED' ? p.void_reason : p.note]],
       totals: [[refund ? 'Amount refunded' : 'Amount received', fmtAmt(amt), true], ['Balance on the bill when printed', fmtAmt({ amount: Money.ofMinor(BigInt(f.balance_minor), f.currency).toDecimalString(), currency: f.currency })]],
       notes: p.status === 'PENDING_VERIFICATION' ? ['A bank transfer is confirmed once the money is seen in the hotel’s account. This page is updated when that happens.'] : [],
