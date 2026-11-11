@@ -68,6 +68,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Shift handover built (migration 0056):** a Handover tab under Reservations where one shift leaves a note and open items for the next, the next person marks it read and ticks items off. New reports (Staff group): shift handover (written, read, open items, days with none), front-desk workload (check-ins, check-outs, bookings, payments, moves, cancellations and charges per person or day, from the audit trail) and SLA performance (complaints and incidents against their response target, maintenance jobs against their due date). Not yet: task volume and aging beyond the approval queue, staffing forecast (needs a roster), training and quality trends.
 
+**Room-status history built (migration 0057):** every change of a room's housekeeping state is now recorded (who, when, why). New report: room-status history and cleaning time (every change, by room, dirty-to-clean turnaround, vacant rooms still not ready). History starts from the day this is deployed. Not yet: discrepancies over time between the rack, housekeeping and maintenance (needs the history to build up first), linen, amenity and minibar use.
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.

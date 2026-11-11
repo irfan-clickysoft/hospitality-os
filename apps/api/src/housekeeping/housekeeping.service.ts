@@ -7,7 +7,7 @@ import { AuthorizationService } from '../authz/authorization.service.js';
 import { CLOCK, type ClockLike } from '../common/clock.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { OutboxService } from '../outbox/outbox.service.js';
-import { currentTenant } from '../tenancy/tenant-context.js';
+import { currentTenant, tryCurrentTenant } from '../tenancy/tenant-context.js';
 import type * as S from './schemas.js';
 
 type Trx = Transaction<DB>;
@@ -53,6 +53,7 @@ export class HousekeepingService {
     if (!r) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Room not found' });
     if (r.hk_status === status) return r;
     await trx.updateTable('room').set({ hk_status: status, hk_updated_at: new Date(this.clock.now()), version: sql`version + 1` as never }).where('id', '=', roomId).execute();
+    await trx.insertInto('room_status_event').values({ tenant_id: currentTenant().tenantId, property_id: propertyId, room_id: roomId, from_status: r.hk_status, to_status: status, reason: reason.slice(0, 300), actor_id: tryCurrentTenant()?.actorId ?? null, occurred_at: new Date(this.clock.now()) } as never).execute();      // the history of the room's state
     await this.outbox.publish(trx, { aggregateType: 'room', aggregateId: roomId, eventType: 'RoomStatusChanged', propertyId, payload: { roomId, number: r.number, hkStatus: status, previous: r.hk_status, reason } });
     return r;
   }
