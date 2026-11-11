@@ -70,6 +70,8 @@ Each report is checked again on every run and every export. The cashier report s
 
 **Room-status history built (migration 0057):** every change of a room's housekeeping state is now recorded (who, when, why). New report: room-status history and cleaning time (every change, by room, dirty-to-clean turnaround, vacant rooms still not ready). History starts from the day this is deployed. Not yet: discrepancies over time between the rack, housekeeping and maintenance (needs the history to build up first), linen, amenity and minibar use.
 
+**Lost business and denials built (migration 0058):** a price search for dates where a room type is sold out is recorded (once per person, dates, room type and day). New report in Sales: lost business and denials, by arrival date, room type, channel or each search, with the room nights asked for (value is not estimated). Recording starts when this is deployed. Not yet: forecast accuracy (needs forecasts saved each night), guest feedback, group blocks and pickup.
+
 **Also built:** discount reasons (standard list + note), who gave and who approved, and a request/approve flow for discounts above a user's limit (approval is used once, for the exact price).
 
 **Next (needs new capture):** room-status history, channel commission.

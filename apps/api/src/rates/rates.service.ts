@@ -368,6 +368,7 @@ export class RatesService {
         if (i.roomTypeId && t.id !== i.roomTypeId) continue;
         const nights = avail.find((a) => a.roomTypeId === t.id)?.nights ?? [];
         const rooms = nights.length === nightsOf(i.arrival, i.departure).length ? Math.min(...nights.map((n) => n.available)) : 0;
+        if (rooms < 1) await trx.insertInto('quote_denial').values({ tenant_id: currentTenant().tenantId, property_id: propertyId, user_id: userId, searched_on: p.business_date, arrival: i.arrival, departure: i.departure, room_type_id: t.id, adults: i.adults, children: i.children, channel: i.channel ?? null } as never).onConflict((oc) => oc.doNothing()).execute();      // sold out for what was asked: demand turned away
         const limits: RoomTypeLimits = { maxAdults: t.max_adults, maxChildren: t.max_children, maxOccupancy: t.max_occupancy, baseOccupancy: t.base_occupancy };
         for (const pr of planRows) {
           const baseId = pr.kind === 'DERIVED' ? pr.parent_rate_plan_id! : pr.id;
