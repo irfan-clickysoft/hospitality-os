@@ -19,6 +19,13 @@ export class GuestPortalController {
     return this.svc.withToken(token, (id) => this.svc.page(id));
   }
 
+  @Public() @Post('booking/:token/feedback') @HttpCode(201)
+  feedback(@Param('token') token: string, @Body() body: unknown, @Res({ passthrough: true }) reply: FastifyReply) {
+    reply.header('Cache-Control', 'no-store');
+    const input = parse(S.GuestFeedback, body);
+    return this.svc.withToken(token, (id) => this.svc.feedback(id, input));
+  }
+
   @Public() @Post('booking/:token/requests') @HttpCode(201)
   request(@Param('token') token: string, @Body() body: unknown, @Res({ passthrough: true }) reply: FastifyReply) {
     reply.header('Cache-Control', 'no-store');
