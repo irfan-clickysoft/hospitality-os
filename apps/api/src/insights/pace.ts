@@ -65,9 +65,9 @@ export const bookingPace: Def = {
   },
 };
 
-const BUCKETS: Array<[number, number]> = [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7], [8, 14], [15, 21], [22, 30], [31, 60], [61, 90], [91, 180], [181, 365]];
-const bucketOf = (lead: number) => BUCKETS.findIndex(([a, b]) => lead >= a && lead <= b);
-const MIN_SAMPLES = 8;
+export const BUCKETS: Array<[number, number]> = [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7], [8, 14], [15, 21], [22, 30], [31, 60], [61, 90], [91, 180], [181, 365]];
+export const bucketOf = (lead: number) => BUCKETS.findIndex(([a, b]) => lead >= a && lead <= b);
+export const MIN_SAMPLES = 8;
 
 export const forecast: Def = {
   id: 'forecast', name: 'Occupancy and revenue forecast', category: 'sales', kind: 'analytical', permissions: ['management.view', 'report.view'], roles: ['manager', 'accounts'],
@@ -103,6 +103,46 @@ export const forecast: Def = {
       columns: [{ key: 'date', label: 'Stay date', type: 'date' }, { key: 'lead', label: 'Days ahead', type: 'int' }, { key: 'otb', label: 'On the books', type: 'int', total: true }, { key: 'pickup', label: 'Typical pickup (nights)' }, { key: 'samples', label: 'Samples', type: 'int', hidden: false }, { key: 'nights', label: 'Forecast nights', type: 'int', total: true }, { key: 'occ', label: 'Forecast occupancy %', type: 'pct' },
         { key: 'adr', label: 'ADR used', type: 'money' }, { key: 'revenue', label: 'Forecast revenue', type: 'money', total: true }, { key: 'confidence', label: 'Confidence', type: 'badge' }],
       chart: { kind: 'line', x: 'date', series: [{ key: 'occ', label: 'Forecast occupancy %' }] }, rows, warnings,
-      notes: ['A statistical estimate from this property’s own history; it does not know about events, rate changes or groups not yet booked. Each row shows what it was based on.', 'Forecast accuracy (how close past forecasts were) needs forecasts to be saved over time and is a later addition.'] };
+      notes: ['A statistical estimate from this property’s own history; it does not know about events, rate changes or groups not yet booked. Each row shows what it was based on.', 'How close past forecasts were is in the Forecast accuracy report.'] };
+  },
+};
+
+/** How close the room-night forecast saved each night was to the nights really sold. */
+export const forecastAccuracy: Def = {
+  id: 'forecast-accuracy', name: 'Forecast accuracy', category: 'sales', kind: 'analytical', permissions: ['management.view', 'report.view'], roles: ['manager', 'accounts'],
+  purpose: 'How close the forecast was to what was really sold, for stay dates that have passed, and whether it beats simply counting what was already on the books.',
+  basis: [{ id: 'stay', label: 'Stay date' }], range: 'last30',
+  params: [
+    { key: 'lead', label: 'Forecast made', default: '7', options: [{ value: '1', label: '1 day before' }, { value: '3', label: '3 days before' }, { value: '7', label: '7 days before' }, { value: '14', label: '14 days before' }, { value: '30', label: '30 days before' }] },
+    { key: 'group', label: 'Show', default: 'date', options: [{ value: 'date', label: 'Each stay date' }, { value: 'lead', label: 'By how far ahead' }] }],
+  definitions: [
+    { term: 'Forecast', text: 'The room-night forecast saved when the business day closed, the number of days before the stay date you choose. See the Occupancy and revenue forecast for the method.' },
+    { term: 'Actual', text: 'Room nights sold for that stay date, from the night audit.' },
+    { term: 'Error', text: 'Forecast − actual. Positive means the forecast was too high.' },
+    { term: 'Accuracy', text: '100% − (sum of the errors, ignoring sign) ÷ actual nights. 100% is perfect.' },
+    { term: 'Bias', text: 'Sum of the errors ÷ actual nights. Positive means the forecast runs high over time.' },
+    { term: 'On-books error', text: 'The error if you had just used the nights already on the books and forecast no more pickup. The forecast is worth having when its error is smaller.' },
+    { term: 'Recording starts', text: 'Forecasts are saved from the day this was introduced, only for dates with enough history, so earlier dates cannot be scored.' },
+  ],
+  async run(c) {
+    const g = c.params.group ?? 'date'; const lead = Number(c.params.lead) || 7; const bd = c.prop.businessDate; const to = c.to < bd ? c.to : addDays(bd, -1);
+    const r = await sql<Record<string, any>>`SELECT f.stay_date::text AS d, f.lead, f.on_books, f.forecast_nights AS fc, s.rooms_sold AS actual
+      FROM forecast_saved f JOIN daily_property_stats s ON s.tenant_id = f.tenant_id AND s.property_id = f.property_id AND s.business_date = f.stay_date
+      WHERE f.tenant_id = ${c.tenantId} AND f.property_id = ${c.propertyId} AND f.stay_date BETWEEN ${c.from}::date AND ${to}::date ${g === 'date' ? sql`AND f.lead = ${lead}` : sql``} ORDER BY f.stay_date, f.lead`.execute(c.trx);
+    const rows = r.rows; const sum = (f: (x: Record<string, any>) => number) => rows.reduce((t, x) => t + f(x), 0);
+    const act = sum((x) => x.actual); const abs = sum((x) => Math.abs(x.fc - x.actual)); const err = sum((x) => x.fc - x.actual); const ob = sum((x) => Math.abs(x.on_books - x.actual));
+    const acc = (a: number, t: number) => (t > 0 ? Math.max(0, Math.round((1 - a / t) * 1000) / 10) : null); const bias = (e: number, t: number) => (t > 0 ? Math.round((e / t) * 1000) / 10 : null);
+    const kp = [{ key: 'n', label: g === 'date' ? 'Dates scored' : 'Forecasts scored', value: rows.length, type: 'int' as const, definition: 'Stay dates in the period that have passed and have a saved forecast.' },
+      { key: 'acc', label: 'Accuracy', value: rows.length ? acc(abs, act) ?? '—' : '—', type: rows.length && acc(abs, act) !== null ? 'pct' as const : 'text' as const, definition: '100% − absolute error ÷ actual nights.' },
+      { key: 'bias', label: 'Bias', value: rows.length ? bias(err, act) ?? '—' : '—', type: rows.length && bias(err, act) !== null ? 'pct' as const : 'text' as const, definition: 'Net error ÷ actual nights. Positive: forecasts run high.' },
+      { key: 'ob', label: 'Accuracy of on-books alone', value: rows.length ? acc(ob, act) ?? '—' : '—', type: rows.length && acc(ob, act) !== null ? 'pct' as const : 'text' as const, definition: 'The same score if no pickup had been added.' }];
+    const warnings = rows.length ? [] : ['No forecasts to score yet. Forecasts are saved each time a business day closes, and a date can be scored once its stay date has passed.'];
+    if (g === 'date') return { kpis: kp, warnings, columns: [{ key: 'd', label: 'Stay date', type: 'date' }, { key: 'ob', label: 'On the books then', type: 'int', total: true }, { key: 'fc', label: 'Forecast', type: 'int', total: true }, { key: 'actual', label: 'Actually sold', type: 'int', total: true }, { key: 'err', label: 'Error', type: 'int', total: true }, { key: 'obErr', label: 'On-books error', type: 'int', total: true, hidden: true }],
+      rows: rows.map((x): Row => ({ d: x.d, ob: x.on_books, fc: x.fc, actual: x.actual, err: x.fc - x.actual, obErr: x.on_books - x.actual })), chart: { kind: 'line', x: 'd', series: [{ key: 'fc', label: 'Forecast' }, { key: 'actual', label: 'Actually sold' }] }, notes: [`Forecasts made ${lead} day(s) before the stay date.`] };
+    const m = new Map<number, { n: number; act: number; abs: number; err: number; ob: number }>();
+    for (const x of rows) { const b = bucketOf(x.lead); const e = m.get(b) ?? { n: 0, act: 0, abs: 0, err: 0, ob: 0 }; e.n++; e.act += x.actual; e.abs += Math.abs(x.fc - x.actual); e.err += x.fc - x.actual; e.ob += Math.abs(x.on_books - x.actual); m.set(b, e); }
+    const label = (b: number) => { const [a, z] = BUCKETS[b]!; return a === z ? `${a} day${a === 1 ? '' : 's'} before` : `${a}–${z} days before`; };
+    return { kpis: kp, warnings, columns: [{ key: 'what', label: 'Forecast made' }, { key: 'n', label: 'Forecasts', type: 'int', total: true }, { key: 'acc', label: 'Accuracy', type: 'pct' }, { key: 'bias', label: 'Bias', type: 'pct' }, { key: 'ob', label: 'On-books alone', type: 'pct' }],
+      rows: [...m.entries()].sort((p, q) => p[0] - q[0]).map(([b, e]): Row => ({ what: label(b), n: e.n, acc: acc(e.abs, e.act), bias: bias(e.err, e.act), ob: acc(e.ob, e.act) })), chart: { kind: 'bar', x: 'what', series: [{ key: 'acc', label: 'Accuracy %' }] }, notes: ['Every forecast saved for the dates in the period, grouped by how many days before the stay date it was made.'] };
   },
 };
