@@ -158,3 +158,5 @@ Desktop: dense sticky-header table with column chooser, sortable columns, totals
 7. Custom report builder.
 
 Demo data: the Sunset demo property's seed data is clearly the demo; reports show whatever the property holds.
+
+**Guest feedback built (migration 0059):** after check-out the guest's booking page shows a short form (overall and four 1–5 ratings, would recommend, comment); one response per booking. New report in the Risk group: guest feedback and satisfaction, by response, low ratings, month or room type, with the response rate against check-outs (no reminders are sent). Not yet: group blocks and pickup, forecast accuracy (needs forecasts saved each night), commission and net revenue, integration failures, asset lifecycle, linen/amenity/minibar, training and quality, staffing forecast.

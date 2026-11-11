@@ -15,3 +15,7 @@ export const GuestRequest = z.object({
 
 export const HandleRequest = z.object({ status: z.enum(['ACKNOWLEDGED', 'DONE', 'DECLINED']), staffNote: z.string().trim().max(300).optional() }).strict();
 export const ListRequests = z.object({ status: z.enum(['OPEN', 'ALL']).default('OPEN'), reservationId: uuid.optional() });
+
+const star = z.number().int().min(1).max(5);
+/** What a guest says about the stay: an overall rating, up to four ratings of parts of it, whether they would recommend it, and their own words. */
+export const GuestFeedback = z.object({ overall: star, cleanliness: star.optional(), staff: star.optional(), comfort: star.optional(), value: star.optional(), wouldRecommend: z.boolean().optional(), comment: z.string().trim().max(1000).optional() }).strict();
