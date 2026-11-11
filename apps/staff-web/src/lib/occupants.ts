@@ -4,7 +4,7 @@ import type { Key } from '../i18n/en.js';
 export interface Occupant {
   fullName: string; idType: string; idNumber: string; nationality: string; idExpiry: string; ageGroup: 'ADULT' | 'CHILD';
   /** The kind of guest; empty means "worked out from the card". */
-  guestType: string; docs: Record<string, { state: 'SEEN' | 'NOT_AVAILABLE'; note?: string }>; foreign: Record<string, string | boolean>; /** Position of the accompanying adult on the card. */ guardian: number | null; /** How a companion is related to the main guest. */ relationship: string;
+  guestType: string; docs: Record<string, { state: 'SEEN' | 'NOT_AVAILABLE'; note?: string }>; foreign: Record<string, string | boolean>; /** Position of the accompanying adult on the card. */ guardian: number | null; /** The ID on file from an earlier stay is being used: the number is not typed. */ onFile?: boolean; /** How a companion is related to the main guest. */ relationship: string;
 }
 export type OccErrors = Partial<Record<'fullName' | 'idType' | 'idNumber' | 'nationality' | 'idExpiry', Key>>;
 
@@ -33,11 +33,11 @@ export function formatId(type: string, raw: string): string {
 export function checkOccupant(o: Occupant, i: number, foreign: boolean, businessDate: string): OccErrors {
   const e: OccErrors = {};
   const main = i === 0;
-  const hasId = o.idNumber.trim() !== '';
+  const hasId = o.onFile || o.idNumber.trim() !== '';
   if (!o.fullName.trim()) e.fullName = 'ci.e.name';
   if (main && foreign && o.idType !== 'PASSPORT') e.idType = 'ci.e.passportOnly';
   if (!hasId) { if (main) e.idNumber = 'ci.e.idNumber'; }
-  else { const bad = idNumberError(o.idType, o.idNumber); if (bad) e.idNumber = bad; }
+  else if (!o.onFile) { const bad = idNumberError(o.idType, o.idNumber); if (bad) e.idNumber = bad; }
   if (o.nationality.trim() ? o.nationality.trim().length !== 2 : (main || (hasId && o.ageGroup === 'ADULT'))) e.nationality = 'ci.e.nationality';
   if (o.idType === 'PASSPORT' && hasId && o.idExpiry && o.idExpiry < businessDate) e.idExpiry = 'ci.e.expired';
   return e;

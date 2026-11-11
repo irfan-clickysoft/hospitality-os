@@ -82,6 +82,7 @@ describe('branded documents', () => {
     expect(html.statusCode).toBe(200); expect(html.headers['content-type']).toContain('text/html'); expect(html.headers['cache-control']).toContain('no-store');
     expect(html.headers['content-security-policy']).toMatch(/script-src 'nonce-[A-Za-z0-9+/=]+'/);
     for (const s of ['12 Seaview Road, Clifton', '+92 21 1234567', 'Thank you for choosing us', '--brand: #0a6c74', lg.logoUrl, p.payment.receiptNo, 'PAID', 'PKR 5,000.00', 'ADVANCE DEPOSIT', '•••• 4242']) expect(html.body, s).toContain(s);
+    expect(html.body).toMatch(/Time<\/[a-z]+>\s*<[^>]+>\s*\d{2}:\d{2} [AP]M/);      // the time it was entered, in the hotel's own time
     expect((await app.inject({ method: 'DELETE', url: u(w, 'branding/logo'), headers: O })).statusCode).toBe(204);
     expect((await app.inject({ method: 'GET', url: lg.logoUrl })).statusCode).toBe(404);
   });

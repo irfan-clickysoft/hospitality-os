@@ -88,7 +88,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
   };
   const stepper = (label: string, value: number, set: (n: number) => void, min: number, max: number) => <label>{label}<input type="number" min={min} max={max} value={value} onChange={(e) => set(Math.min(max, Math.max(min, Math.floor(Number(e.target.value)) || min)))} dir="ltr" /></label>;
   return (
-    <Sheet title={t('wi.title')} onClose={onClose}>
+    <Sheet title={t('wi.title')} onClose={onClose} sticky>
       {done ? (<><p className="ok big" role="status">✓ {done.confirmationNo}</p><div className="actions"><button className="primary" onClick={() => onOpenReservation(done.id)}>{t('bk.open')}</button><button onClick={onClose}>{t('common.close')}</button></div></>) : (<>
         {known ? (
           <div className="card inner stack" role="status">
@@ -121,7 +121,7 @@ export function WalkIn({ businessDate, onClose, onOpenReservation }: { businessD
         </>}
         <h3>{t('ci.guests')}</h3>
         <p className="muted small">{t('wi.idNote')}</p>
-        <OccupantsForm occupants={occ} onChange={setOcc} foreign={foreign} businessDate={businessDate} attempted={attempted} matrix={matrix} />
+        <OccupantsForm guestId={known?.id ?? null} occupants={occ} onChange={setOcc} foreign={foreign} businessDate={businessDate} attempted={attempted} matrix={matrix} />
         <PurposeField value={purpose} onChange={setPurpose} />
         {attempted && hasErrors(errors) && <Banner level="ACTION" title={t('ci.e.fix')} />}
         <ErrorLine code={problem?.code} detail={problem?.detail} />

@@ -54,7 +54,7 @@ describe('upkeep reports', () => {
     const od = await ok(call('GET', u(w, 'insights/work-orders-open?view=overdue'), O)); expect(od.rows).toHaveLength(1);
     const rep = await ok(call('GET', u(w, 'insights/repeat-faults?from=2026-11-01&to=2026-11-30'), O)); expect(rep.rows).toHaveLength(1); expect(rep.rows[0]).toMatchObject({ where: '103', cat: 'Plumbing', n: 2 });
     const dt = await ok(call('GET', u(w, 'insights/room-downtime?from=2026-11-01&to=2026-11-30'), O)); expect(dt.rows).toHaveLength(1); expect(dt.rows[0]).toMatchObject({ room: '104', kind: 'Out of order', nights: 4 });
-    await adminDb.updateTable('work_order').set({ status: 'DONE', assigned_at: new Date(testClock.now() + 3_600_000), started_at: new Date(testClock.now() + 2 * 3_600_000), done_at: new Date(testClock.now() + 4 * 3_600_000) } as never).where('id', '=', a.id).execute();
+    await adminDb.updateTable('work_order').set({ created_at: new Date(testClock.now()), status: 'DONE', assigned_at: new Date(testClock.now() + 3_600_000), started_at: new Date(testClock.now() + 2 * 3_600_000), done_at: new Date(testClock.now() + 4 * 3_600_000) } as never).where('id', '=', a.id).execute();
     const tm = await ok(call('GET', u(w, 'insights/work-order-times?from=2026-11-01&to=2026-11-30'), O)); expect(tm.rows[0]).toMatchObject({ what: 'Plumbing', n: 1 }); expect(Number(tm.rows[0].toDone)).toBeGreaterThanOrEqual(4);
     const b = await book(w, { arrival: '2026-11-05', departure: '2026-11-06' });
     const nr = await ok(call('GET', u(w, 'insights/rooms-not-ready'), O)); expect(nr.rows).toHaveLength(1); expect(nr.rows[0].state).toBe('No room assigned');

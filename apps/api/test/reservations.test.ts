@@ -266,7 +266,7 @@ describe('cancellation (72-hour rule), waiver, no-show, reinstatement', () => {
   });
 
   it('a hold runs in half-hour steps, whole days, or until a date — and never past the day before arrival', async () => {
-    const w = await sunset();
+    const w = await sunset();  testClock.set(karachi(OPEN, '10:00'));      // the fixed dates below must not depend on today's real date
     const body = (hold: Record<string, unknown>) => ({ body: { hold } });
     expect((await book(w, body({ minutes: 45 }))).statusCode).toBe(400);                                  // not a half-hour step
     expect((await book(w, body({ minutes: 15 }))).statusCode).toBe(400);
@@ -312,7 +312,7 @@ describe('cancellation (72-hour rule), waiver, no-show, reinstatement', () => {
   });
 
   it('cancelling an unconfirmed option never carries a fee', async () => {
-    const w = await sunset();
+    const w = await sunset();  testClock.set(karachi(OPEN, '10:00'));      // the fixed dates below must not depend on today's real date
     const r = await ok(book(w, { body: { hold: { minutes: 120 } } }), 201);
     expect(r.status).toBe('OPTION');
     expect((await avail(w, 'STD', '2026-11-05')).held).toBe(1);
@@ -400,7 +400,7 @@ describe('cancellation (72-hour rule), waiver, no-show, reinstatement', () => {
 
 describe('options (holds)', () => {
   it('an option holds the room, confirming turns the hold into a sale, and an expired option releases itself', async () => {
-    const w = await sunset();
+    const w = await sunset();  testClock.set(karachi(OPEN, '10:00'));      // the fixed dates below must not depend on today's real date
     const r = await ok(book(w, { body: { hold: { minutes: 60 } } }), 201);
     expect(r).toMatchObject({ status: 'OPTION' }); expect(r.optionExpiresAt).toBeTruthy();
     expect(await avail(w, 'STD', '2026-11-05')).toMatchObject({ held: 1, reserved: 0 });
@@ -422,7 +422,7 @@ describe('options (holds)', () => {
   });
 
   it('a held room cannot be sold to someone else', async () => {
-    const w = await sunset();
+    const w = await sunset();  testClock.set(karachi(OPEN, '10:00'));      // the fixed dates below must not depend on today's real date
     for (let i = 0; i < 3; i++) await ok(book(w, { body: { hold: { minutes: 60 } } }), 201);
     const q = (await call('POST', `/v1/properties/${w.pid}/quotes`, O, { arrival: '2026-11-05', departure: '2026-11-07', adults: 2 })).json();
     expect(q.options.find((o: any) => o.roomType.code === 'STD')).toBeUndefined();                          // sold out for new quotes
