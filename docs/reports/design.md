@@ -158,3 +158,5 @@ Desktop: dense sticky-header table with column chooser, sortable columns, totals
 7. Custom report builder.
 
 Demo data: the Sunset demo property's seed data is clearly the demo; reports show whatever the property holds.
+
+**Commission and net revenue built (migration 0060):** a commission percentage per booking source is set under Reports → Budgets (Commission by booking source). New Sales report: commission and net revenue, by source or month, with a warning for sources that have no rate. Commission is room revenue × the rate (an estimate, not an agent statement). Not yet: group blocks and pickup, forecast accuracy, integration failures, asset lifecycle, linen/amenity/minibar, training and quality, staffing forecast.

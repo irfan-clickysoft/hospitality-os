@@ -29,7 +29,7 @@ function performance(d: Dim): Def {
       const rows: Row[] = [...m.entries()].sort((p, q) => (p[1].rev < q[1].rev ? 1 : p[1].rev > q[1].rev ? -1 : p[0].localeCompare(q[0]))).map(([k, e]) => ({ what: k, lines: e.lines, nights: e.nights, rev: e.rev.toString(), adr: e.nights ? (e.rev / BigInt(e.nights)).toString() : '0', share: total > 0n ? Math.round(Number((e.rev * 1000n) / total)) / 10 : 0, lost: e.lost, cancel: pctOf(e.lost, e.all) }));
       return { kpis: [{ key: 'rev', label: 'Room revenue', value: dec(total), type: 'money', definition: 'Room revenue for the stay dates, before tax.' }, { key: 'nights', label: 'Room nights', value: tn, type: 'int', definition: 'Nights sold in the period.' }, { key: 'adr', label: 'ADR', value: tn ? dec(total / BigInt(tn)) : '0.00', type: 'money', definition: 'Room revenue ÷ room nights.' }, { key: 'cancel', label: 'Cancel rate', value: pctOf(tl, ta), type: 'pct', definition: 'Cancelled or no-show lines ÷ lines with an arrival in the period.' }],
         columns: [{ key: 'what', label: d.label }, { key: 'lines', label: 'Bookings', type: 'int', total: true }, { key: 'nights', label: 'Room nights', type: 'int', total: true }, { key: 'rev', label: 'Room revenue', type: 'money', total: true }, { key: 'adr', label: 'ADR', type: 'money' }, { key: 'share', label: 'Share of revenue', type: 'pct' }, { key: 'lost', label: 'Cancelled or no-show', type: 'int', total: true }, { key: 'cancel', label: 'Cancel rate', type: 'pct' }],
-        rows, chart: { kind: 'bar', x: 'what', series: [{ key: 'rev', label: 'Room revenue' }] }, notes: ['Room revenue only: extras, food and beverage and tax are not included. Channel commission and net revenue are not recorded yet.'] };
+        rows, chart: { kind: 'bar', x: 'what', series: [{ key: 'rev', label: 'Room revenue' }] }, notes: ['Room revenue only: extras, food and beverage and tax are not included. Commission and net revenue are in the Commission and net revenue report.'] };
     },
   };
 }
@@ -88,5 +88,39 @@ export const tentative: Def = {
     const tv = rows.reduce((s, x) => s + BigInt(x.val as string), 0n); const late = rows.filter((x) => x.state === 'Past its time').length;
     return { kpis: [{ key: 'n', label: 'Tentative bookings', value: rows.length, type: 'int', definition: 'Holds with an arrival in the period.' }, { key: 'val', label: 'Value held', value: dec(tv), type: 'money', definition: 'Room value of the holds, before tax. Not on the books.' }, { key: 'late', label: 'Past their time', value: late, type: 'int', tone: late ? 'warn' : 'ok', definition: 'Holds whose time has passed and have not been released yet.' }],
       columns: [{ key: 'conf', label: 'Booking' }, { key: 'guest', label: 'Guest' }, { key: 'company', label: 'Company', hidden: true }, { key: 'source', label: 'Source', hidden: true }, { key: 'rtype', label: 'Room type' }, { key: 'arrival', label: 'Arrival', type: 'date' }, { key: 'departure', label: 'Departure', type: 'date', hidden: true }, { key: 'nights', label: 'Nights', type: 'int', total: true }, { key: 'val', label: 'Value', type: 'money', total: true }, { key: 'lapses', label: 'Lapses', type: 'datetime' }, { key: 'state', label: 'State', type: 'badge' }], rows };
+  },
+};
+
+/** Room revenue less the commission each booking source keeps. The rate per source is set under Reports → Budgets. */
+export const commission: Def = {
+  id: 'commission-net', name: 'Commission and net revenue', category: 'sales', kind: 'analytical', permissions: ['report.view', 'management.view'], roles: ['manager', 'accounts'],
+  purpose: 'What each booking source costs in commission, and the room revenue the hotel keeps after paying it.',
+  basis: [{ id: 'stay', label: 'Stay date' }], range: 'month',
+  params: [{ key: 'group', label: 'Group by', default: 'source', options: [{ value: 'source', label: 'Booking source' }, { value: 'month', label: 'Month' }] }],
+  definitions: [
+    { term: 'Room revenue', text: 'Room charges for confirmed, in-house and checked-out nights with a stay date in the period, before tax.' },
+    { term: 'Commission rate', text: 'The percentage set for the source under Reports → Budgets. A source with no rate set counts as 0%.' },
+    { term: 'Commission', text: 'Room revenue × the source’s rate. An estimate from the rate, not an invoice from the agent.' },
+    { term: 'Net revenue', text: 'Room revenue − commission.' },
+  ],
+  async run(c: Ctx) {
+    const a = await sql<Record<string, any>>`SELECT r.source, to_char(n.business_date, 'YYYY-MM') AS mo, count(*)::int AS nights, coalesce(sum(n.total_minor), 0)::text AS rev
+      FROM ${FROM} WHERE n.tenant_id = ${c.tenantId} AND n.property_id = ${c.propertyId} AND n.business_date BETWEEN ${c.from}::date AND ${c.to}::date AND l.status IN ('CONFIRMED','CHECKED_IN','CHECKED_OUT') GROUP BY 1, 2`.execute(c.trx);
+    const rt = await sql<Record<string, any>>`SELECT source, pct::text AS pct FROM source_commission WHERE tenant_id = ${c.tenantId} AND property_id = ${c.propertyId}`.execute(c.trx);
+    const rate = new Map(rt.rows.map((x) => [x.source, Number(x.pct)]));
+    // Commission in basis points of a percent (two decimals) keeps it exact in minor units.
+    const comm = (rev: bigint, src: string) => (rev * BigInt(Math.round((rate.get(src) ?? 0) * 100)) + 5000n) / 10000n;
+    const g = c.params.group ?? 'source'; const m = new Map<string, { nights: number; rev: bigint; com: bigint }>();
+    for (const x of a.rows) { const k = g === 'month' ? x.mo : SRC[x.source] ?? x.source; const e = m.get(k) ?? { nights: 0, rev: 0n, com: 0n }; const rev = BigInt(x.rev); e.nights += x.nights; e.rev += rev; e.com += comm(rev, x.source); m.set(k, e); }
+    const tot = [...m.values()].reduce((s, e) => ({ rev: s.rev + e.rev, com: s.com + e.com, nights: s.nights + e.nights }), { rev: 0n, com: 0n, nights: 0 });
+    const rows: Row[] = [...m.entries()].sort((p, q) => (g === 'month' ? p[0].localeCompare(q[0]) : p[1].com < q[1].com ? 1 : p[1].com > q[1].com ? -1 : p[0].localeCompare(q[0]))).map(([k, e]) => ({ what: k, nights: e.nights, rev: e.rev.toString(), com: e.com.toString(), net: (e.rev - e.com).toString(), pct: e.rev > 0n ? Math.round(Number((e.com * 1000n) / e.rev)) / 10 : 0 }));
+    const unset = [...new Set(a.rows.filter((x) => !rate.has(x.source) && BigInt(x.rev) > 0n).map((x) => SRC[x.source] ?? x.source))];
+    return {
+      kpis: [{ key: 'rev', label: 'Room revenue', value: dec(tot.rev), type: 'money', definition: 'Room revenue for the stay dates, before tax.' }, { key: 'com', label: 'Commission', value: dec(tot.com), type: 'money', definition: 'Room revenue × each source’s rate.' }, { key: 'net', label: 'Net revenue', value: dec(tot.rev - tot.com), type: 'money', definition: 'Room revenue − commission.' }, { key: 'pct', label: 'Commission as share of revenue', value: tot.rev > 0n ? Math.round(Number((tot.com * 1000n) / tot.rev)) / 10 : 0, type: 'pct', definition: 'Commission ÷ room revenue.' }],
+      columns: [{ key: 'what', label: g === 'month' ? 'Month' : 'Booking source' }, { key: 'nights', label: 'Room nights', type: 'int', total: true }, { key: 'rev', label: 'Room revenue', type: 'money', total: true }, { key: 'com', label: 'Commission', type: 'money', total: true }, { key: 'net', label: 'Net revenue', type: 'money', total: true }, { key: 'pct', label: 'Commission share', type: 'pct' }],
+      rows, chart: { kind: 'bar', x: 'what', series: [{ key: 'net', label: 'Net revenue' }, { key: 'com', label: 'Commission' }] },
+      warnings: unset.length ? [`No commission rate is set for: ${unset.join(', ')}. They are counted at 0%.`] : [],
+      notes: ['Commission is worked out from the rate set for each source, not from agent statements. Room revenue only: extras, food and beverage and tax are not included.'],
+    };
   },
 };
