@@ -39,6 +39,42 @@ export class BudgetsService {
   }
 }
 
+export const SOURCES = ['WALK_IN', 'PHONE', 'WHATSAPP', 'WEBSITE', 'OTA_BOOKING_COM', 'OTA_OTHER', 'CORPORATE', 'TRAVEL_AGENT', 'CRS', 'OTHER'] as const;
+const Source = z.enum(SOURCES);
+const Commission = z.object({ pct: z.number().min(0).max(100) }).strict();
+
+/** The share of room revenue each booking source keeps (online travel agents, travel agents). A source with no entry is 0%. */
+@Injectable()
+export class CommissionsService {
+  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService) {}
+
+  async list(propertyId: string) {
+    return this.tdb.tx(async (trx) => {
+      const rows = await trx.selectFrom('source_commission').select(['source', 'pct']).where('property_id', '=', propertyId).execute();
+      const by = new Map(rows.map((r) => [r.source, Number(r.pct)]));
+      return { items: SOURCES.map((s) => ({ source: s, pct: by.get(s) ?? 0, set: by.has(s) })) };
+    });
+  }
+
+  async save(propertyId: string, source: string, userId: string, pct: number) {
+    return this.tdb.tx(async (trx) => {
+      const v = { pct: String(pct), updated_by: userId, updated_at: new Date() };
+      await trx.insertInto('source_commission').values({ tenant_id: currentTenant().tenantId, property_id: propertyId, source, ...v } as never).onConflict((oc) => oc.columns(['tenant_id', 'property_id', 'source']).doUpdateSet(v as never)).execute();
+      await this.audit.record(trx, { action: 'commission.save', resourceType: 'source_commission', resourceId: `${propertyId}:${source}`, propertyId, after: { source, pct } });
+      return { source, pct, saved: true };
+    });
+  }
+}
+
+@Controller('v1/properties/:propertyId/commissions')
+export class CommissionsController {
+  constructor(@Inject(CommissionsService) private readonly svc: CommissionsService) {}
+  @Get() @RequirePermission('report.view', P)
+  list(@Param('propertyId', new ParseUUIDPipe()) pid: string) { return this.svc.list(pid); }
+  @Put(':source') @RequirePermission('rate.manage', P)
+  save(@Param('propertyId', new ParseUUIDPipe()) pid: string, @Param('source') source: string, @Body() b: unknown) { return this.svc.save(pid, parse(Source, source), currentTenant().actorId!, parse(Commission, b).pct); }
+}
+
 @Controller('v1/properties/:propertyId/budgets')
 export class BudgetsController {
   constructor(@Inject(BudgetsService) private readonly svc: BudgetsService) {}
