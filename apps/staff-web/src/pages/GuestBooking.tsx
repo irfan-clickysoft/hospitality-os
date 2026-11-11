@@ -15,7 +15,7 @@ interface Req { id: string; kind: string; neededOn: string | null; neededTime: s
 interface Page {
   property: { name: string; city: string | null; mapsUrl: string | null; checkInTime: string; checkOutTime: string; terms: string | null };
   booking: { confirmationNo: string; status: string; guestName: string; arrival: string | null; departure: string | null; canRequest: boolean; specialRequests: string | null };
-  rooms: Room[]; requests: Req[]; slips?: Array<{ id: string; status: string; claimed: { amount: string; currency: string } | null; reference: string | null; rejectReason: string | null; submittedAt: string }>;
+  feedback?: { canGive: boolean; given: boolean }; rooms: Room[]; requests: Req[]; slips?: Array<{ id: string; status: string; claimed: { amount: string; currency: string } | null; reference: string | null; rejectReason: string | null; submittedAt: string }>;
 }
 const KINDS = ['AIRPORT_PICKUP', 'AIRPORT_DROP', 'GROUND_FLOOR', 'WHEELCHAIR', 'EARLY_CHECKIN', 'LATE_CHECKOUT', 'EXTRA_BED', 'OTHER'] as const;
 type Kind = (typeof KINDS)[number];
@@ -99,6 +99,8 @@ export function GuestBooking({ token }: { token: string }) {
         </section>
       )}
 
+      {page.feedback && (page.feedback.canGive || page.feedback.given) && <FeedbackBlock token={token} given={page.feedback.given} onDone={load} />}
+
       <section className="gb-block" aria-labelledby="gb-terms"><h2 id="gb-terms">{t('gp.terms')}</h2>
         {page.rooms.some((r) => policyLines(t, r.policy).length > 0) && <ul>{[...new Set(page.rooms.flatMap((r) => policyLines(t, r.policy)))].map((l) => <li key={l}>{l}</li>)}</ul>}
         {p.terms ? <p className="gb-terms">{p.terms}</p> : <p className="muted small">{t('gp.noTerms')}</p>}
@@ -134,5 +136,35 @@ function RequestForm({ token, kind, arrival, departure, onSent }: { token: strin
       {err && <p className="warnbox" role="alert">{t(`err.${err}` as Key) === `err.${err}` ? t('err.generic') : t(`err.${err}` as Key)}</p>}
       <div className="actions"><button className="primary" disabled={busy || need || (transfer && (!f.neededOn || !f.neededTime))} onClick={() => void send()}>{t('gp.send')}</button></div>
     </div>
+  );
+}
+
+const PARTS = ['cleanliness', 'staff', 'comfort', 'value'] as const;
+/** After the stay: how it was, in the guest's own words and a few stars. Asked once. */
+function FeedbackBlock({ token, given, onDone }: { token: string; given: boolean; onDone: () => void }) {
+  const { t } = useT();
+  const [r, setR] = useState<Record<string, number>>({}); const [rec, setRec] = useState<boolean | null>(null); const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
+  const stars = (key: string, label: string) => (
+    <fieldset className="gb-stars"><legend>{label}</legend>
+      <div className="row">{[1, 2, 3, 4, 5].map((n) => <label key={n} className="check"><input type="radio" name={`fb-${key}`} checked={r[key] === n} onChange={() => setR({ ...r, [key]: n })} /> <span aria-label={t('gp.fb.outOf', { n })}>{n}</span></label>)}</div>
+    </fieldset>);
+  const send = async () => {
+    setBusy(true); setErr(null);
+    try { await api('POST', `/v1/guest/booking/${token}/feedback`, { overall: r.overall, ...Object.fromEntries(PARTS.filter((k) => r[k]).map((k) => [k, r[k]])), ...(rec === null ? {} : { wouldRecommend: rec }), ...(comment.trim() ? { comment: comment.trim() } : {}) }); onDone(); }
+    catch (e) { setErr(e instanceof ApiError ? e.code : 'ERROR'); } finally { setBusy(false); }
+  };
+  return (
+    <section className="gb-block" aria-labelledby="gb-fb"><h2 id="gb-fb">{t('gp.fb.title')}</h2>
+      {given ? <p className="ok" role="status">✓ {t('gp.fb.thanks')}</p> : (<div className="card inner stack">
+        <p className="muted small">{t('gp.fb.help')}</p>
+        {stars('overall', t('gp.fb.overall'))}
+        {PARTS.map((k) => <div key={k}>{stars(k, t(`gp.fb.${k}` as Key))}</div>)}
+        <fieldset><legend>{t('gp.fb.recommend')}</legend><div className="row"><label className="check"><input type="radio" name="fb-rec" checked={rec === true} onChange={() => setRec(true)} /> {t('gp.fb.yes')}</label><label className="check"><input type="radio" name="fb-rec" checked={rec === false} onChange={() => setRec(false)} /> {t('gp.fb.no')}</label></div></fieldset>
+        <label>{t('gp.fb.comment')}<textarea rows={4} maxLength={1000} value={comment} onChange={(e) => setComment(e.target.value)} /></label>
+        {err && <p className="warnbox" role="alert">{t(`err.${err}` as Key) === `err.${err}` ? t('err.generic') : t(`err.${err}` as Key)}</p>}
+        <div className="actions"><button className="primary" disabled={busy || !r.overall} onClick={() => void send()}>{t('gp.fb.send')}</button></div>
+      </div>)}
+    </section>
   );
 }

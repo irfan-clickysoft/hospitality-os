@@ -61,12 +61,14 @@ export class GuestPortalService {
         typeIds.length ? trx.selectFrom('room_type_amenity as x').innerJoin('amenity as a', 'a.id', 'x.amenity_id').select(['x.room_type_id', 'a.name_en', 'a.name_ur', 'a.category']).where('x.room_type_id', 'in', typeIds).execute() : [],
         trx.selectFrom('room_assignment as a').innerJoin('room as rm', 'rm.id', 'a.room_id').leftJoin('floor as f', 'f.id', 'rm.floor_id').select(['a.assignment_ref', 'rm.number', 'f.name as floor']).where('a.assignment_ref', 'in', lines.map((l) => l.id)).where('a.status', 'in', ['ASSIGNED', 'IN_HOUSE']).execute(),
       ]);
+      const fb = await trx.selectFrom('guest_feedback').select('id').where('reservation_id', '=', reservationId).executeTakeFirst();
       const live = lines.filter((l) => !['CANCELLED', 'NO_SHOW'].includes(l.status));
       const shown = live.length ? live : lines;
       return {
         property: { name: p.name, city: p.city, mapsUrl: p.maps_url, checkInTime: String(p.check_in_time).slice(0, 5), checkOutTime: String(p.check_out_time).slice(0, 5), terms: p.terms_text },
         booking: { confirmationNo: r.confirmation_no, status: r.status, guestName: g.full_name, arrival: shown.map((l) => l.arrival).sort()[0] ?? null, departure: shown.map((l) => l.departure).sort().slice(-1)[0] ?? null,
           canRequest: OPEN.includes(r.status), specialRequests: r.special_requests },
+        feedback: { canGive: lines.some((l) => l.status === 'CHECKED_OUT'), given: !!fb },
         rooms: shown.map((l) => {
           const t = types.find((x) => x.id === l.room_type_id)!; const a = assigns.find((x) => x.assignment_ref === l.id);
           return {
@@ -81,6 +83,19 @@ export class GuestPortalService {
           .map((x) => ({ id: x.id, status: x.status, claimed: x.claimed_amount_minor === null ? null : fmt(x.claimed_amount_minor, r.currency), reference: x.reference, rejectReason: x.reject_reason, submittedAt: x.submitted_at })),
         requests: reqs.map((q) => ({ id: q.id, kind: q.kind, neededOn: q.needed_on, neededTime: q.needed_time, flightNo: q.flight_no, passengers: q.passengers, note: q.note, status: q.status, staffNote: q.staff_note, createdAt: q.created_at })),
       };
+    });
+  }
+
+  /** Once a stay has ended the guest can say how it was. One answer per booking. */
+  async feedback(reservationId: string, i: z.infer<typeof S.GuestFeedback>) {
+    return this.tdb.tx(async (trx) => {
+      const r = await trx.selectFrom('reservation').select(['id', 'property_id']).where('id', '=', reservationId).forUpdate().executeTakeFirstOrThrow();
+      const done = await trx.selectFrom('reservation_room').select('id').where('reservation_id', '=', reservationId).where('status', '=', 'CHECKED_OUT').executeTakeFirst();
+      if (!done) throw new ConflictException({ code: 'FEEDBACK_NOT_YET', message: 'You can tell us about your stay once you have checked out.' });
+      if (await trx.selectFrom('guest_feedback').select('id').where('reservation_id', '=', reservationId).executeTakeFirst()) throw new ConflictException({ code: 'ALREADY_GIVEN', message: 'Thank you: we already have your feedback.' });
+      await trx.insertInto('guest_feedback').values({ tenant_id: currentTenant().tenantId, property_id: r.property_id, reservation_id: reservationId, overall: i.overall, cleanliness: i.cleanliness ?? null, staff: i.staff ?? null, comfort: i.comfort ?? null, value: i.value ?? null, would_recommend: i.wouldRecommend ?? null, comment: i.comment || null } as never).execute();
+      await this.audit.record(trx, { action: 'guest_feedback.create', resourceType: 'reservation', resourceId: reservationId, propertyId: r.property_id, after: { overall: i.overall } });
+      return { thanks: true };
     });
   }
 
