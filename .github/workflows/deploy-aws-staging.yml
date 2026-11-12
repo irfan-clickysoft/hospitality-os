@@ -1,0 +1,84 @@
+name: Deploy to AWS staging
+# Tests, then builds the release ONCE (API and web images, pinned by digest in Amazon ECR), then deploys it to Stay360's own
+# AWS staging server with clickysoft-platform's ./deploy, the same command used from a terminal.
+# AWS access is short-lived through GitHub OIDC: no AWS keys are stored in this repository. Pull requests from forks
+# cannot get these credentials (GitHub gives them no OIDC token), and the build role only trusts main.
+#   push to main          -> tests -> build this commit -> deploy to AWS staging (Sunset demo test copy, no guests, no e-mail)
+#   Run workflow (manual)  -> deploy an existing release id without rebuilding (e.g. to roll back)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Existing release id (12 characters) to deploy without rebuilding. Leave empty to test and build this commit.
+        required: false
+        type: string
+
+concurrency:
+  group: aws-staging-stay360
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    if: github.event_name == 'push' || inputs.release == ''
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: test
+    # only main may build releases (the AWS build role trusts nothing else)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    outputs:
+      release: ${{ steps.build.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: irfan-clickysoft/clickysoft-platform
+          ref: main
+          ssh-key: ${{ secrets.PLATFORM_REPO_KEY }}
+          path: platform
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::159412675902:role/gha-build-stay360
+          aws-region: ap-south-1
+      - uses: docker/setup-buildx-action@v3
+      - uses: crazy-max/ghaction-github-runtime@v3
+      - id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLATFORM_BUILD_CACHE: gha
+        run: |
+          rel=$(platform/deploy build stay360 --ref "$GITHUB_SHA")
+          echo "release=$rel" >> "$GITHUB_OUTPUT"
+          echo "Built release \`$rel\` from $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: [test, build]
+    # Only after a successful test + build, or a manual run naming an existing release. Never after a failed test.
+    if: always() && (needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.release != ''))
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: irfan-clickysoft/clickysoft-platform
+          ref: main
+          ssh-key: ${{ secrets.PLATFORM_REPO_KEY }}
+          path: platform
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::159412675902:role/gha-deploy-stay360-staging
+          aws-region: ap-south-1
+      - name: Deploy
+        env:
+          RELEASE: ${{ needs.build.outputs.release || inputs.release }}
+        run: |
+          platform/deploy stay360 staging --release "$RELEASE"
+          { echo "### Stay360 staging"; platform/deploy history stay360 staging | head -6 | sed 's/^/    /'; } >> "$GITHUB_STEP_SUMMARY"
