@@ -1,6 +1,10 @@
 import { sql } from 'kysely';
 import type { Trx } from './types.js';
 import { addDays } from './util.js';
+import { BUCKETS, MIN_SAMPLES, bucketOf } from './pace.js';
+
+/** How many days ahead each night's forecast is kept. */
+export const FORECAST_HORIZON_DAYS = 60;
 
 /** How far ahead the books are saved. */
 export const SNAPSHOT_HORIZON_DAYS = 365;
@@ -22,5 +26,29 @@ export async function takeBookingSnapshot(trx: Trx, tenantId: string, propertyId
   const rows = ins.rows[0]?.n ?? 0;
   await sql`INSERT INTO booking_snapshot_run (tenant_id, property_id, snapshot_date, source, taken_by, horizon_days, rows) VALUES (${tenantId}, ${propertyId}, ${date}::date, ${source}, ${userId}, ${SNAPSHOT_HORIZON_DAYS}, ${rows})
     ON CONFLICT (tenant_id, property_id, snapshot_date) DO UPDATE SET source = EXCLUDED.source, taken_at = now(), taken_by = EXCLUDED.taken_by, horizon_days = EXCLUDED.horizon_days, rows = EXCLUDED.rows`.execute(trx);
+  await saveForecast(trx, tenantId, propertyId, date);
   return { rows };
+}
+
+/**
+ * Keeps the room-night forecast as it stood when `date` closed (the same method as the forecast report: nights on the books + the typical pickup for that distance, capped at sellable rooms),
+ * for the next FORECAST_HORIZON_DAYS stay dates. Dates without enough history are not saved. Repeating a date replaces it.
+ */
+export async function saveForecast(trx: Trx, tenantId: string, propertyId: string, date: string): Promise<{ rows: number }> {
+  await trx.deleteFrom('forecast_saved').where('property_id', '=', propertyId).where('made_on', '=', date).execute();
+  const hist = await sql<{ lead: number; pickup: number }>`WITH h AS (SELECT snapshot_date AS sd, stay_date AS d, sum(rooms)::int AS otb FROM booking_snapshot WHERE tenant_id = ${tenantId} AND property_id = ${propertyId} AND stay_date BETWEEN ${addDays(date, -89)}::date AND ${date}::date AND snapshot_date <= stay_date GROUP BY 1, 2)
+    SELECT (h.d - h.sd)::int AS lead, (s.rooms_sold - h.otb)::int AS pickup FROM h JOIN daily_property_stats s ON s.tenant_id = ${tenantId} AND s.property_id = ${propertyId} AND s.business_date = h.d WHERE h.sd < h.d`.execute(trx);
+  const stats = BUCKETS.map(() => ({ n: 0, sum: 0 })); for (const x of hist.rows) { const b = bucketOf(x.lead); if (b >= 0) { stats[b]!.n++; stats[b]!.sum += x.pickup; } }
+  const last = addDays(date, FORECAST_HORIZON_DAYS);
+  const books = await sql<{ d: string; n: number; s: number }>`WITH d AS (SELECT generate_series(${addDays(date, 1)}::date, ${last}::date, '1 day')::date AS day)
+    SELECT d.day::text AS d, coalesce((SELECT sum(rooms) FROM booking_snapshot WHERE tenant_id = ${tenantId} AND property_id = ${propertyId} AND snapshot_date = ${date}::date AND stay_date = d.day), 0)::int AS n,
+      ((SELECT count(*) FROM room WHERE tenant_id = ${tenantId} AND property_id = ${propertyId} AND status = 'ACTIVE') - (SELECT count(DISTINCT b.room_id) FROM room_block b WHERE b.tenant_id = ${tenantId} AND b.property_id = ${propertyId} AND b.cancelled_at IS NULL AND b.start_date <= d.day AND b.end_date > d.day))::int AS s FROM d`.execute(trx);
+  const out = [];
+  for (const x of books.rows) {
+    const lead = Math.round((Date.parse(x.d) - Date.parse(date)) / 86_400_000); const b = bucketOf(lead); const st = b >= 0 ? stats[b]! : { n: 0, sum: 0 };
+    if (st.n < MIN_SAMPLES) continue;
+    const avg = st.sum / st.n; out.push({ tenant_id: tenantId, property_id: propertyId, made_on: date, stay_date: x.d, lead, on_books: x.n, expected_pickup: String(Math.round(avg * 100) / 100), forecast_nights: Math.min(x.s, Math.max(0, Math.round(x.n + avg))), sellable: x.s, samples: st.n });
+  }
+  for (let i = 0; i < out.length; i += 500) await trx.insertInto('forecast_saved').values(out.slice(i, i + 500) as never).execute();
+  return { rows: out.length };
 }
