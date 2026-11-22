@@ -13,16 +13,20 @@ const foreignLine = (g: CardView['guests'][number]) => FOREIGN.filter(([k]) => g
 const money = (minor: string | bigint, cur: string): string => { const n = BigInt(minor); const neg = n < 0n; const a = neg ? -n : n; const w = (a / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); const f = (a % 100n).toString().padStart(2, '0'); return `${neg ? '−' : ''}${cur} ${w}${f === '00' ? '' : `.${f}`}`; };
 
 /** Shown on the card when the property has not written its own rules. */
-export const DEFAULT_RULES = `1. Check-in and check-out follow the times printed on this card; late departure may be charged.
+export const DEFAULT_RULES = `1. Check-in and check-out follow the times printed on this Reg card; late departure will be charged.
 2. A valid photo ID (CNIC, NICOP or passport) is required for every adult guest; foreign guests are registered with the authorities as the law requires.
-3. Only the guests named on this card may stay in the room. Visitors must leave by 10 pm.
-4. Smoking is not allowed inside the rooms; a cleaning charge applies.
+3. Only the guests named on this card can stay in the room. Visitors are not allowed in the room.
+4. Smoking is not allowed inside the rooms; Penalty will be 10,000/- Rupees.
 5. Guests are responsible for damage to or loss of hotel property during their stay.
-6. The hotel is not responsible for valuables left in the room; please use the safe.
+6. The hotel is not responsible for valuables left in the room; please check your room before check-out.
 7. Please keep noise low between 10 pm and 7 am.
-8. Illegal items, weapons and unlawful activity are not allowed on the premises.
-9. Rent is payable in advance or as agreed; taxes are added as applicable. The balance is settled at check-out.
-10. Cancellation and refund terms follow the booking confirmation.`;
+8. Illegal items, weapons and unlawful activity alcohol, drugs are not allowed on the premises.
+9. Room Rent is payable in advance or as agreed; taxes are added as applicable. The balance should be clear/settle before check-out.
+10. Cancellation and refund terms follow the booking confirmation.
+11. Outside parking is not responsibility of Hotel.
+12. Food items are not allowed inside the rooms.
+13. Extra Mattress will be charged.
+14. Hotel management can change any policy or terms at any time.`;
 
 export interface CardView {
   company: string; property: string; confirmationNo: string; room: string | null; roomType: string; arrival: string; departure: string; adults: number; children: number; printedOn: string; idRevealed: boolean;
