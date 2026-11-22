@@ -65,6 +65,7 @@ export const SECTIONS: Section[] = [
     { id: 'accounts', label: 'nav.accounts', show: any('paymentaccount.view'), Page: L(() => import('../desk/Accounts.js'), 'Accounts') },
     { id: 'messages', label: 'nav.messages', show: any('tenant.manage'), Page: L(() => import('../pages/MessageTemplates.js'), 'MessageTemplates') },
     { id: 'readiness', label: 'nav.readiness', show: any('management.view'), Page: L(() => import('../desk/Readiness.js'), 'Readiness') },
+    { id: 'roster', label: 'ro.nav', show: any('rate.manage', 'management.view'), Page: L(() => import('../desk/Roster.js'), 'Roster') },
     { id: 'staff', label: 'nav.staff', show: any('user.manage'), Page: L(() => import('../desk/Staff.js'), 'Staff') },
     { id: 'import', label: 'nav.import', show: any('data.import'), Page: L(() => import('../desk/Import.js'), 'Import') },
   ] },
