@@ -1,36 +1,29 @@
-// Browser test: a pasted guest list fills the registration card, and a gate visitor staying the night becomes a registered guest.
+// Browser test: Administration → Roster: a manager sets a standard, adds and removes a shift, and the staffing forecast report shows it.
 import { chromium } from 'playwright';
-import { BASE, session, goTab, mainNav } from './lib.mjs';
+import { BASE, mainNav } from './lib.mjs';
 
 const browser = await chromium.launch({ ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}), args: ['--no-sandbox'] });
 const fail = [];
 const check = (name, cond) => { console.log((cond ? 'PASS ' : 'FAIL ') + name); if (!cond) fail.push(name); };
-const stamp = Date.now().toString().slice(-6);
-const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+const page = await (await browser.newContext({ viewport: { width: 1400, height: 1000 } })).newPage();
 page.on('pageerror', (e) => { console.log('PAGEERROR', e.message); fail.push('pageerror ' + e.message); });
 await page.goto(BASE);
 await page.getByLabel(/Company code/).fill('sunset'); await page.getByLabel(/^Email/).fill('manager@sunset.local'); await page.getByLabel(/^Password/).fill(process.env.E2E_PASSWORD ?? 'sunset-demo-passphrase');
 await page.locator('form button.primary').click(); await mainNav(page).waitFor();
-
-await goTab(page, 'Bookings');
-await page.getByRole('button', { name: 'Walk-in' }).first().click();
-const sheet = page.locator('.sheet').last();
-await sheet.getByRole('button', { name: 'Paste a guest list' }).click();
-await sheet.getByLabel('Guest list').fill(`Ali Roster ${stamp}, 3520212345671\nSara Roster ${stamp}, child\nJohn Roster ${stamp}, GB, 123456789\nx`);
-await sheet.getByRole('button', { name: 'Add these guests' }).click();
-check('a line that cannot be read is reported', (await sheet.getByText(/Could not read 1 line/).count()) === 1);
-check('the three people are added after the main guest', (await sheet.locator('fieldset.guestcard', { hasText: 'Companion' }).count()) === 3);
-check('the CNIC is tidied and the child has no ID', (await sheet.getByLabel('ID number').nth(1).inputValue()) === '35202-1234567-1' && (await sheet.locator('fieldset.guestcard').nth(2).getByLabel('Child', { exact: true }).isChecked()));
-await sheet.getByRole('button', { name: 'Close' }).last().click().catch(() => {});
-
-// the gate
-const api = await session('gate@sunset.local');
-const pid = (await api.get('/v1/me/properties')).items.find((p) => p.name.endsWith('Boulevard')).id;
-await api.post(`/v1/properties/${pid}/gate/visits`, { kind: 'VISITOR', name: `Overnight Visitor ${stamp}`, phone: `0301${stamp}9`, visiting: 'Room 101' });
-await page.evaluate(() => { window.location.hash = '/tasks?tab=gate'; });
-const row = page.locator('li', { hasText: `Overnight Visitor ${stamp}` });
-await row.getByRole('button', { name: /register as guest/ }).click();
-await row.getByText('Registered as guest').waitFor();
-check('the visitor is now a registered guest', true);
-await browser.close();
-console.log(fail.length ? `\nFAILED: ${fail.length}` : '\nALL PASSED'); process.exit(fail.length ? 1 : 0);
+await page.evaluate(() => { window.location.hash = '/admin?tab=roster'; });
+await page.getByRole('heading', { name: 'Staff roster' }).waitFor({ timeout: 15000 }); check('the Roster tab opens', true);
+await page.getByLabel(/Housekeeping: Rooms per person/).fill('5'); await page.getByLabel(/Housekeeping: At least/).fill('1');
+await page.getByLabel(/Housekeeping: Rooms per person/).locator('xpath=ancestor::tr').getByRole('button', { name: 'Save' }).click();
+await page.getByText('Saved').first().waitFor({ timeout: 10000 }); check('the standard saves', true);
+await page.getByRole('button', { name: /^Add a shift for/ }).first().click();
+await page.getByLabel('Department').first().selectOption('HOUSEKEEPING');
+await page.getByRole('button', { name: 'Save' }).first().click();
+await page.getByText('08:00–16:00').first().waitFor({ timeout: 10000 }); check('a shift is added to the grid', true);
+await page.reload(); await page.getByText('08:00–16:00').first().waitFor({ timeout: 15000 }); check('it is still there after reload', true);
+await page.evaluate(() => { window.location.hash = '/reports/center?r=staffing-forecast'; });
+await page.getByText('Staffing forecast').first().waitFor({ timeout: 15000 });
+check('the report lists Housekeeping', await page.getByText('Housekeeping').first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false));
+await page.evaluate(() => { window.location.hash = '/admin?tab=roster'; });
+await page.getByRole('button', { name: /^Remove the shift for/ }).first().click(); await page.getByText('08:00–16:00').first().waitFor({ state: 'detached', timeout: 10000 }).catch(() => {});
+check('the shift is removed', (await page.getByText('08:00–16:00').count()) === 0);
+await browser.close(); if (fail.length) { console.log('FAILED', fail); process.exit(1); } console.log('all passed');
