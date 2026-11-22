@@ -30,7 +30,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
   const { property, can } = useAuth();
   const base = `/v1/properties/${property!.id}`;
   const [step, setStep] = useState<'search' | 'options' | 'guest' | 'confirm' | 'done'>('search');
-  const [arrival, setArrival] = useState(initial.arrival); const [nights, setNights] = useState(1); const [adults, setAdults] = useState(2); const [children, setChildren] = useState(0);
+  const [arrival, setArrival] = useState(initial.arrival); const [nights, setNights] = useState(1); const [roomsWanted, setRoomsWanted] = useState(1); const [adults, setAdults] = useState(2); const [children, setChildren] = useState(0);
   const companies = useLive<{ items: Array<{ id: string; name: string; status: string }> }>(can('company.view') ? '/v1/companies' : null, 300_000);
   const [companyId, setCompanyId] = useState(''); const [eta, setEta] = useState('');
   const [foreign, setForeign] = useState(false); const [source, setSource] = useState<(typeof SOURCES)[number]>('PHONE');
@@ -103,6 +103,9 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
         <div className="grid2"><label>{t('bk.arrival')}<input type="date" value={arrival} min={businessDate} onChange={(e) => setArrival(e.target.value)} dir="ltr" /></label><label>{t('bk.departure')}<input type="date" value={departure} min={addDays(arrival, 1)} onChange={(e) => { if (e.target.value) setNights(Math.min(60, Math.max(1, nightsBetween(arrival, e.target.value)))); }} dir="ltr" /></label></div>
         <div className="grid2"><label>{t('bk.nights')}<input type="number" min={1} max={60} value={nights} onChange={(e) => setNights(Math.max(1, Number(e.target.value) || 1))} dir="ltr" /></label></div>
         <p className="muted small">{shortDate(arrival, locale)} → {shortDate(departure, locale)}</p>
+        <fieldset className="card inner stack"><legend>{t('bk.group')}</legend>
+          <label>{t('bk.groupRooms')}<input type="number" min={1} max={MAX_ROOMS} value={roomsWanted} onChange={(e) => setRoomsWanted(Math.max(1, Math.min(MAX_ROOMS, Number(e.target.value) || 1)))} dir="ltr" /></label>
+          <p className="muted small">{t('bk.groupHelp', { max: MAX_ROOMS })}</p></fieldset>
         <div className="grid2"><label>{t('d.adults')}<input type="number" min={1} max={10} value={adults} onChange={(e) => setAdults(Math.max(1, Number(e.target.value) || 1))} dir="ltr" /></label><label>{t('d.children')}<input type="number" min={0} max={10} value={children} onChange={(e) => setChildren(Math.max(0, Number(e.target.value) || 0))} dir="ltr" /></label></div>
         <label>{t('bk.source')}<select value={source} onChange={(e) => setSource(e.target.value as typeof source)}>{SOURCES.map((s) => <option key={s} value={s}>{t(`src.${s}` as Key)}</option>)}</select></label>
         {companies.data && companies.data.items.length > 0 && <label>{t('ar.company')} ({t('common.optional')})<select value={companyId} onChange={(e) => setCompanyId(e.target.value)}><option value="">—</option>{companies.data.items.filter((c) => c.status !== 'ARCHIVED').map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
@@ -124,6 +127,7 @@ export function NewBooking({ initial, businessDate, onClose, onOpenReservation }
           {(negActive || Object.values(nightPct).some((v) => v !== '')) && <DiscountReasonField value={why} onChange={setWhy} />}
         </fieldset>
         {options.length === 0 && <p className="warnbox">{t('bk.noRooms')}</p>}
+        {roomsWanted > 1 && options.length > 0 && <p className={roomCount === roomsWanted ? 'okbox' : 'warnbox'} role="status">{t('bk.groupPick', { want: roomsWanted, have: roomCount })}</p>}
         {options.map((o) => (
           <div key={`${o.roomType.id}-${o.plan.id}`} className="card inner stack">
             <div className="row between"><strong>{o.roomType.name}</strong><span className="muted small">{o.plan.name}</span></div>

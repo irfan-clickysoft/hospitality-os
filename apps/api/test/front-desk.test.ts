@@ -277,7 +277,7 @@ describe('the document matrix at check-in', () => {
     const url = `/v1/properties/${w.pid}/reservations/${r.json().id}/rooms/${r.json().lines[0].id}`;
     const html = (await call('GET', `${url}/registration-card`, O)).body;
     expect(html).toContain('Imran Card'); expect(html).toContain('Spouse of main guest'); expect(html).toContain('Business'); expect(html).toContain('Total nights');
-    expect(html).toContain('Rent and payment'); expect(html).toContain('Advance received'); expect(html).toContain('Rules &amp; policies'); expect(html).toContain('check-out by');
+    expect(html).toContain('Rent and payment'); expect(html).toContain('Advance received'); expect(html).toContain('Rules &amp; policies'); expect(html).toContain('Penalty will be 10,000/- Rupees'); expect(html).toContain('14. Hotel management can change any policy or terms at any time.'); expect(html).toContain('check-out by');
     const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
     expect((await call('POST', `${url}/registration-sign`, O, { name: 'Imran Card', accepted: true, signature: 'javascript:alert(1)' })).statusCode).toBe(400);
     expect((await call('POST', `${url}/registration-sign`, O, { name: 'Imran Card', accepted: false, signature: png })).statusCode).toBe(400);
