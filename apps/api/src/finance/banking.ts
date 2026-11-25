@@ -196,7 +196,7 @@ export class BankingService {
   }
 
   // ---- simple vouchers
-  private async moneyLine(trx: Trx, m: z.infer<typeof MoneyRef>): Promise<{ account: string; branchId: string | null; ref: string }> {
+  async moneyLine(trx: Trx, m: z.infer<typeof MoneyRef>): Promise<{ account: string; branchId: string | null; ref: string }> {
     if (m.kind === 'BANK') {
       if (!m.bankId) throw err(400, 'VALIDATION_FAILED', 'Choose the bank account');
       const b = await trx.selectFrom('payment_account as p').leftJoin('gl_account as g', (j) => j.onRef('g.id', '=', 'p.gl_account_id').onRef('g.tenant_id', '=', 'p.tenant_id')).select(['g.code', 'p.name']).where('p.id', '=', m.bankId).where('p.kind', '=', 'BANK').executeTakeFirst();

@@ -43,6 +43,9 @@ await page.getByRole('heading', { name: 'Cash and petty cash' }).waitFor({ timeo
 await page.getByLabel('Branch').last().selectOption({ index: 1 }); await page.getByLabel('Account name').fill('Front desk cash');
 await page.getByRole('button', { name: 'Add a cash drawer' }).last().click();
 await page.getByText('Front desk cash').first().waitFor({ timeout: 15000 }); check('a cash drawer is added', true);
+await page.evaluate(() => { window.location.hash = '/finance?tab=interbranch'; });
+await page.getByRole('heading', { name: 'Inter-branch' }).waitFor({ timeout: 15000 }); check('the Inter-branch tab opens', true);
+check('it says there is nothing yet', await page.getByText('No inter-branch entries yet.').first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false));
 await page.evaluate(() => { window.location.hash = '/finance?tab=vouchers'; });
 await page.getByRole('button', { name: 'New journal voucher' }).click();
 await page.getByLabel('What it is for').fill('Repair paid in cash');
