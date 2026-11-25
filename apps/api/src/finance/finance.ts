@@ -21,7 +21,7 @@ const Control = z.enum(['CASH', 'PETTY_CASH', 'BANK', 'RECEIVABLE', 'PAYABLE', '
 
 const AccountIn = z.object({ code: z.string().regex(/^[0-9]{4,8}$/, 'Use 4 to 8 digits'), name: z.string().trim().min(2).max(120), type: z.enum(TYPES), parentCode: z.string().regex(/^[0-9]{4,8}$/).optional(), isGroup: z.boolean().default(false), control: Control.optional(), normalBalance: z.enum(['DEBIT', 'CREDIT']).optional(), note: z.string().trim().max(300).optional() }).strict();
 const AccountEdit = z.object({ name: z.string().trim().min(2).max(120).optional(), active: z.boolean().optional(), note: z.string().trim().max(300).nullish() }).strict();
-const Line = z.object({ account: z.string().regex(/^[0-9]{4,8}$/, 'Use the account code'), branchId: z.string().uuid().nullish(), counterpartyBranchId: z.string().uuid().nullish(), debit: amount.optional(), credit: amount.optional(), description: z.string().trim().max(300).optional(), reference: z.string().trim().max(120).optional() }).strict();
+const Line = z.object({ account: z.string().regex(/^[0-9]{4,8}$/, 'Use the account code'), branchId: z.string().uuid().nullish(), counterpartyBranchId: z.string().uuid().nullish(), supplierId: z.string().uuid().nullish(), debit: amount.optional(), credit: amount.optional(), description: z.string().trim().max(300).optional(), reference: z.string().trim().max(120).optional() }).strict();
 const VoucherIn = z.object({ type: z.literal('JV'), date, postingDate: date.optional(), narration: z.string().trim().min(3).max(500), lines: z.array(Line).min(2).max(100) }).strict();
 const Reverse = z.object({ date, reason: z.string().trim().min(3).max(300) }).strict();
 const Reject = z.object({ reason: z.string().trim().min(3).max(300) }).strict();
@@ -32,7 +32,7 @@ const TbQ = z.object({ from: date, to: date, branchId: z.string().uuid().optiona
 const GlQ = z.object({ account: z.string().regex(/^[0-9]{4,8}$/), from: date, to: date, branchId: z.string().uuid().optional() });
 
 /** Starter chart of accounts for a hotel company. The branch is a dimension on each line, so one cash account serves every branch. The finance controller approves the final list. */
-export type VType = 'JV' | 'CRV' | 'BRV' | 'CPV' | 'BPV' | 'CTV' | 'IBEV' | 'IBTV';
+export type VType = 'JV' | 'CRV' | 'BRV' | 'CPV' | 'BPV' | 'CTV' | 'IBEV' | 'IBTV' | 'SBV' | 'SPV';
 export type CreateArgs = Omit<z.infer<typeof VoucherIn>, 'type'> & { type: VType };
 
 export const STARTER_COA: ReadonlyArray<[string, string, string, boolean, string | null, string | null]> = [
@@ -156,7 +156,7 @@ export class FinanceService {
 
   // ---- vouchers
   private async lines(trx: Trx, cur: string, lines: z.infer<typeof Line>[]) {
-    const out: Array<{ account_id: string; property_id: string | null; counterparty_property_id: string | null; debit_minor: string; credit_minor: string; description: string | null; reference: string | null }> = [];
+    const out: Array<{ account_id: string; property_id: string | null; counterparty_property_id: string | null; supplier_id: string | null; debit_minor: string; credit_minor: string; description: string | null; reference: string | null }> = [];
     for (const [n, l] of lines.entries()) {
       const d = minor(l.debit, cur), c = minor(l.credit, cur);
       if ((d > 0n) === (c > 0n)) throw err(400, 'VALIDATION_FAILED', `Line ${n + 1}: enter either a debit or a credit, not both and not neither`);
@@ -170,8 +170,11 @@ export class FinanceService {
         if (l.branchId === l.counterpartyBranchId) throw err(400, 'SAME_BRANCH', `Line ${n + 1}: the two branches must be different`);
       } else if (l.counterpartyBranchId) throw err(400, 'INTERBRANCH_BRANCHES', `Line ${n + 1}: only a Due From / Due To line names another branch`);
       if (l.counterpartyBranchId && !(await trx.selectFrom('property').select('id').where('id', '=', l.counterpartyBranchId).executeTakeFirst())) throw err(400, 'BRANCH_UNKNOWN', `Line ${n + 1}: the other branch does not exist`);
+      if (a.control_type === 'PAYABLE') { if (!l.supplierId) throw err(400, 'SUPPLIER_REQUIRED', `Line ${n + 1}: a line on the payables account must name the supplier`); }
+      else if (l.supplierId) throw err(400, 'SUPPLIER_REQUIRED', `Line ${n + 1}: only a line on the payables account names a supplier`);
+      if (l.supplierId && !(await trx.selectFrom('supplier').select('id').where('id', '=', l.supplierId).executeTakeFirst())) throw err(400, 'SUPPLIER_UNKNOWN', `Line ${n + 1}: that supplier does not exist`);
       await this.checkBank(trx, a.id, l.branchId ?? null, n + 1);
-      out.push({ account_id: a.id, property_id: l.branchId ?? null, counterparty_property_id: l.counterpartyBranchId ?? null, debit_minor: d.toString(), credit_minor: c.toString(), description: l.description ?? null, reference: l.reference ?? null });
+      out.push({ account_id: a.id, property_id: l.branchId ?? null, counterparty_property_id: l.counterpartyBranchId ?? null, supplier_id: l.supplierId ?? null, debit_minor: d.toString(), credit_minor: c.toString(), description: l.description ?? null, reference: l.reference ?? null });
     }
     return out;
   }
@@ -245,10 +248,14 @@ export class FinanceService {
       if (v.created_by === userId && (ownerTitled.rows[0]!.n > 0 || v.voucher_type === 'IBEV' || v.voucher_type === 'IBTV' || BigInt(v.total_minor) > BigInt(s.self_approve_limit_minor))) throw err(403, 'FINANCE_SELF_APPROVAL', 'You prepared this voucher, so someone else has to approve it');
       await this.assertOpen(trx, v.posting_date);
       const lines = await trx.selectFrom('voucher_line').selectAll().where('voucher_id', '=', id).orderBy('line_no').execute();
-      await trx.insertInto('gl_entry').values(lines.map((l) => ({ tenant_id: currentTenant().tenantId, voucher_id: id, line_id: l.id, account_id: l.account_id, property_id: l.property_id, counterparty_property_id: l.counterparty_property_id, posting_date: v.posting_date, debit_minor: l.debit_minor, credit_minor: l.credit_minor })) as never).execute();
+      await trx.insertInto('gl_entry').values(lines.map((l) => ({ tenant_id: currentTenant().tenantId, voucher_id: id, line_id: l.id, account_id: l.account_id, property_id: l.property_id, counterparty_property_id: l.counterparty_property_id, supplier_id: l.supplier_id, posting_date: v.posting_date, debit_minor: l.debit_minor, credit_minor: l.credit_minor })) as never).execute();
       const now = new Date();
       await trx.updateTable('voucher').set({ status: 'POSTED', approved_by: userId, approved_at: now, posted_by: userId, posted_at: now } as never).where('id', '=', id).execute();
       await sql`UPDATE bank_suspense_item SET status = 'ALLOCATED' WHERE allocated_voucher_id = ${id}`.execute(trx);
+      if (v.reverses_voucher_id) {                           // undoing a supplier payment gives the bills back what was paid; undoing a bill voids it
+        await sql`UPDATE supplier_bill b SET paid_minor = b.paid_minor - a.amount_minor FROM supplier_payment p JOIN supplier_payment_alloc a ON a.tenant_id = p.tenant_id AND a.payment_id = p.id WHERE p.voucher_id = ${v.reverses_voucher_id} AND b.tenant_id = a.tenant_id AND b.id = a.bill_id`.execute(trx);
+        await sql`UPDATE supplier_bill SET reversed = true WHERE voucher_id = ${v.reverses_voucher_id}`.execute(trx);
+      } else await sql`UPDATE supplier_bill b SET paid_minor = b.paid_minor + a.amount_minor FROM supplier_payment p JOIN supplier_payment_alloc a ON a.tenant_id = p.tenant_id AND a.payment_id = p.id WHERE p.voucher_id = ${id} AND b.tenant_id = a.tenant_id AND b.id = a.bill_id`.execute(trx);
       await this.audit.record(trx, { action: 'finance.voucher.post', resourceType: 'voucher', resourceId: id, after: { voucherNo: v.voucher_no, total: dec(v.total_minor, v.currency), postingDate: v.posting_date } });
       return { id, voucherNo: v.voucher_no, status: 'POSTED' };
     });
@@ -280,12 +287,13 @@ export class FinanceService {
     return this.tdb.tx(async (trx) => {
       const v = await this.load(trx, id);
       if (v.status !== 'POSTED') throw err(409, 'NOT_POSTED', 'Only a posted voucher can be reversed');
+      if (v.voucher_type === 'SBV') { const b = await trx.selectFrom('supplier_bill').select(['id', 'paid_minor']).where('voucher_id', '=', id).executeTakeFirst(); const pend = b ? await sql<{ n: number }>`SELECT count(*)::int AS n FROM supplier_payment_alloc a JOIN supplier_payment p ON p.tenant_id = a.tenant_id AND p.id = a.payment_id JOIN voucher pv ON pv.tenant_id = p.tenant_id AND pv.id = p.voucher_id WHERE a.bill_id = ${b.id} AND pv.status IN ('DRAFT','SUBMITTED','REJECTED','POSTED') AND NOT EXISTS (SELECT 1 FROM voucher r WHERE r.reverses_voucher_id = pv.id AND r.status = 'POSTED')`.execute(trx) : null; if (b && (BigInt(b.paid_minor) > 0n || (pend?.rows[0]?.n ?? 0) > 0)) throw err(409, 'SUPPLIER_BILL_HAS_PAYMENTS', 'This bill has payments against it. Reverse those first.'); }
       const live = await trx.selectFrom('voucher').select('id').where('reverses_voucher_id', '=', id).where('status', 'in', ['DRAFT', 'SUBMITTED', 'POSTED']).executeTakeFirst();
       if (live) throw err(409, 'ALREADY_REVERSED', 'This voucher already has a reversal');
       await this.assertOpen(trx, i.date);
       const lines = await trx.selectFrom('voucher_line').selectAll().where('voucher_id', '=', id).orderBy('line_no').execute();
       const r = await trx.insertInto('voucher').values({ tenant_id: currentTenant().tenantId, voucher_type: v.voucher_type, voucher_date: i.date, posting_date: i.date, narration: `Reversal of ${v.voucher_no}: ${i.reason}`.slice(0, 500), currency: v.currency, total_minor: v.total_minor, reverses_voucher_id: id, created_by: userId } as never).returning('id').executeTakeFirstOrThrow();
-      await this.writeLines(trx, r.id, lines.map((l) => ({ account_id: l.account_id, property_id: l.property_id, counterparty_property_id: l.counterparty_property_id, debit_minor: l.credit_minor, credit_minor: l.debit_minor, description: l.description, reference: l.reference })));
+      await this.writeLines(trx, r.id, lines.map((l) => ({ account_id: l.account_id, property_id: l.property_id, counterparty_property_id: l.counterparty_property_id, supplier_id: l.supplier_id, debit_minor: l.credit_minor, credit_minor: l.debit_minor, description: l.description, reference: l.reference })));
       await this.audit.record(trx, { action: 'finance.voucher.reverse', resourceType: 'voucher', resourceId: id, after: { reversal: r.id, reason: i.reason } });
       return { id: r.id };
     });

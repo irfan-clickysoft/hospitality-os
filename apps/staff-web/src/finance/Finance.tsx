@@ -594,3 +594,113 @@ export function FinStatements() {
     </section>
   );
 }
+
+interface Supp { id: string; name: string; ntn: string | null; termsDays: number; status: string; owed: string; contactName: string | null; phone: string | null; iban: string | null; accountNumber: string | null }
+interface SBill { id: string; branch: string; billNo: string; billDate: string; dueDate: string; total: string; paid: string; outstanding: string; available: string; status: string; overdueDays: number; voucherId: string; supplierId: string; supplier: string }
+const SB_TONE: Record<string, 'neutral' | 'warn' | 'clean' | 'urgent'> = { OPEN: 'warn', PART_PAID: 'warn', PAID: 'clean', DRAFT: 'neutral', SUBMITTED: 'neutral', REJECTED: 'urgent', REVERSED: 'neutral' };
+
+/** The people the hotels buy from, what is owed to each, and the bills and payments that make it up. */
+export function FinSuppliers() {
+  const { t } = useT(); const { can } = useAuth(); const { busy, problem, run } = useAction();
+  const [rows, setRows] = useState<Supp[] | null>(null); const [open, setOpen] = useState<Supp | null>(null); const [f, setF] = useState({ name: '', ntn: '', terms: '30' });
+  const load = () => api<{ items: Supp[] }>('GET', '/v1/finance/suppliers').then((r) => setRows(r.items));
+  useEffect(() => { void load(); }, []);
+  if (!rows) return <Spinner />;
+  return (
+    <section className="stack">
+      <h2>{t('fin.suppliers')}</h2><p className="muted">{t('fin.suppliersHelp')}</p>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.accountName')}</th><th scope="col">{t('fin.terms')}</th><th scope="col">{t('fin.owedNow')}</th><th scope="col">{t('fin.status')}</th></tr></thead>
+        <tbody>{rows.length === 0 && <tr><td colSpan={4} className="muted">{t('fin.none')}</td></tr>}{rows.map((s) => <tr key={s.id}><th scope="row"><button className="link" onClick={() => setOpen(s)}>{s.name}</button></th><td>{t('fin.days', { n: s.termsDays })}</td><td dir="ltr">{fmt(s.owed)}</td><td>{s.status === 'ACTIVE' ? t('fin.active') : t('fin.off')}</td></tr>)}</tbody></table></div>
+      {can('finance.prepare') && (
+        <form className="card inner stack" onSubmit={async (e) => { e.preventDefault(); if (await run(() => api('POST', '/v1/finance/suppliers', { name: f.name, ...(f.ntn ? { ntn: f.ntn } : {}), paymentTermsDays: Number(f.terms) || 0 }))) { setF({ name: '', ntn: '', terms: '30' }); void load(); } }}>
+          <h3>{t('fin.addSupplier')}</h3>
+          <div className="grid2"><label>{t('fin.accountName')}<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} maxLength={120} /></label><label>NTN<input value={f.ntn} onChange={(e) => setF({ ...f, ntn: e.target.value })} maxLength={30} dir="ltr" /></label></div>
+          <label>{t('fin.terms')} ({t('fin.daysUnit')})<input inputMode="numeric" value={f.terms} onChange={(e) => setF({ ...f, terms: e.target.value.replace(/\D/g, '') })} dir="ltr" /></label>
+          <div className="actions"><button className="primary" type="submit" disabled={busy || f.name.trim().length < 2}>{t('fin.addSupplier')}</button></div>
+        </form>)}
+      {open && <SupplierSheet supplier={open} onClose={() => { setOpen(null); void load(); }} />}
+    </section>
+  );
+}
+
+function SupplierSheet({ supplier, onClose }: { supplier: Supp; onClose: () => void }) {
+  const { t } = useT(); const { property, can } = useAuth(); const withStepUp = useStepUp(); const { busy, problem, run } = useAction();
+  const [bills, setBills] = useState<SBill[] | null>(null); const [ledger, setLedger] = useState<{ rows: Array<{ date: string; voucherNo: string; narration: string; billed: string; paid: string; balance: string }>; closing: string } | null>(null); const [form, setForm] = useState<'bill' | 'pay' | null>(null); const [shown, setShown] = useState<{ iban: string | null; accountNumber: string | null } | null>(null);
+  const bd = property!.businessDate;
+  const load = async () => { setBills((await api<{ items: SBill[] }>('GET', `/v1/finance/supplier-bills?supplierId=${supplier.id}`)).items); setLedger(await api('GET', `/v1/finance/reports/supplier-ledger?supplierId=${supplier.id}&from=${bd.slice(0, 4)}-01-01&to=${bd}`)); };
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  return (
+    <Sheet title={supplier.name} onClose={onClose} wide>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      <p className="small" dir="ltr">IBAN {shown?.iban ?? supplier.iban ?? '—'} · {t('fin.acctNo')} {shown?.accountNumber ?? supplier.accountNumber ?? '—'}</p>
+      <div className="actions">
+        {can('finance.prepare') && <button onClick={() => setForm('bill')}>{t('fin.newBill')}</button>}{can('finance.prepare') && <button className="primary" onClick={() => setForm('pay')}>{t('fin.paySupplier')}</button>}
+        {can('finance.bank_details') && <button disabled={busy} onClick={async () => { const r = await run(() => withStepUp(() => api<{ iban: string | null; accountNumber: string | null }>('GET', `/v1/finance/suppliers/${supplier.id}/reveal`))); if (r) setShown(r); }}>{t('fin.reveal')}</button>}
+      </div>
+      <h3>{t('fin.bills')}</h3>
+      {!bills ? <Spinner /> : <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.billNo')}</th><th scope="col">{t('fin.branch')}</th><th scope="col">{t('fin.dueDate')}</th><th scope="col">{t('fin.total')}</th><th scope="col">{t('fin.outstanding')}</th><th scope="col">{t('fin.status')}</th></tr></thead>
+        <tbody>{bills.length === 0 && <tr><td colSpan={6} className="muted">{t('fin.none')}</td></tr>}{bills.map((b) => <tr key={b.id}><th scope="row">{b.billNo}</th><td>{b.branch}</td><td dir="ltr">{b.dueDate}{b.overdueDays > 0 && <Badge tone="urgent">{t('fin.days', { n: b.overdueDays })}</Badge>}</td><td dir="ltr">{fmt(b.total)}</td><td dir="ltr">{fmt(b.outstanding)}</td><td><Badge tone={SB_TONE[b.status] ?? 'neutral'}>{t(`fin.sb.${b.status}` as never)}</Badge></td></tr>)}</tbody></table></div>}
+      <h3>{t('fin.supplierLedger')}</h3>
+      {ledger && <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.date')}</th><th scope="col">{t('fin.no')}</th><th scope="col">{t('fin.narration')}</th><th scope="col">{t('fin.billed')}</th><th scope="col">{t('fin.paidCol')}</th><th scope="col">{t('fin.balance')}</th></tr></thead>
+        <tbody>{ledger.rows.length === 0 && <tr><td colSpan={6} className="muted">{t('fin.none')}</td></tr>}{ledger.rows.map((r, i) => <tr key={i}><td dir="ltr">{r.date}</td><td dir="ltr">{r.voucherNo}</td><td>{r.narration}</td><td dir="ltr">{r.billed === '0.00' ? '' : fmt(r.billed)}</td><td dir="ltr">{r.paid === '0.00' ? '' : fmt(r.paid)}</td><td dir="ltr">{fmt(r.balance)}</td></tr>)}</tbody></table></div>}
+      {form === 'bill' && <BillForm supplier={supplier} onClose={() => setForm(null)} onSaved={() => { setForm(null); void load(); }} />}
+      {form === 'pay' && bills && <PayForm supplier={supplier} bills={bills.filter((b) => Number(b.available) > 0)} onClose={() => setForm(null)} onSaved={() => { setForm(null); void load(); }} />}
+    </Sheet>
+  );
+}
+
+function BillForm({ supplier, onClose, onSaved }: { supplier: Supp; onClose: () => void; onSaved: () => void }) {
+  const { t } = useT(); const { property } = useAuth(); const { busy, problem, run } = useAction(); const branches = useBranches(); const [accts, setAccts] = useState<Account[]>([]);
+  const bd = property!.businessDate; const [f, setF] = useState({ billNo: '', billDate: bd, dueDate: '', narration: '', branchId: property!.id }); const [lines, setLines] = useState([{ account: '', amount: '' }]);
+  useEffect(() => { void api<{ items: Account[] }>('GET', '/v1/finance/accounts').then((r) => setAccts(r.items.filter((a) => !a.isGroup && a.active && (a.type === 'EXPENSE' || a.type === 'ASSET') && !a.control))); }, []);
+  const total = lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+  return (
+    <Sheet title={`${t('fin.newBill')}: ${supplier.name}`} onClose={onClose}>
+      <div className="grid2"><label>{t('fin.billNo')}<input value={f.billNo} onChange={(e) => setF({ ...f, billNo: e.target.value })} maxLength={60} dir="ltr" /></label><label>{t('fin.branch')}<select value={f.branchId} onChange={(e) => setF({ ...f, branchId: e.target.value })}>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label></div>
+      <div className="grid2"><label>{t('fin.billDate')}<input type="date" value={f.billDate} onChange={(e) => setF({ ...f, billDate: e.target.value })} dir="ltr" /></label><label>{t('fin.dueDate')} ({t('common.optional')})<input type="date" value={f.dueDate} onChange={(e) => setF({ ...f, dueDate: e.target.value })} dir="ltr" /></label></div>
+      <label>{t('fin.narration')}<input value={f.narration} onChange={(e) => setF({ ...f, narration: e.target.value })} maxLength={500} /></label>
+      {lines.map((l, i) => <div key={i} className="grid2"><label>{t('fin.expenseFor')}<select value={l.account} onChange={(e) => setLines(lines.map((x, k) => (k === i ? { ...x, account: e.target.value } : x)))}><option value="">—</option>{accts.map((a) => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}</select></label><label>{t('fin.amount')}<input inputMode="decimal" value={l.amount} onChange={(e) => setLines(lines.map((x, k) => (k === i ? { ...x, amount: clean(e.target.value) } : x)))} dir="ltr" /></label></div>)}
+      <div className="row"><button type="button" onClick={() => setLines([...lines, { account: '', amount: '' }])}>{t('fin.addLine')}</button><strong dir="ltr">{t('fin.total')}: {total.toFixed(2)}</strong></div>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      <div className="actions"><button onClick={onClose}>{t('common.cancel')}</button><button className="primary" disabled={busy || !f.billNo || f.narration.trim().length < 3 || lines.some((l) => !l.account || !Number(l.amount))} onClick={async () => { if (await run(() => api('POST', '/v1/finance/supplier-bills', { supplierId: supplier.id, branchId: f.branchId, billNo: f.billNo, billDate: f.billDate, ...(f.dueDate ? { dueDate: f.dueDate } : {}), narration: f.narration, lines: lines.map((l) => ({ account: l.account, amount: l.amount })) }))) onSaved(); }}>{t('fin.saveDraft')}</button></div>
+    </Sheet>
+  );
+}
+
+function PayForm({ supplier, bills, onClose, onSaved }: { supplier: Supp; bills: SBill[]; onClose: () => void; onSaved: () => void }) {
+  const { t } = useT(); const { property } = useAuth(); const { busy, problem, run } = useAction(); const branches = useBranches(); const [banks, setBanks] = useState<Bank[]>([]);
+  const [sel, setSel] = useState<Record<string, string>>({}); const [f, setF] = useState({ date: property!.businessDate, reference: '', branchId: branches[0]?.id ?? '', money: 'CASH' });
+  useEffect(() => { void api<{ items: Bank[] }>('GET', '/v1/finance/banks').then((r) => setBanks(r.items.filter((b) => b.ledger))); }, []);
+  const total = Object.values(sel).reduce((s, v) => s + (Number(v) || 0), 0);
+  const ref = () => { const [k, id] = f.money.split(':'); return k === 'BANK' ? { kind: 'BANK', bankId: id } : { kind: k }; };
+  return (
+    <Sheet title={`${t('fin.paySupplier')}: ${supplier.name}`} onClose={onClose} wide>
+      <p className="muted small">{t('fin.payHelp')}</p>
+      <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col" /><th scope="col">{t('fin.billNo')}</th><th scope="col">{t('fin.branch')}</th><th scope="col">{t('fin.dueDate')}</th><th scope="col">{t('fin.outstanding')}</th><th scope="col">{t('fin.payNow')}</th></tr></thead>
+        <tbody>{bills.length === 0 && <tr><td colSpan={6} className="muted">{t('fin.nothingToPay')}</td></tr>}{bills.map((b) => <tr key={b.id}><td><input type="checkbox" aria-label={b.billNo} checked={b.id in sel} onChange={(e) => { const n = { ...sel }; if (e.target.checked) n[b.id] = b.available; else delete n[b.id]; setSel(n); }} /></td><th scope="row">{b.billNo}</th><td>{b.branch}</td><td dir="ltr">{b.dueDate}</td><td dir="ltr">{fmt(b.available)}</td><td>{b.id in sel && <input aria-label={`${b.billNo}: ${t('fin.payNow')}`} inputMode="decimal" value={sel[b.id]} onChange={(e) => setSel({ ...sel, [b.id]: clean(e.target.value) })} dir="ltr" />}</td></tr>)}</tbody></table></div>
+      <div className="grid2"><label>{t('fin.date')}<input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} dir="ltr" /></label><label>{t('fin.branch')}<select value={f.branchId} onChange={(e) => setF({ ...f, branchId: e.target.value })}>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label></div>
+      <div className="grid2"><label>{t('fin.paidFrom')}<select value={f.money} onChange={(e) => setF({ ...f, money: e.target.value })}><option value="CASH">{t('fin.cashDrawer')}</option><option value="PETTY">{t('fin.petty')}</option>{banks.map((b) => <option key={b.id} value={`BANK:${b.id}`}>{b.name}</option>)}</select></label><label>{t('fin.chequeRef')}<input value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })} maxLength={120} dir="ltr" /></label></div>
+      <p className="muted small" dir="ltr">{t('fin.total')}: {total.toFixed(2)}</p>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      <div className="actions"><button onClick={onClose}>{t('common.cancel')}</button><button className="primary" disabled={busy || total <= 0 || !f.branchId} onClick={async () => { if (await run(() => api('POST', '/v1/finance/supplier-payments', { supplierId: supplier.id, branchId: f.branchId, date: f.date, ...(f.reference ? { reference: f.reference } : {}), money: ref(), allocations: Object.entries(sel).map(([billId, amount]) => ({ billId, amount })) }))) onSaved(); }}>{t('fin.saveDraft')}</button></div>
+    </Sheet>
+  );
+}
+
+interface AgeRow { supplierId: string; supplier: string; current: string; d30: string; d60: string; d90: string; over90: string; total: string }
+/** What is owed to suppliers, by how late it is. */
+export function FinPayables() {
+  const { t } = useT(); const { property } = useAuth(); const { problem, run } = useAction(); const [asAt, setAsAt] = useState(property!.businessDate); const [d, setD] = useState<{ rows: AgeRow[]; totals: Omit<AgeRow, 'supplierId' | 'supplier'> } | null>(null);
+  useEffect(() => { setD(null); void run(() => api<{ rows: AgeRow[]; totals: Omit<AgeRow, 'supplierId' | 'supplier'> }>('GET', `/v1/finance/reports/payables-ageing?asAt=${asAt}`)).then((r) => r && setD(r)); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [asAt]);
+  return (
+    <section className="stack">
+      <h2>{t('fin.payables')}</h2><p className="muted">{t('fin.payablesHelp')}</p>
+      <label>{t('fin.asAt')}<input type="date" value={asAt} onChange={(e) => setAsAt(e.target.value)} dir="ltr" /></label>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      {!d ? <Spinner /> : <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.suppliers')}</th><th scope="col">{t('fin.notDue')}</th><th scope="col">1–30</th><th scope="col">31–60</th><th scope="col">61–90</th><th scope="col">90+</th><th scope="col">{t('fin.total')}</th></tr></thead>
+        <tbody>{d.rows.length === 0 && <tr><td colSpan={7} className="muted">{t('fin.none')}</td></tr>}{d.rows.map((r) => <tr key={r.supplierId}><th scope="row">{r.supplier}</th>{[r.current, r.d30, r.d60, r.d90, r.over90, r.total].map((v, i) => <td key={i} dir="ltr">{v === '0.00' ? '' : fmt(v)}</td>)}</tr>)}</tbody>
+        <tfoot><tr><th scope="row">{t('fin.total')}</th>{[d.totals.current, d.totals.d30, d.totals.d60, d.totals.d90, d.totals.over90, d.totals.total].map((v, i) => <td key={i} dir="ltr">{fmt(v)}</td>)}</tr></tfoot></table></div>}
+    </section>
+  );
+}
