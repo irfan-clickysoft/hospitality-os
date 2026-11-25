@@ -60,6 +60,8 @@ await page.getByLabel('Account name').last().fill('Pipes Ltd'); await page.getBy
 await page.getByRole('button', { name: 'Pipes Ltd' }).waitFor({ timeout: 15000 }); check('a supplier is added', true);
 await page.evaluate(() => { window.location.hash = '/finance?tab=payables'; });
 await page.getByRole('heading', { name: 'Payables ageing' }).waitFor({ timeout: 15000 }); check('the payables ageing opens', true);
+await page.evaluate(() => { window.location.hash = '/finance?tab=periods'; });
+await page.getByRole('heading', { name: 'Financial year' }).waitFor({ timeout: 15000 }); check('the financial year section opens', true);
 await page.evaluate(() => { window.location.hash = '/finance?tab=interbranch'; });
 await page.getByRole('heading', { name: 'Inter-branch' }).waitFor({ timeout: 15000 }); check('the Inter-branch tab opens', true);
 check('it says there is nothing yet', await page.getByText('No inter-branch entries yet.').first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false));
