@@ -1,3 +1,4 @@
+import { PmsPostingService } from '../finance/pms-posting.js';
 import { ConflictException, ForbiddenException, HttpException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { sql, type Transaction } from 'kysely';
 import type { z } from 'zod';
@@ -39,6 +40,7 @@ export class FolioService {
     @Inject(ChargeReviewService) private readonly reviews: ChargeReviewService,
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
     @Inject(CLOCK) private readonly clock: ClockLike,
+    @Inject(PmsPostingService) private readonly pms: PmsPostingService,
   ) {}
 
   async property(trx: Trx, id: string) {
@@ -82,6 +84,7 @@ export class FolioService {
       created_by: a.userId ?? currentTenant().actorId ?? null,
       tax_code: a.tax?.code ?? null, tax_version_id: a.tax?.versionId ?? null, tax_rate_bp: a.tax?.rateBp ?? null, taxable_minor: a.tax?.taxableMinor?.toString() ?? null,
     } as never).returning('id').executeTakeFirstOrThrow();
+    await this.pms.onFolioPosting(trx, row.id);
     if (a.type === 'CHARGE') await this.reviews.openFor(trx, { postingId: row.id, folioId: a.folioId, propertyId: a.propertyId, txnCode: a.txnCode, amount: a.amount, currency: a.currency, description: a.description });
     if (a.type === 'CHARGE' || a.type === 'DISCOUNT') await this.tax.applyToPosting(trx, { id: row.id, folioId: a.folioId, propertyId: a.propertyId, txnCode: a.taxAs ?? taxAs(a.txnCode), amount: a.amount, date: a.businessDate, lineId: a.lineId, currency: a.currency, userId: a.userId });
     return row.id;
