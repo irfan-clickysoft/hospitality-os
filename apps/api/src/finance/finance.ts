@@ -21,7 +21,7 @@ const Control = z.enum(['CASH', 'PETTY_CASH', 'BANK', 'RECEIVABLE', 'PAYABLE', '
 
 const AccountIn = z.object({ code: z.string().regex(/^[0-9]{4,8}$/, 'Use 4 to 8 digits'), name: z.string().trim().min(2).max(120), type: z.enum(TYPES), parentCode: z.string().regex(/^[0-9]{4,8}$/).optional(), isGroup: z.boolean().default(false), control: Control.optional(), normalBalance: z.enum(['DEBIT', 'CREDIT']).optional(), note: z.string().trim().max(300).optional() }).strict();
 const AccountEdit = z.object({ name: z.string().trim().min(2).max(120).optional(), active: z.boolean().optional(), note: z.string().trim().max(300).nullish() }).strict();
-const Line = z.object({ account: z.string().regex(/^[0-9]{4,8}$/, 'Use the account code'), branchId: z.string().uuid().nullish(), debit: amount.optional(), credit: amount.optional(), description: z.string().trim().max(300).optional(), reference: z.string().trim().max(120).optional() }).strict();
+const Line = z.object({ account: z.string().regex(/^[0-9]{4,8}$/, 'Use the account code'), branchId: z.string().uuid().nullish(), counterpartyBranchId: z.string().uuid().nullish(), debit: amount.optional(), credit: amount.optional(), description: z.string().trim().max(300).optional(), reference: z.string().trim().max(120).optional() }).strict();
 const VoucherIn = z.object({ type: z.literal('JV'), date, postingDate: date.optional(), narration: z.string().trim().min(3).max(500), lines: z.array(Line).min(2).max(100) }).strict();
 const Reverse = z.object({ date, reason: z.string().trim().min(3).max(300) }).strict();
 const Reject = z.object({ reason: z.string().trim().min(3).max(300) }).strict();
@@ -32,7 +32,7 @@ const TbQ = z.object({ from: date, to: date, branchId: z.string().uuid().optiona
 const GlQ = z.object({ account: z.string().regex(/^[0-9]{4,8}$/), from: date, to: date, branchId: z.string().uuid().optional() });
 
 /** Starter chart of accounts for a hotel company. The branch is a dimension on each line, so one cash account serves every branch. The finance controller approves the final list. */
-export type VType = 'JV' | 'CRV' | 'BRV' | 'CPV' | 'BPV' | 'CTV';
+export type VType = 'JV' | 'CRV' | 'BRV' | 'CPV' | 'BPV' | 'CTV' | 'IBEV' | 'IBTV';
 export type CreateArgs = Omit<z.infer<typeof VoucherIn>, 'type'> & { type: VType };
 
 export const STARTER_COA: ReadonlyArray<[string, string, string, boolean, string | null, string | null]> = [
@@ -156,17 +156,22 @@ export class FinanceService {
 
   // ---- vouchers
   private async lines(trx: Trx, cur: string, lines: z.infer<typeof Line>[]) {
-    const out: Array<{ account_id: string; property_id: string | null; debit_minor: string; credit_minor: string; description: string | null; reference: string | null }> = [];
+    const out: Array<{ account_id: string; property_id: string | null; counterparty_property_id: string | null; debit_minor: string; credit_minor: string; description: string | null; reference: string | null }> = [];
     for (const [n, l] of lines.entries()) {
       const d = minor(l.debit, cur), c = minor(l.credit, cur);
       if ((d > 0n) === (c > 0n)) throw err(400, 'VALIDATION_FAILED', `Line ${n + 1}: enter either a debit or a credit, not both and not neither`);
-      const a = await trx.selectFrom('gl_account').select(['id', 'active', 'is_group']).where('code', '=', l.account).executeTakeFirst();
+      const a = await trx.selectFrom('gl_account').select(['id', 'active', 'is_group', 'control_type']).where('code', '=', l.account).executeTakeFirst();
       if (!a) throw err(400, 'ACCOUNT_UNKNOWN', `Line ${n + 1}: account ${l.account} does not exist`);
       if (a.is_group) throw err(400, 'ACCOUNT_IS_HEADING', `Line ${n + 1}: account ${l.account} is a heading; post to one of the accounts under it`);
       if (!a.active) throw err(400, 'ACCOUNT_INACTIVE', `Line ${n + 1}: account ${l.account} is switched off`);
       if (l.branchId) { const p = await trx.selectFrom('property').select('id').where('id', '=', l.branchId).executeTakeFirst(); if (!p) throw err(400, 'BRANCH_UNKNOWN', `Line ${n + 1}: that branch does not exist`); }
+      if (a.control_type === 'INTERBRANCH') {
+        if (!l.branchId || !l.counterpartyBranchId) throw err(400, 'INTERBRANCH_BRANCHES', `Line ${n + 1}: a Due From / Due To line needs both branches`);
+        if (l.branchId === l.counterpartyBranchId) throw err(400, 'SAME_BRANCH', `Line ${n + 1}: the two branches must be different`);
+      } else if (l.counterpartyBranchId) throw err(400, 'INTERBRANCH_BRANCHES', `Line ${n + 1}: only a Due From / Due To line names another branch`);
+      if (l.counterpartyBranchId && !(await trx.selectFrom('property').select('id').where('id', '=', l.counterpartyBranchId).executeTakeFirst())) throw err(400, 'BRANCH_UNKNOWN', `Line ${n + 1}: the other branch does not exist`);
       await this.checkBank(trx, a.id, l.branchId ?? null, n + 1);
-      out.push({ account_id: a.id, property_id: l.branchId ?? null, debit_minor: d.toString(), credit_minor: c.toString(), description: l.description ?? null, reference: l.reference ?? null });
+      out.push({ account_id: a.id, property_id: l.branchId ?? null, counterparty_property_id: l.counterpartyBranchId ?? null, debit_minor: d.toString(), credit_minor: c.toString(), description: l.description ?? null, reference: l.reference ?? null });
     }
     return out;
   }
@@ -237,10 +242,10 @@ export class FinanceService {
       if (v.status !== 'SUBMITTED') throw err(409, 'VOUCHER_NOT_SUBMITTED', 'Only a submitted voucher can be approved');
       const s = await this.settings(trx);
       const ownerTitled = await sql<{ n: number }>`SELECT count(*)::int AS n FROM voucher_line l JOIN payment_account b ON b.tenant_id = l.tenant_id AND b.gl_account_id = l.account_id WHERE l.voucher_id = ${id} AND b.owner_type <> 'COMPANY'`.execute(trx);
-      if (v.created_by === userId && (ownerTitled.rows[0]!.n > 0 || BigInt(v.total_minor) > BigInt(s.self_approve_limit_minor))) throw err(403, 'FINANCE_SELF_APPROVAL', 'You prepared this voucher, so someone else has to approve it');
+      if (v.created_by === userId && (ownerTitled.rows[0]!.n > 0 || v.voucher_type === 'IBEV' || v.voucher_type === 'IBTV' || BigInt(v.total_minor) > BigInt(s.self_approve_limit_minor))) throw err(403, 'FINANCE_SELF_APPROVAL', 'You prepared this voucher, so someone else has to approve it');
       await this.assertOpen(trx, v.posting_date);
       const lines = await trx.selectFrom('voucher_line').selectAll().where('voucher_id', '=', id).orderBy('line_no').execute();
-      await trx.insertInto('gl_entry').values(lines.map((l) => ({ tenant_id: currentTenant().tenantId, voucher_id: id, line_id: l.id, account_id: l.account_id, property_id: l.property_id, posting_date: v.posting_date, debit_minor: l.debit_minor, credit_minor: l.credit_minor })) as never).execute();
+      await trx.insertInto('gl_entry').values(lines.map((l) => ({ tenant_id: currentTenant().tenantId, voucher_id: id, line_id: l.id, account_id: l.account_id, property_id: l.property_id, counterparty_property_id: l.counterparty_property_id, posting_date: v.posting_date, debit_minor: l.debit_minor, credit_minor: l.credit_minor })) as never).execute();
       const now = new Date();
       await trx.updateTable('voucher').set({ status: 'POSTED', approved_by: userId, approved_at: now, posted_by: userId, posted_at: now } as never).where('id', '=', id).execute();
       await this.audit.record(trx, { action: 'finance.voucher.post', resourceType: 'voucher', resourceId: id, after: { voucherNo: v.voucher_no, total: dec(v.total_minor, v.currency), postingDate: v.posting_date } });
@@ -279,7 +284,7 @@ export class FinanceService {
       await this.assertOpen(trx, i.date);
       const lines = await trx.selectFrom('voucher_line').selectAll().where('voucher_id', '=', id).orderBy('line_no').execute();
       const r = await trx.insertInto('voucher').values({ tenant_id: currentTenant().tenantId, voucher_type: v.voucher_type, voucher_date: i.date, posting_date: i.date, narration: `Reversal of ${v.voucher_no}: ${i.reason}`.slice(0, 500), currency: v.currency, total_minor: v.total_minor, reverses_voucher_id: id, created_by: userId } as never).returning('id').executeTakeFirstOrThrow();
-      await this.writeLines(trx, r.id, lines.map((l) => ({ account_id: l.account_id, property_id: l.property_id, debit_minor: l.credit_minor, credit_minor: l.debit_minor, description: l.description, reference: l.reference })));
+      await this.writeLines(trx, r.id, lines.map((l) => ({ account_id: l.account_id, property_id: l.property_id, counterparty_property_id: l.counterparty_property_id, debit_minor: l.credit_minor, credit_minor: l.debit_minor, description: l.description, reference: l.reference })));
       await this.audit.record(trx, { action: 'finance.voucher.reverse', resourceType: 'voucher', resourceId: id, after: { reversal: r.id, reason: i.reason } });
       return { id: r.id };
     });
@@ -298,10 +303,10 @@ export class FinanceService {
     return this.tdb.tx(async (trx) => {
       const v = await this.load(trx, id);
       const lines = await trx.selectFrom('voucher_line as l').innerJoin('gl_account as a', (j) => j.onRef('a.id', '=', 'l.account_id').onRef('a.tenant_id', '=', 'l.tenant_id')).leftJoin('property as p', (j) => j.onRef('p.id', '=', 'l.property_id').onRef('p.tenant_id', '=', 'l.tenant_id'))
-        .select(['l.line_no', 'a.code', 'a.name', 'l.property_id', 'p.name as branch', 'l.debit_minor', 'l.credit_minor', 'l.description', 'l.reference']).where('l.voucher_id', '=', id).orderBy('l.line_no').execute();
+        .leftJoin('property as cp', (j) => j.onRef('cp.id', '=', 'l.counterparty_property_id').onRef('cp.tenant_id', '=', 'l.tenant_id')).select(['l.line_no', 'a.code', 'a.name', 'l.property_id', 'p.name as branch', 'cp.name as other', 'l.debit_minor', 'l.credit_minor', 'l.description', 'l.reference']).where('l.voucher_id', '=', id).orderBy('l.line_no').execute();
       const rev = await trx.selectFrom('voucher').select(['id', 'voucher_no', 'status']).where('reverses_voucher_id', '=', id).where('status', 'in', ['DRAFT', 'SUBMITTED', 'POSTED']).executeTakeFirst();
       return { id: v.id, voucherNo: v.voucher_no, type: v.voucher_type, date: v.voucher_date, postingDate: v.posting_date, status: v.status, narration: v.narration, currency: v.currency, total: dec(v.total_minor, v.currency), preparedById: v.created_by, rejectReason: v.reject_reason, reversesId: v.reverses_voucher_id, reversal: rev ? { id: rev.id, voucherNo: rev.voucher_no, status: rev.status } : null,
-        lines: lines.map((l) => ({ lineNo: l.line_no, account: l.code, accountName: l.name, branchId: l.property_id, branch: l.branch ?? 'Head office', debit: dec(l.debit_minor, v.currency), credit: dec(l.credit_minor, v.currency), description: l.description, reference: l.reference })) };
+        lines: lines.map((l) => ({ lineNo: l.line_no, account: l.code, accountName: l.name, branchId: l.property_id, branch: l.branch ?? 'Head office', otherBranch: l.other ?? null, debit: dec(l.debit_minor, v.currency), credit: dec(l.credit_minor, v.currency), description: l.description, reference: l.reference })) };
     });
   }
 

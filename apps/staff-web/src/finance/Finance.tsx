@@ -350,3 +350,68 @@ export function QuickVoucherForm({ onClose, onSaved }: { onClose: () => void; on
     </Sheet>
   );
 }
+
+interface Pair { a: string; aId: string; b: string; bId: string; aBooks: string; bBooks: string; difference: string; status: 'AGREE' | 'DIFFERENCE' }
+interface IbItem { date: string; voucherNo: string; narration: string; account: string; debit: string; credit: string; balance: string }
+
+/** What each branch owes or is owed by each other branch, as each branch's own books say; plus the two vouchers that create it. */
+export function FinInterBranch() {
+  const { t } = useT(); const { property, can } = useAuth(); const { problem, run } = useAction(); const branches = useBranches();
+  const [to, setTo] = useState(property!.businessDate); const [data, setData] = useState<{ rows: Pair[]; agree: boolean } | null>(null); const [items, setItems] = useState<{ title: string; rows: IbItem[]; balance: string } | null>(null); const [form, setForm] = useState<'transfer' | 'expense' | null>(null);
+  const load = async () => { const r = await run(() => api<{ rows: Pair[]; agree: boolean }>('GET', `/v1/finance/interbranch/matrix?to=${to}`)); if (r) setData(r); };
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [to]);
+  const open = async (p: Pair) => { const r = await run(() => api<{ items: IbItem[]; balance: string }>('GET', `/v1/finance/interbranch/items?branchId=${p.aId}&counterpartyId=${p.bId}&to=${to}`)); if (r) setItems({ title: `${p.a} ↔ ${p.b}`, rows: r.items, balance: r.balance }); };
+  void branches;
+  return (
+    <section className="stack">
+      <div className="row between"><h2>{t('fin.interbranch')}</h2>{can('finance.prepare') && <div className="row"><button onClick={() => setForm('transfer')}>{t('fin.ibTransfer')}</button><button className="primary" onClick={() => setForm('expense')}>{t('fin.ibExpense')}</button></div>}</div>
+      <p className="muted">{t('fin.interbranchHelp')}</p>
+      <label>{t('fin.asAt')}<input type="date" value={to} onChange={(e) => setTo(e.target.value)} dir="ltr" /></label>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      {!data ? <Spinner /> : (<>
+        <p className={data.agree ? 'okbox' : 'warnbox'} role="status">{data.rows.length === 0 ? t('fin.ibNone') : data.agree ? t('fin.ibAgree') : t('fin.ibDiffer')}</p>
+        {data.rows.length > 0 && <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.ibPair')}</th><th scope="col">{t('fin.ibFirst')}</th><th scope="col">{t('fin.ibSecond')}</th><th scope="col">{t('fin.ibDiff')}</th></tr></thead>
+          <tbody>{data.rows.map((p) => <tr key={`${p.aId}${p.bId}`}><th scope="row"><button className="link" onClick={() => void open(p)}>{p.a} ↔ {p.b}</button></th><td dir="ltr">{fmt(p.aBooks)}</td><td dir="ltr">{fmt(p.bBooks)}</td><td dir="ltr">{p.status === 'AGREE' ? <Badge tone="clean">{t('fin.ibOk')}</Badge> : <Badge tone="urgent">{fmt(p.difference)}</Badge>}</td></tr>)}</tbody></table></div>}
+      </>)}
+      {items && (
+        <Sheet title={items.title} onClose={() => setItems(null)} wide>
+          <p className="muted small">{t('fin.ibItemsHelp')}</p>
+          <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.date')}</th><th scope="col">{t('fin.no')}</th><th scope="col">{t('fin.narration')}</th><th scope="col">{t('fin.debit')}</th><th scope="col">{t('fin.credit')}</th><th scope="col">{t('fin.balance')}</th></tr></thead>
+            <tbody>{items.rows.map((r, i) => <tr key={i}><td dir="ltr">{r.date}</td><td dir="ltr">{r.voucherNo}</td><td>{r.narration}</td><td dir="ltr">{r.debit === '0.00' ? '' : fmt(r.debit)}</td><td dir="ltr">{r.credit === '0.00' ? '' : fmt(r.credit)}</td><td dir="ltr">{fmt(r.balance)}</td></tr>)}</tbody></table></div>
+        </Sheet>)}
+      {form && <InterBranchForm kind={form} onClose={() => setForm(null)} onSaved={() => { setForm(null); void load(); }} />}
+    </section>
+  );
+}
+
+function InterBranchForm({ kind, onClose, onSaved }: { kind: 'transfer' | 'expense'; onClose: () => void; onSaved: () => void }) {
+  const { t } = useT(); const { property } = useAuth(); const { busy, problem, run } = useAction(); const branches = useBranches();
+  const [accts, setAccts] = useState<Account[]>([]); const [banks, setBanks] = useState<Bank[]>([]);
+  const [f, setF] = useState({ date: property!.businessDate, narration: '', amount: '', a: branches[0]?.id ?? '', aMoney: 'CASH', b: branches[1]?.id ?? branches[0]?.id ?? '', bMoney: 'CASH', account: '', vendor: '', invoiceNo: '' });
+  useEffect(() => { void api<{ items: Account[] }>('GET', '/v1/finance/accounts').then((r) => setAccts(r.items.filter((a) => !a.isGroup && a.active && a.type === 'EXPENSE'))); void api<{ items: Bank[] }>('GET', '/v1/finance/banks').then((r) => setBanks(r.items.filter((b) => b.ledger))); }, []);
+  const ref = (v: string) => { const [k, id] = v.split(':'); return k === 'BANK' ? { kind: 'BANK', bankId: id } : { kind: k }; };
+  const moneyOpts = [{ v: 'CASH', l: t('fin.cashDrawer') }, { v: 'PETTY', l: t('fin.petty') }, ...banks.map((b) => ({ v: `BANK:${b.id}`, l: b.name }))];
+  const send = async () => {
+    const r = kind === 'transfer'
+      ? await run(() => api('POST', '/v1/finance/interbranch/transfer', { date: f.date, narration: f.narration, amount: f.amount, fromBranchId: f.a, from: ref(f.aMoney), toBranchId: f.b, to: ref(f.bMoney) }))
+      : await run(() => api('POST', '/v1/finance/interbranch/expense', { date: f.date, narration: f.narration, amount: f.amount, paidByBranchId: f.a, paidWith: ref(f.aMoney), expenseBranchId: f.b, expenseAccount: f.account, vendor: f.vendor, ...(f.invoiceNo ? { invoiceNo: f.invoiceNo } : {}) }));
+    if (r) onSaved();
+  };
+  const sel = (v: string, set: (x: string) => void, opts: Array<{ v: string; l: string }>) => <select value={v} onChange={(e) => set(e.target.value)}>{opts.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}</select>;
+  const br = branches.map((b) => ({ v: b.id, l: b.name }));
+  return (
+    <Sheet title={kind === 'transfer' ? t('fin.ibTransfer') : t('fin.ibExpense')} onClose={onClose} sticky>
+      <div className="grid2"><label>{t('fin.date')}<input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} dir="ltr" /></label><label>{t('fin.amount')}<input inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: clean(e.target.value) })} dir="ltr" /></label></div>
+      <label>{t('fin.narration')}<input value={f.narration} onChange={(e) => setF({ ...f, narration: e.target.value })} maxLength={500} /></label>
+      <div className="grid2"><label>{kind === 'transfer' ? t('fin.ibFromBranch') : t('fin.ibPaidBy')}{sel(f.a, (x) => setF({ ...f, a: x }), br)}</label><label>{kind === 'transfer' ? t('fin.ibFromMoney') : t('fin.ibPaidWith')}{sel(f.aMoney, (x) => setF({ ...f, aMoney: x }), moneyOpts)}</label></div>
+      {kind === 'transfer'
+        ? <div className="grid2"><label>{t('fin.ibToBranch')}{sel(f.b, (x) => setF({ ...f, b: x }), br)}</label><label>{t('fin.ibToMoney')}{sel(f.bMoney, (x) => setF({ ...f, bMoney: x }), moneyOpts)}</label></div>
+        : <>
+          <div className="grid2"><label>{t('fin.ibExpenseFor')}{sel(f.b, (x) => setF({ ...f, b: x }), br)}</label><label>{t('fin.ibExpenseAcct')}<select value={f.account} onChange={(e) => setF({ ...f, account: e.target.value })}><option value="">—</option>{accts.map((a) => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}</select></label></div>
+          <div className="grid2"><label>{t('fin.ibVendor')}<input value={f.vendor} onChange={(e) => setF({ ...f, vendor: e.target.value })} maxLength={120} /></label><label>{t('fin.ibInvoice')}<input value={f.invoiceNo} onChange={(e) => setF({ ...f, invoiceNo: e.target.value })} maxLength={60} /></label></div></>}
+      <p className="muted small">{t('fin.ibSecond2')}</p>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      <div className="actions"><button onClick={onClose}>{t('common.cancel')}</button><button className="primary" disabled={busy || !f.amount || f.narration.trim().length < 3 || f.a === f.b || (kind === 'expense' && (!f.account || f.vendor.trim().length < 2))} onClick={() => void send()}>{t('fin.saveDraft')}</button></div>
+    </Sheet>
+  );
+}

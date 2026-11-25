@@ -61,6 +61,7 @@ export const SECTIONS: Section[] = [
     { id: 'accounts', label: 'fin.accounts', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinAccounts') },
     { id: 'banks', label: 'fin.banks', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinBanks') },
     { id: 'cash', label: 'fin.cash', show: any('finance.view', 'cashier.operate'), Page: L(() => import('../finance/Finance.js'), 'FinCash') },
+    { id: 'interbranch', label: 'fin.interbranch', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinInterBranch') },
     { id: 'posting', label: 'fin.posting', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinPosting') },
     { id: 'periods', label: 'fin.periods', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinPeriods') },
   ] },
