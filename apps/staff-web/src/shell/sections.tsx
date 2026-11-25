@@ -56,6 +56,8 @@ export const SECTIONS: Section[] = [
     { id: 'trail', label: 'nav.audit2', show: any('audit.view'), Page: L(() => import('../desk/AuditLog.js'), 'AuditLog') },
   ] },
   { id: 'finance', path: '/finance', label: 'fin.nav', icon: 'card', show: any('finance.view'), tabs: [
+    { id: 'dashboard', label: 'fin.dashboard', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinDashboard') },
+    { id: 'statements', label: 'fin.statements', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinStatements') },
     { id: 'vouchers', label: 'fin.vouchers', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinVouchers') },
     { id: 'reports', label: 'fin.reports', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinReports') },
     { id: 'accounts', label: 'fin.accounts', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinAccounts') },

@@ -74,5 +74,6 @@ describe('bank reconciliation', () => {
     await code(call('POST', U(`bank/reconciliations/${rec.id}/approve`), prep.hm), 403, 'FINANCE_SELF_APPROVAL');
     await ok(call('POST', U(`bank/reconciliations/${rec.id}/approve`), OM));
     await code(call('POST', U(`bank/lines/${by('IBFT from guest').id}/unmatch`), prep.h, { reason: 'checking the lock' }), 409, 'RECON_LOCKED');
+    const bb = await ok(call('GET', U(`reports/bank-book?bankId=${bank.id}&from=2026-11-01&to=2026-11-30`), prep.h)); expect(bb.rows.at(-1).cells[5]).toBe('28500.00'); expect(bb.rows.filter((r: any) => r.cells[6] === 'not on a statement')).toHaveLength(1);
   });
 });
