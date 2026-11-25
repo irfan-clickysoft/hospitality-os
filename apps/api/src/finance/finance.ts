@@ -8,6 +8,7 @@ import { RequirePermission } from '../authz/decorators.js';
 import { parse } from '../common/validate.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
+import { FinanceScope } from './scope.js';
 
 type Trx = Transaction<DB>;
 const ANY = { anyScope: true } as const;
@@ -61,7 +62,7 @@ const dec = (m: bigint | string, cur: string) => Money.ofMinor(BigInt(m), cur).t
 /** The accounting core: chart of accounts, vouchers that need a second person to approve, an immutable ledger, and month locks. Branch (property) is a dimension on every line. */
 @Injectable()
 export class FinanceService {
-  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService) {}
+  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(FinanceScope) private readonly scope: FinanceScope) {}
 
   async settings(trx: Trx) {
     const t = currentTenant().tenantId;
@@ -208,6 +209,7 @@ export class FinanceService {
       const s = await this.settings(trx); const cur = s.base_currency; const posting = i.postingDate ?? i.date;
       await this.assertOpen(trx, posting, i.type);
       const rows = await this.lines(trx, cur, i.lines);
+      if (!source) await this.guardBranches('finance.prepare', rows.map((r) => r.property_id), i.type);
       const d = rows.reduce((t, r) => t + BigInt(r.debit_minor), 0n), c = rows.reduce((t, r) => t + BigInt(r.credit_minor), 0n);
       const v = await trx.insertInto('voucher').values({ tenant_id: currentTenant().tenantId, voucher_type: i.type, voucher_date: i.date, posting_date: posting, narration: i.narration, currency: cur, total_minor: d.toString(), created_by: userId, source_module: source?.module ?? null, source_event_id: source?.eventId ?? null } as never).returning('id').executeTakeFirstOrThrow();
       await this.writeLines(trx, v.id, rows);
@@ -216,6 +218,19 @@ export class FinanceService {
     });
   }
 
+  /** A voucher's branch rules: a branch role may only touch its own branches, head office and inter-branch entries need a company-wide role. */
+  private async guardBranches(perm: 'finance.prepare' | 'finance.approve' | 'finance.view', branches: Array<string | null>, type: string) {
+    if (type === 'IBEV' || type === 'IBTV' || type === 'YEC' || type === 'PMS') await this.scope.requireAll(perm, type === 'YEC' ? 'The year-end closing' : type === 'PMS' ? 'A hotel posting' : 'An inter-branch voucher');
+    await this.scope.assert(perm, branches);
+  }
+  private async voucherBranches(trx: Trx, id: string): Promise<Array<string | null>> { return (await trx.selectFrom('voucher_line').select('property_id').where('voucher_id', '=', id).execute()).map((l) => l.property_id); }
+  /** `AND <alias>.property_id …` for a report: the chosen branch (refused if it is not yours), or only the branches you may see. */
+  async br(branchId?: string, alias = 'e', perm = 'finance.view') {
+    const sc = await this.scope.of(perm);
+    if (branchId) { if (!this.scope.allows(sc, branchId)) throw err(403, 'BRANCH_NOT_ALLOWED', 'You do not have this permission for that branch.'); return sql`AND ${sql.raw(alias)}.property_id = ${branchId}`; }
+    return this.scope.filter(sc, `${alias}.property_id`);
+  }
+  async mayView(trx: Trx, voucherId: string): Promise<boolean> { const sc = await this.scope.of('finance.view'); return sc.all || (await this.voucherBranches(trx, voucherId)).every((b) => this.scope.allows(sc, b)); }
   private async load(trx: Trx, id: string) { const v = await trx.selectFrom('voucher').selectAll().where('id', '=', id).executeTakeFirst(); if (!v) throw err(404, 'NOT_FOUND', 'No such voucher'); return v; }
 
   async edit(userId: string, id: string, i: z.infer<typeof VoucherIn>) {
@@ -225,6 +240,7 @@ export class FinanceService {
       if (v.created_by !== userId) throw err(403, 'FIN_NOT_YOURS', 'Only the person who prepared this voucher can edit it');
       const posting = i.postingDate ?? i.date; await this.assertOpen(trx, posting, v.voucher_type);
       const rows = await this.lines(trx, v.currency, i.lines);
+      await this.guardBranches('finance.prepare', rows.map((r) => r.property_id), v.voucher_type);
       const d = await this.writeLines(trx, id, rows); const c = rows.reduce((t, r) => t + BigInt(r.credit_minor), 0n);
       await trx.updateTable('voucher').set({ voucher_date: i.date, posting_date: posting, narration: i.narration, total_minor: d.toString(), status: 'DRAFT', reject_reason: null } as never).where('id', '=', id).execute();
       await this.audit.record(trx, { action: 'finance.voucher.edit', resourceType: 'voucher', resourceId: id, after: { total: dec(d, v.currency) } });
@@ -237,6 +253,7 @@ export class FinanceService {
       const v = await this.load(trx, id);
       if (!['DRAFT', 'REJECTED'].includes(v.status)) throw err(409, 'VOUCHER_LOCKED', `A ${v.status.toLowerCase()} voucher cannot be submitted`);
       await this.assertOpen(trx, v.posting_date, v.voucher_type);
+      await this.guardBranches('finance.prepare', await this.voucherBranches(trx, id), v.voucher_type);
       const sums = await sql<{ d: string; c: string }>`SELECT coalesce(sum(debit_minor),0)::text AS d, coalesce(sum(credit_minor),0)::text AS c FROM voucher_line WHERE voucher_id = ${id}`.execute(trx);
       const d = BigInt(sums.rows[0]!.d), c = BigInt(sums.rows[0]!.c);
       if (d !== c || d === 0n) throw err(409, 'NOT_BALANCED', `Debits ${dec(d, v.currency)} and credits ${dec(c, v.currency)} differ by ${dec(d > c ? d - c : c - d, v.currency)}`);
@@ -256,6 +273,7 @@ export class FinanceService {
       const ownerTitled = await sql<{ n: number }>`SELECT count(*)::int AS n FROM voucher_line l JOIN payment_account b ON b.tenant_id = l.tenant_id AND b.gl_account_id = l.account_id WHERE l.voucher_id = ${id} AND b.owner_type <> 'COMPANY'`.execute(trx);
       if (v.created_by === userId && (ownerTitled.rows[0]!.n > 0 || v.voucher_type === 'IBEV' || v.voucher_type === 'IBTV' || BigInt(v.total_minor) > BigInt(s.self_approve_limit_minor))) throw err(403, 'FINANCE_SELF_APPROVAL', 'You prepared this voucher, so someone else has to approve it');
       await this.assertOpen(trx, v.posting_date, v.voucher_type);
+      await this.guardBranches('finance.approve', await this.voucherBranches(trx, id), v.voucher_type);
       const lines = await trx.selectFrom('voucher_line').selectAll().where('voucher_id', '=', id).orderBy('line_no').execute();
       await trx.insertInto('gl_entry').values(lines.map((l) => ({ tenant_id: currentTenant().tenantId, voucher_id: id, line_id: l.id, account_id: l.account_id, property_id: l.property_id, counterparty_property_id: l.counterparty_property_id, supplier_id: l.supplier_id, posting_date: v.posting_date, debit_minor: l.debit_minor, credit_minor: l.credit_minor })) as never).execute();
       const now = new Date();
@@ -278,6 +296,7 @@ export class FinanceService {
     return this.tdb.tx(async (trx) => {
       const v = await this.load(trx, id);
       if (v.status !== 'SUBMITTED') throw err(409, 'VOUCHER_NOT_SUBMITTED', 'Only a submitted voucher can be rejected');
+      await this.guardBranches('finance.approve', await this.voucherBranches(trx, id), v.voucher_type);
       await trx.updateTable('voucher').set({ status: 'REJECTED', rejected_by: userId, reject_reason: reason } as never).where('id', '=', id).execute();
       await this.audit.record(trx, { action: 'finance.voucher.reject', resourceType: 'voucher', resourceId: id, after: { reason } });
       return { id, status: 'REJECTED' };
@@ -300,6 +319,7 @@ export class FinanceService {
     return this.tdb.tx(async (trx) => {
       const v = await this.load(trx, id);
       if (v.status !== 'POSTED') throw err(409, 'NOT_POSTED', 'Only a posted voucher can be reversed');
+      await this.guardBranches('finance.prepare', await this.voucherBranches(trx, id), v.voucher_type);
       if (v.voucher_type === 'SBV') { const b = await trx.selectFrom('supplier_bill').select(['id', 'paid_minor']).where('voucher_id', '=', id).executeTakeFirst(); const pend = b ? await sql<{ n: number }>`SELECT count(*)::int AS n FROM supplier_payment_alloc a JOIN supplier_payment p ON p.tenant_id = a.tenant_id AND p.id = a.payment_id JOIN voucher pv ON pv.tenant_id = p.tenant_id AND pv.id = p.voucher_id WHERE a.bill_id = ${b.id} AND pv.status IN ('DRAFT','SUBMITTED','REJECTED','POSTED') AND NOT EXISTS (SELECT 1 FROM voucher r WHERE r.reverses_voucher_id = pv.id AND r.status = 'POSTED')`.execute(trx) : null; if (b && (BigInt(b.paid_minor) > 0n || (pend?.rows[0]?.n ?? 0) > 0)) throw err(409, 'SUPPLIER_BILL_HAS_PAYMENTS', 'This bill has payments against it. Reverse those first.'); }
       const live = await trx.selectFrom('voucher').select('id').where('reverses_voucher_id', '=', id).where('status', 'in', ['DRAFT', 'SUBMITTED', 'POSTED']).executeTakeFirst();
       if (live) throw err(409, 'ALREADY_REVERSED', 'This voucher already has a reversal');
@@ -316,6 +336,8 @@ export class FinanceService {
     return this.tdb.tx(async (trx) => {
       let b = trx.selectFrom('voucher as v').leftJoin('staff_user as u', (j) => j.onRef('u.id', '=', 'v.created_by').onRef('u.tenant_id', '=', 'v.tenant_id'))
         .select(['v.id', 'v.voucher_no', 'v.voucher_type', 'v.voucher_date', 'v.posting_date', 'v.status', 'v.narration', 'v.total_minor', 'v.currency', 'v.created_by', 'u.full_name as by', 'v.reverses_voucher_id', 'v.reject_reason']).orderBy('v.created_at', 'desc').limit(300);
+      const sc = await this.scope.of('finance.view');
+      if (!sc.all) b = b.where(sql<boolean>`NOT EXISTS (SELECT 1 FROM voucher_line l WHERE l.voucher_id = v.id AND ${sc.ids.length ? sql`(l.property_id IS NULL OR l.property_id NOT IN (${sql.join(sc.ids.map((i) => sql`${i}::uuid`))}))` : sql`true`})`);
       if (q.status) b = b.where('v.status', '=', q.status); if (q.from) b = b.where('v.posting_date', '>=', q.from); if (q.to) b = b.where('v.posting_date', '<=', q.to);
       return { items: (await b.execute()).map((v) => ({ id: v.id, voucherNo: v.voucher_no, type: v.voucher_type, date: v.voucher_date, postingDate: v.posting_date, status: v.status, narration: v.narration, total: dec(v.total_minor, v.currency), preparedBy: v.by, preparedById: v.created_by, reversesId: v.reverses_voucher_id, rejectReason: v.reject_reason })) };
     });
@@ -324,6 +346,7 @@ export class FinanceService {
   async get(id: string) {
     return this.tdb.tx(async (trx) => {
       const v = await this.load(trx, id);
+      if (!(await this.mayView(trx, id))) throw err(404, 'NOT_FOUND', 'No such voucher');
       const lines = await trx.selectFrom('voucher_line as l').innerJoin('gl_account as a', (j) => j.onRef('a.id', '=', 'l.account_id').onRef('a.tenant_id', '=', 'l.tenant_id')).leftJoin('property as p', (j) => j.onRef('p.id', '=', 'l.property_id').onRef('p.tenant_id', '=', 'l.tenant_id'))
         .leftJoin('property as cp', (j) => j.onRef('cp.id', '=', 'l.counterparty_property_id').onRef('cp.tenant_id', '=', 'l.tenant_id')).select(['l.line_no', 'a.code', 'a.name', 'l.property_id', 'p.name as branch', 'cp.name as other', 'l.debit_minor', 'l.credit_minor', 'l.description', 'l.reference']).where('l.voucher_id', '=', id).orderBy('l.line_no').execute();
       const rev = await trx.selectFrom('voucher').select(['id', 'voucher_no', 'status']).where('reverses_voucher_id', '=', id).where('status', 'in', ['DRAFT', 'SUBMITTED', 'POSTED']).executeTakeFirst();
@@ -354,7 +377,7 @@ export class FinanceService {
   async trialBalance(q: z.infer<typeof TbQ>) {
     return this.tdb.tx(async (trx) => {
       const cur = (await this.settings(trx)).base_currency;
-      const br = q.branchId ? sql`AND e.property_id = ${q.branchId}` : sql``;
+      const br = await this.br(q.branchId);
       const r = await sql<{ code: string; name: string; type: string; open_d: string; open_c: string; d: string; c: string }>`
         SELECT a.code, a.name, a.account_type AS type,
           coalesce(sum(e.debit_minor) FILTER (WHERE e.posting_date < ${q.from}::date), 0)::text AS open_d, coalesce(sum(e.credit_minor) FILTER (WHERE e.posting_date < ${q.from}::date), 0)::text AS open_c,
@@ -377,7 +400,7 @@ export class FinanceService {
     return this.tdb.tx(async (trx) => {
       const cur = (await this.settings(trx)).base_currency;
       const a = await trx.selectFrom('gl_account').selectAll().where('code', '=', q.account).executeTakeFirst(); if (!a) throw err(404, 'NOT_FOUND', 'No such account');
-      const br = q.branchId ? sql`AND e.property_id = ${q.branchId}` : sql``; const sign = a.normal_balance === 'DEBIT' ? 1n : -1n;
+      const br = await this.br(q.branchId); const sign = a.normal_balance === 'DEBIT' ? 1n : -1n;
       const open = await sql<{ d: string; c: string }>`SELECT coalesce(sum(e.debit_minor),0)::text AS d, coalesce(sum(e.credit_minor),0)::text AS c FROM gl_entry e WHERE e.account_id = ${a.id} AND e.posting_date < ${q.from}::date ${br}`.execute(trx);
       const ent = await sql<{ date: string; no: string; narration: string; d: string; c: string; branch: string | null; vid: string }>`SELECT e.posting_date::text AS date, v.voucher_no AS no, v.narration, e.debit_minor::text AS d, e.credit_minor::text AS c, p.name AS branch, v.id AS vid
         FROM gl_entry e JOIN voucher v ON v.tenant_id = e.tenant_id AND v.id = e.voucher_id LEFT JOIN property p ON p.tenant_id = e.tenant_id AND p.id = e.property_id
@@ -394,11 +417,11 @@ export class FinanceController {
   constructor(@Inject(FinanceService) private readonly svc: FinanceService) {}
   private me() { return currentTenant().actorId!; }
   @Get('accounts') @RequirePermission('finance.view', ANY) accounts() { return this.svc.accounts(); }
-  @Post('accounts') @RequirePermission('finance.setup', ANY) addAccount(@Body() b: unknown) { return this.svc.addAccount(this.me(), parse(AccountIn, b)); }
-  @Post('accounts/starter') @HttpCode(200) @RequirePermission('finance.setup', ANY) starter() { return this.svc.loadStarter(this.me()); }
-  @Put('accounts/:id') @RequirePermission('finance.setup', ANY) editAccount(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.editAccount(this.me(), id, parse(AccountEdit, b)); }
+  @Post('accounts') @RequirePermission('finance.setup') addAccount(@Body() b: unknown) { return this.svc.addAccount(this.me(), parse(AccountIn, b)); }
+  @Post('accounts/starter') @HttpCode(200) @RequirePermission('finance.setup') starter() { return this.svc.loadStarter(this.me()); }
+  @Put('accounts/:id') @RequirePermission('finance.setup') editAccount(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.editAccount(this.me(), id, parse(AccountEdit, b)); }
   @Get('settings') @RequirePermission('finance.view', ANY) settings() { return this.svc.getSettings(); }
-  @Put('settings') @RequirePermission('finance.setup', ANY) saveSettings(@Body() b: unknown) { return this.svc.saveSettings(this.me(), parse(Settings, b)); }
+  @Put('settings') @RequirePermission('finance.setup') saveSettings(@Body() b: unknown) { return this.svc.saveSettings(this.me(), parse(Settings, b)); }
   @Get('vouchers') @RequirePermission('finance.view', ANY) list(@Query() q: unknown) { return this.svc.list(parse(ListQ, q)); }
   @Post('vouchers') @RequirePermission('finance.prepare', ANY) create(@Body() b: unknown) { return this.svc.create(this.me(), parse(VoucherIn, b)); }
   @Get('vouchers/:id') @RequirePermission('finance.view', ANY) get(@Param('id', new ParseUUIDPipe()) id: string) { return this.svc.get(id); }
@@ -409,8 +432,8 @@ export class FinanceController {
   @Post('vouchers/:id/cancel') @HttpCode(200) @RequirePermission('finance.prepare', ANY) cancel(@Param('id', new ParseUUIDPipe()) id: string) { return this.svc.cancel(this.me(), id); }
   @Post('vouchers/:id/reverse') @RequirePermission('finance.prepare', ANY) reverse(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.reverse(this.me(), id, parse(Reverse, b)); }
   @Get('periods') @RequirePermission('finance.view', ANY) periods() { return this.svc.periods(); }
-  @Post('periods/:month/close') @HttpCode(200) @RequirePermission('finance.period', ANY) close(@Param('month') m: string) { return this.svc.setPeriod(this.me(), parse(month, m), 'CLOSED'); }
-  @Post('periods/:month/reopen') @HttpCode(200) @RequirePermission('finance.period', ANY) reopen(@Param('month') m: string, @Body() b: unknown) { return this.svc.setPeriod(this.me(), parse(month, m), 'OPEN', parse(Period, b ?? {}).reason); }
+  @Post('periods/:month/close') @HttpCode(200) @RequirePermission('finance.period') close(@Param('month') m: string) { return this.svc.setPeriod(this.me(), parse(month, m), 'CLOSED'); }
+  @Post('periods/:month/reopen') @HttpCode(200) @RequirePermission('finance.period') reopen(@Param('month') m: string, @Body() b: unknown) { return this.svc.setPeriod(this.me(), parse(month, m), 'OPEN', parse(Period, b ?? {}).reason); }
   @Get('reports/trial-balance') @RequirePermission('finance.view', ANY) tb(@Query() q: unknown) { return this.svc.trialBalance(parse(TbQ, q)); }
   @Get('reports/general-ledger') @RequirePermission('finance.view', ANY) gl(@Query() q: unknown) { return this.svc.generalLedger(parse(GlQ, q)); }
 }

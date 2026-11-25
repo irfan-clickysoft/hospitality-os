@@ -27,6 +27,8 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
   { key: 'night_auditor', name: 'Night Auditor', permissions: [...READ, 'nightaudit.run', 'cashier.operate', 'folio.post', 'maintenance.request', 'maintenance.view', 'damage.report', 'case.report', 'case.view'] },
   { key: 'accountant', name: 'Accountant', permissions: [...READ, 'folio.adjust', 'payment.take', 'tax.configure', 'payment.verify', 'cashier.review', 'invoice.issue', 'invoice.credit', 'company.view', 'company.manage', 'ar.bill', 'ar.receipt', 'ar.verify', 'management.view', 'ota.claim', 'data.import', 'maintenance.view', 'maintenance.pay', 'paymentaccount.view', 'paymentaccount.manage', 'space.view', 'maintenance.request', 'damage.view', 'report.schedule', 'finance.view', 'finance.prepare', 'finance.approve', 'finance.setup', 'finance.period', 'finance.bank_details'] },
   { key: 'read_only', name: 'Read-only', permissions: [...READ] },
+  { key: 'branch_accountant', name: 'Branch Accountant (one branch)', permissions: [...READ, 'finance.view', 'finance.prepare', 'cashier.operate'] },
+  { key: 'branch_finance_manager', name: 'Branch Finance Manager (one branch)', permissions: [...READ, 'finance.view', 'finance.prepare', 'finance.approve', 'cashier.operate', 'cashier.review'] },
   // Sunset staffing model (per property: manager, front desk/night auditor, housekeeping, kitchen, guards; central: GM, accountant, bookings)
   { key: 'group_gm', name: 'Group General Manager (central)', permissions: [
     'property.manage', 'property.view', 'user.manage', 'role.manage', 'audit.view', 'reservation.view', 'reservation.create',

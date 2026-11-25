@@ -8,6 +8,7 @@ import { TenantDb } from '../db/tenant-db.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { BankingService } from './banking.js';
 import { FinanceService } from './finance.js';
+import { FinanceScope } from './scope.js';
 
 const ANY = { anyScope: true } as const;
 const err = (status: number, code: string, message: string) => new HttpException({ code, message }, status);
@@ -23,7 +24,7 @@ const ItemsQ = z.object({ branchId: uuid, counterpartyId: uuid, to: date.optiona
 /** One branch paying or sending money on another's behalf. The two branches each get their own balanced pair of entries, tied together by the voucher, so a branch's books always balance on their own. */
 @Injectable()
 export class InterBranchService {
-  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(FinanceService) private readonly fin: FinanceService, @Inject(BankingService) private readonly bank: BankingService) {}
+  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(FinanceService) private readonly fin: FinanceService, @Inject(BankingService) private readonly bank: BankingService, @Inject(FinanceScope) private readonly scope: FinanceScope) {}
 
   private async dueAccounts(): Promise<{ from: string; to: string }> {
     return this.tdb.tx(async (trx) => {
@@ -66,7 +67,7 @@ export class InterBranchService {
   /** For every pair of branches: what each says it is owed or owes the other. They should be equal and opposite. */
   async matrix(to: string) {
     return this.tdb.tx(async (trx) => {
-      const cur = (await this.fin.settings(trx)).base_currency; const f = (v: bigint) => Money.ofMinor(v, cur).toDecimalString();
+      const cur = (await this.fin.settings(trx)).base_currency; const f = (v: bigint) => Money.ofMinor(v, cur).toDecimalString(); const sc = await this.scope.of('finance.view');
       const r = await sql<{ a: string; b: string; net: string }>`SELECT e.property_id AS a, e.counterparty_property_id AS b, sum(e.debit_minor - e.credit_minor)::text AS net
         FROM gl_entry e JOIN gl_account g ON g.tenant_id = e.tenant_id AND g.id = e.account_id WHERE g.control_type = 'INTERBRANCH' AND e.counterparty_property_id IS NOT NULL AND e.posting_date <= ${to}::date GROUP BY 1, 2`.execute(trx);
       const names = new Map((await trx.selectFrom('property').select(['id', 'name']).execute()).map((p) => [p.id, p.name]));
@@ -74,13 +75,16 @@ export class InterBranchService {
       const pairs = new Set<string>(); for (const x of r.rows) pairs.add([x.a, x.b].sort().join('|'));
       const rows = [...pairs].map((k) => {
         const [p, q] = k.split('|') as [string, string]; const a = net.get(`${p}|${q}`) ?? 0n, b = net.get(`${q}|${p}`) ?? 0n; const diff = a + b;
-        return { a: names.get(p) ?? p, aId: p, b: names.get(q) ?? q, bId: q, aBooks: f(a), bBooks: f(b), difference: f(diff < 0n ? -diff : diff), status: diff === 0n ? 'AGREE' : 'DIFFERENCE' };
-      }).sort((x, y) => x.a.localeCompare(y.a) || x.b.localeCompare(y.b));
+        const seeA = this.scope.allows(sc, p), seeB = this.scope.allows(sc, q);
+        if (!seeA && !seeB) return null;                           // a branch role sees only the pairs it is part of, and only its own side's figure
+        return { a: names.get(p) ?? p, aId: p, b: names.get(q) ?? q, bId: q, aBooks: seeA ? f(a) : '—', bBooks: seeB ? f(b) : '—', difference: f(diff < 0n ? -diff : diff), status: diff === 0n ? 'AGREE' : 'DIFFERENCE' };
+      }).filter((x): x is NonNullable<typeof x> => x !== null).sort((x, y) => x.a.localeCompare(y.a) || x.b.localeCompare(y.b));
       return { currency: cur, to, rows, agree: rows.every((x) => x.status === 'AGREE') };
     });
   }
 
   async items(branchId: string, counterpartyId: string, to?: string) {
+    await this.scope.assert('finance.view', [branchId]);
     return this.tdb.tx(async (trx) => {
       const cur = (await this.fin.settings(trx)).base_currency; const f = (v: string) => Money.ofMinor(BigInt(v), cur).toDecimalString();
       const r = await sql<{ date: string; no: string; vid: string; narration: string; d: string; c: string; code: string }>`SELECT e.posting_date::text AS date, v.voucher_no AS no, v.id AS vid, v.narration, e.debit_minor::text AS d, e.credit_minor::text AS c, g.code

@@ -10,6 +10,7 @@ import { parse } from '../common/validate.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { FinanceService, type VType } from './finance.js';
+import { FinanceScope } from './scope.js';
 
 type Trx = Transaction<DB>;
 const ANY = { anyScope: true } as const;
@@ -32,7 +33,7 @@ const ClosingsQ = z.object({ status: z.enum(['CLOSED', 'PENDING_APPROVAL', 'APPR
 /** Bank accounts as the books see them (which branches use them, what for, whether they may be used), branch cash and petty cash with daily closing, and the simple cash, bank and transfer vouchers. */
 @Injectable()
 export class BankingService {
-  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(FinanceService) private readonly fin: FinanceService, @Inject(AuthorizationService) private readonly authz: AuthorizationService) {}
+  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(FinanceService) private readonly fin: FinanceService, @Inject(AuthorizationService) private readonly authz: AuthorizationService, @Inject(FinanceScope) private readonly scope: FinanceScope) {}
 
   private async accountByKey(trx: Trx, key: string, fallbackCode: string, create?: { name: string; type: string; parent: string }): Promise<{ id: string; code: string }> {
     const m = await trx.selectFrom('gl_posting_map as m').innerJoin('gl_account as a', (j) => j.onRef('a.id', '=', 'm.account_id').onRef('a.tenant_id', '=', 'm.tenant_id')).select(['a.id', 'a.code']).where('m.key', '=', key).executeTakeFirst();
@@ -54,7 +55,8 @@ export class BankingService {
         .select(['p.id', 'p.name', 'p.bank_name', 'p.branch', 'p.account_title', 'p.iban', 'p.account_number', 'p.owner_type', 'p.owner_name', 'p.account_type', 'p.purpose', 'p.authorised_at', 'p.authorisation_note', 'g.code as gl_code', 'g.name as gl_name', 'u.full_name as authorised_by', 'p.status'])
         .where('p.kind', '=', 'BANK').where('p.status', '=', 'ACTIVE').orderBy('p.name').execute();
       const maps = await trx.selectFrom('payment_account_branch as b').innerJoin('property as pr', (j) => j.onRef('pr.id', '=', 'b.property_id').onRef('pr.tenant_id', '=', 'b.tenant_id')).select(['b.payment_account_id', 'pr.id as pid', 'pr.name']).execute();
-      return { items: rows.map((r) => {
+      const sc = await this.scope.of('finance.view');
+      return { items: rows.filter((r) => sc.all || maps.some((m) => m.payment_account_id === r.id && sc.ids.includes(m.pid))).map((r) => {
         const branches = maps.filter((m) => m.payment_account_id === r.id).map((m) => ({ id: m.pid, name: m.name }));
         const ownerFlag = r.owner_type !== 'COMPANY';
         const status = !r.purpose || !r.account_type || branches.length === 0 ? 'NEEDS_SETUP' : ownerFlag && !r.authorised_at ? 'NEEDS_AUTHORISATION' : 'READY';
@@ -120,6 +122,7 @@ export class BankingService {
       let q = trx.selectFrom('cash_drawer as d').innerJoin('property as p', (j) => j.onRef('p.id', '=', 'd.property_id').onRef('p.tenant_id', '=', 'd.tenant_id')).leftJoin('staff_user as u', (j) => j.onRef('u.id', '=', 'd.custodian_user_id').onRef('u.tenant_id', '=', 'd.tenant_id'))
         .select(['d.id', 'd.property_id', 'p.name as branch', 'p.business_date', 'd.kind', 'd.name', 'd.custodian_user_id', 'u.full_name as custodian', 'd.opening_float_minor', 'd.max_limit_minor', 'd.status']).where('d.status', '=', 'ACTIVE').orderBy('p.name').orderBy('d.kind');
       if (propertyId) q = q.where('d.property_id', '=', propertyId);
+      const sc = await this.scope.of('finance.view'); if (!sc.all) q = q.where('d.property_id', 'in', sc.ids.length ? sc.ids : ['00000000-0000-0000-0000-000000000000']);
       const rows = await q.execute(); const out = [];
       for (const d of rows) {
         const acct = await this.drawerAccount(trx, d.kind).catch(() => null);
@@ -156,6 +159,8 @@ export class BankingService {
       const cur = (await this.fin.settings(trx)).base_currency;
       const d = await trx.selectFrom('cash_drawer').selectAll().where('id', '=', id).where('status', '=', 'ACTIVE').executeTakeFirst(); if (!d) throw err(404, 'NOT_FOUND', 'No such drawer');
       if (await trx.selectFrom('cash_closing').select('id').where('drawer_id', '=', id).where('business_date', '=', i.date).executeTakeFirst()) throw err(409, 'ALREADY_CLOSED', 'This drawer is already closed for that date');
+      const w1 = await this.scope.of('cashier.operate'), w2 = await this.scope.of('finance.prepare');
+      if (!this.scope.allows(w1, d.property_id) && !this.scope.allows(w2, d.property_id)) throw err(403, 'BRANCH_NOT_ALLOWED', 'You may not close the cash of that branch.');
       const acct = await this.drawerAccount(trx, d.kind);
       const expected = await this.ledgerBalance(trx, acct.id, d.property_id, i.date); const counted = Money.parse(i.counted, cur).minor; const variance = counted - expected;
       if (variance !== 0n && (i.note?.length ?? 0) < 3) throw err(400, 'EXPLANATION_REQUIRED', `The count is ${variance < 0n ? 'short' : 'over'} by ${Money.ofMinor(variance < 0n ? -variance : variance, cur).toDecimalString()}. Say why.`);
@@ -170,6 +175,7 @@ export class BankingService {
       let q = trx.selectFrom('cash_closing as c').innerJoin('cash_drawer as d', (j) => j.onRef('d.id', '=', 'c.drawer_id').onRef('d.tenant_id', '=', 'c.tenant_id')).innerJoin('property as p', (j) => j.onRef('p.id', '=', 'd.property_id').onRef('p.tenant_id', '=', 'd.tenant_id')).leftJoin('staff_user as u', (j) => j.onRef('u.id', '=', 'c.created_by').onRef('u.tenant_id', '=', 'c.tenant_id'))
         .select(['c.id', 'c.business_date', 'p.name as branch', 'd.kind', 'd.name', 'c.expected_minor', 'c.counted_minor', 'c.variance_minor', 'c.note', 'c.status', 'c.created_by', 'u.full_name as by', 'c.decision_note']).orderBy('c.business_date', 'desc').orderBy('c.created_at', 'desc').limit(200);
       if (status) q = q.where('c.status', '=', status);
+      const sc = await this.scope.of('finance.view'); if (!sc.all) q = q.where('d.property_id', 'in', sc.ids.length ? sc.ids : ['00000000-0000-0000-0000-000000000000']);
       const f = (v: string) => Money.ofMinor(BigInt(v), cur).toDecimalString();
       return { items: (await q.execute()).map((c) => ({ id: c.id, date: c.business_date, branch: c.branch, kind: c.kind, drawer: c.name, expected: f(c.expected_minor), counted: f(c.counted_minor), variance: f(c.variance_minor), note: c.note, status: c.status, by: c.by, byId: c.created_by, decisionNote: c.decision_note })) };
     });
@@ -179,6 +185,7 @@ export class BankingService {
     return this.tdb.tx(async (trx) => {
       const c = await trx.selectFrom('cash_closing').selectAll().where('id', '=', id).forUpdate().executeTakeFirst(); if (!c) throw err(404, 'NOT_FOUND', 'No such closing');
       if (c.status !== 'PENDING_APPROVAL') throw err(409, 'NOT_PENDING', 'This closing is not waiting for a decision');
+      await this.scope.assert('finance.approve', [(await trx.selectFrom('cash_drawer').select('property_id').where('id', '=', c.drawer_id).executeTakeFirstOrThrow()).property_id]);
       if (c.created_by === userId) throw err(403, 'FINANCE_SELF_APPROVAL', 'You did this count, so someone else has to decide');
       if (!i.approve && (i.note?.length ?? 0) < 3) throw err(400, 'EXPLANATION_REQUIRED', 'Say why the explanation is not accepted');
       let voucherId: string | null = null;
@@ -231,13 +238,13 @@ export class BankingController {
   constructor(@Inject(BankingService) private readonly svc: BankingService) {}
   private me() { return currentTenant().actorId!; }
   @Get('banks') @RequirePermission('finance.view', ANY) banks() { return this.svc.banks(); }
-  @Put('banks/:id') @RequirePermission('finance.setup', ANY) editBank(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.editBank(this.me(), id, parse(BankEdit, b)); }
-  @Post('banks/:id/authorise') @HttpCode(200) @RequirePermission('finance.bank_details', ANY) authorise(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.authorise(this.me(), id, parse(Authorise, b).note); }
-  @Post('banks/:id/ledger-account') @HttpCode(200) @RequirePermission('finance.setup', ANY) ledger(@Param('id', new ParseUUIDPipe()) id: string) { return this.svc.ledgerAccount(this.me(), id); }
-  @Get('banks/:id/reveal') @RequirePermission('finance.bank_details', ANY) reveal(@Param('id', new ParseUUIDPipe()) id: string) { return this.svc.reveal(this.me(), id); }
+  @Put('banks/:id') @RequirePermission('finance.setup') editBank(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.editBank(this.me(), id, parse(BankEdit, b)); }
+  @Post('banks/:id/authorise') @HttpCode(200) @RequirePermission('finance.bank_details') authorise(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.authorise(this.me(), id, parse(Authorise, b).note); }
+  @Post('banks/:id/ledger-account') @HttpCode(200) @RequirePermission('finance.setup') ledger(@Param('id', new ParseUUIDPipe()) id: string) { return this.svc.ledgerAccount(this.me(), id); }
+  @Get('banks/:id/reveal') @RequirePermission('finance.bank_details') reveal(@Param('id', new ParseUUIDPipe()) id: string) { return this.svc.reveal(this.me(), id); }
   @Get('cash/drawers') @RequirePermission('finance.view', ANY) drawers(@Query('propertyId') pid?: string) { return this.svc.drawers(pid ? parse(uuid, pid) : undefined); }
-  @Post('cash/drawers') @RequirePermission('finance.setup', ANY) addDrawer(@Body() b: unknown) { return this.svc.addDrawer(this.me(), parse(DrawerIn, b)); }
-  @Put('cash/drawers/:id') @RequirePermission('finance.setup', ANY) editDrawer(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.editDrawer(this.me(), id, parse(DrawerEdit, b)); }
+  @Post('cash/drawers') @RequirePermission('finance.setup') addDrawer(@Body() b: unknown) { return this.svc.addDrawer(this.me(), parse(DrawerIn, b)); }
+  @Put('cash/drawers/:id') @RequirePermission('finance.setup') editDrawer(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.editDrawer(this.me(), id, parse(DrawerEdit, b)); }
   @Post('cash/drawers/:id/close') @Authenticated() close(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.guardClose().then(() => this.svc.closeDay(this.me(), id, parse(Close, b))); }
   @Get('cash/closings') @RequirePermission('finance.view', ANY) closings(@Query() q: unknown) { return this.svc.closings(parse(ClosingsQ, q).status); }
   @Post('cash/closings/:id/decide') @HttpCode(200) @RequirePermission('finance.approve', ANY) decide(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.decide(this.me(), id, parse(Decide, b)); }

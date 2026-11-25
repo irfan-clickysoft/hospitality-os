@@ -712,9 +712,10 @@ interface FyPreview { start: string; end: string; blockers: Array<{ code: string
 /** The financial year: when it starts, and closing it once every month is closed. */
 function YearEnd() {
   const { t } = useT(); const { can } = useAuth(); const withStepUp = useStepUp(); const { busy, problem, run } = useAction();
-  const [data, setData] = useState<{ startMonth: number; items: FyRow[] } | null>(null); const [pv, setPv] = useState<FyPreview | null>(null); const [made, setMade] = useState(false);
-  const load = () => api<{ startMonth: number; items: FyRow[] }>('GET', '/v1/finance/year-end').then(setData);
+  const [data, setData] = useState<{ startMonth: number; items: FyRow[] } | null>(null); const [pv, setPv] = useState<FyPreview | null>(null); const [made, setMade] = useState(false); const [hidden, setHidden] = useState(false);
+  const load = () => api<{ startMonth: number; items: FyRow[] }>('GET', '/v1/finance/year-end').then(setData).catch(() => setHidden(true));     // a branch role has no say over the year
   useEffect(() => { void load(); }, []);
+  if (hidden) return null;
   if (!data) return <Spinner />;
   const monthName = (m: number) => new Date(Date.UTC(2000, m - 1, 1)).toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
   return (

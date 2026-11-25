@@ -9,6 +9,7 @@ import { parse } from '../common/validate.js';
 import { TenantDb } from '../db/tenant-db.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { FinanceService } from './finance.js';
+import { FinanceScope } from './scope.js';
 
 type Trx = Transaction<DB>;
 const ANY = { anyScope: true } as const;
@@ -34,12 +35,11 @@ const CASHISH = ['CASH', 'PETTY_CASH', 'BANK'];
 /** The statements a finance manager or owner reads: profit and loss, balance sheet, cash flow and the day-to-day registers, by branch or for the whole company. All of them read the posted ledger only. */
 @Injectable()
 export class FinanceReportsService {
-  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(FinanceService) private readonly fin: FinanceService) {}
+  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(FinanceService) private readonly fin: FinanceService, @Inject(FinanceScope) private readonly scope: FinanceScope) {}
 
   private async cur(trx: Trx) { return (await this.fin.settings(trx)).base_currency; }
   private f(v: bigint, cur: string) { return Money.ofMinor(v, cur).toDecimalString(); }
   private async names(trx: Trx) { return new Map((await trx.selectFrom('property').select(['id', 'name']).execute()).map((p) => [p.id, p.name])); }
-  private brSql(branchId?: string) { return branchId ? sql`AND e.property_id = ${branchId}` : sql``; }
 
   /** Columns for a branch comparison: the chosen branch, or every branch with entries (and head office if it has any). */
   private async branchKeys(trx: Trx, ids: Array<string | null>, branchId?: string): Promise<Array<{ key: string; name: string }>> {
@@ -51,9 +51,9 @@ export class FinanceReportsService {
 
   async profitLoss(q: z.infer<typeof Range>): Promise<Table> {
     return this.tdb.tx(async (trx) => {
-      const cur = await this.cur(trx);
+      const cur = await this.cur(trx); const br = await this.fin.br(q.branchId);
       const r = await sql<{ code: string; name: string; type: string; pid: string | null; d: string; c: string }>`SELECT a.code, a.name, a.account_type AS type, e.property_id AS pid, sum(e.debit_minor)::text AS d, sum(e.credit_minor)::text AS c
-        FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id WHERE a.account_type IN ('REVENUE','EXPENSE') AND e.posting_date BETWEEN ${q.from}::date AND ${q.to}::date ${sql.raw("AND e.voucher_id NOT IN (SELECT id FROM voucher WHERE voucher_type = 'YEC')")} ${this.brSql(q.branchId)} GROUP BY 1, 2, 3, 4 ORDER BY 1`.execute(trx);
+        FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id WHERE a.account_type IN ('REVENUE','EXPENSE') AND e.posting_date BETWEEN ${q.from}::date AND ${q.to}::date ${sql.raw("AND e.voucher_id NOT IN (SELECT id FROM voucher WHERE voucher_type = 'YEC')")} ${br} GROUP BY 1, 2, 3, 4 ORDER BY 1`.execute(trx);
       const cols = await this.branchKeys(trx, r.rows.map((x) => x.pid), q.branchId);
       const val = (x: { type: string; d: string; c: string }) => (x.type === 'REVENUE' ? BigInt(x.c) - BigInt(x.d) : BigInt(x.d) - BigInt(x.c));
       const sec = (type: string, title: string, totalLabel: string): { rows: TRow[]; tot: Map<string, bigint> } => {
@@ -70,9 +70,9 @@ export class FinanceReportsService {
 
   async balanceSheet(q: z.infer<typeof AsAt>): Promise<Table> {
     return this.tdb.tx(async (trx) => {
-      const cur = await this.cur(trx);
+      const cur = await this.cur(trx); const br = await this.fin.br(q.branchId);
       const r = await sql<{ code: string; name: string; type: string; ctl: string | null; pid: string | null; d: string; c: string }>`SELECT a.code, a.name, a.account_type AS type, a.control_type AS ctl, e.property_id AS pid, sum(e.debit_minor)::text AS d, sum(e.credit_minor)::text AS c
-        FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id WHERE e.posting_date <= ${q.to}::date ${this.brSql(q.branchId)} GROUP BY 1, 2, 3, 4, 5 ORDER BY 1`.execute(trx);
+        FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id WHERE e.posting_date <= ${q.to}::date ${br} GROUP BY 1, 2, 3, 4, 5 ORDER BY 1`.execute(trx);
       const cols = await this.branchKeys(trx, r.rows.map((x) => x.pid), q.branchId); const notes: string[] = ['Posted entries up to the date. The result of the year so far is shown in equity until the year is closed.'];
       const net = (x: { d: string; c: string }) => BigInt(x.d) - BigInt(x.c);
       const inter = r.rows.filter((x) => x.ctl === 'INTERBRANCH').reduce((s, x) => s + net(x), 0n); const eliminate = !q.branchId && inter === 0n && r.rows.some((x) => x.ctl === 'INTERBRANCH');
@@ -100,13 +100,13 @@ export class FinanceReportsService {
 
   async cashFlow(q: z.infer<typeof Range>): Promise<Table> {
     return this.tdb.tx(async (trx) => {
-      const cur = await this.cur(trx);
-      const bal = async (on: string) => BigInt((await sql<{ s: string }>`SELECT coalesce(sum(e.debit_minor - e.credit_minor),0)::text AS s FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id WHERE a.control_type = ANY(${CASHISH}) AND e.posting_date ${sql.raw(on)} ${this.brSql(q.branchId)}`.execute(trx)).rows[0]!.s);
+      const cur = await this.cur(trx); const br = await this.fin.br(q.branchId); const br2 = await this.fin.br(q.branchId, 'e2');
+      const bal = async (on: string) => BigInt((await sql<{ s: string }>`SELECT coalesce(sum(e.debit_minor - e.credit_minor),0)::text AS s FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id WHERE a.control_type = ANY(${CASHISH}) AND e.posting_date ${sql.raw(on)} ${br}`.execute(trx)).rows[0]!.s);
       const opening = await bal(`< '${q.from}'::date`), closing = await bal(`<= '${q.to}'::date`);
       const r = await sql<{ code: string; name: string; type: string; ctl: string | null; amt: string }>`SELECT a.code, a.name, a.account_type AS type, a.control_type AS ctl, sum(e.credit_minor - e.debit_minor)::text AS amt
         FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id
-        WHERE e.posting_date BETWEEN ${q.from}::date AND ${q.to}::date ${this.brSql(q.branchId)} AND NOT (coalesce(a.control_type, '') = ANY(${CASHISH}))
-          AND e.voucher_id IN (SELECT e2.voucher_id FROM gl_entry e2 JOIN gl_account a2 ON a2.tenant_id = e2.tenant_id AND a2.id = e2.account_id WHERE a2.control_type = ANY(${CASHISH}) AND e2.posting_date BETWEEN ${q.from}::date AND ${q.to}::date ${sql`AND (${q.branchId ?? null}::uuid IS NULL OR e2.property_id = ${q.branchId ?? null}::uuid)`})
+        WHERE e.posting_date BETWEEN ${q.from}::date AND ${q.to}::date ${br} AND NOT (coalesce(a.control_type, '') = ANY(${CASHISH}))
+          AND e.voucher_id IN (SELECT e2.voucher_id FROM gl_entry e2 JOIN gl_account a2 ON a2.tenant_id = e2.tenant_id AND a2.id = e2.account_id WHERE a2.control_type = ANY(${CASHISH}) AND e2.posting_date BETWEEN ${q.from}::date AND ${q.to}::date ${br2})
         GROUP BY 1, 2, 3, 4 ORDER BY 1`.execute(trx);
       const cat = (x: { code: string; type: string; ctl: string | null }) => (x.ctl === 'INTERBRANCH' ? 'Financing' : x.type === 'EQUITY' ? 'Financing' : x.type === 'ASSET' && /^15/.test(x.code) ? 'Investing' : 'Operating');
       const label: Record<string, string> = { Operating: 'Operating activities', Investing: 'Investing activities (equipment and fixtures)', Financing: 'Financing (owner funds and inter-branch funding)' };
@@ -128,7 +128,8 @@ export class FinanceReportsService {
     return this.tdb.tx(async (trx) => {
       const cur = await this.cur(trx);
       let d = trx.selectFrom('cash_drawer as d').innerJoin('property as p', (j) => j.onRef('p.id', '=', 'd.property_id').onRef('p.tenant_id', '=', 'd.tenant_id')).select(['d.id', 'd.property_id', 'd.kind', 'd.name', 'p.name as branch']).where('d.status', '=', 'ACTIVE').orderBy('p.name').orderBy('d.kind');
-      if (q.branchId) d = d.where('d.property_id', '=', q.branchId);
+      const sc = await this.scope.of('finance.view'); if (q.branchId && !this.scope.allows(sc, q.branchId)) throw err(403, 'BRANCH_NOT_ALLOWED', 'You do not have this permission for that branch.');
+      if (q.branchId) d = d.where('d.property_id', '=', q.branchId); if (!sc.all) d = d.where('d.property_id', 'in', sc.ids.length ? sc.ids : ['00000000-0000-0000-0000-000000000000']);
       const rows: TRow[] = [];
       for (const x of await d.execute()) {
         const acct = await trx.selectFrom('gl_account').select('id').where('control_type', '=', x.kind === 'PETTY' ? 'PETTY_CASH' : 'CASH').where('is_group', '=', false).executeTakeFirst(); if (!acct) continue;
@@ -155,10 +156,10 @@ export class FinanceReportsService {
 
   async expenses(q: z.infer<typeof Expenses>): Promise<Table> {
     return this.tdb.tx(async (trx) => {
-      const cur = await this.cur(trx);
+      const cur = await this.cur(trx); const br = await this.fin.br(q.branchId);
       const r = await sql<{ date: string; no: string; branch: string | null; code: string; name: string; narration: string; ref: string | null; amt: string }>`SELECT e.posting_date::text AS date, v.voucher_no AS no, p.name AS branch, a.code, a.name, v.narration, l.reference AS ref, (e.debit_minor - e.credit_minor)::text AS amt
         FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id JOIN voucher v ON v.tenant_id = e.tenant_id AND v.id = e.voucher_id JOIN voucher_line l ON l.tenant_id = e.tenant_id AND l.id = e.line_id LEFT JOIN property p ON p.tenant_id = e.tenant_id AND p.id = e.property_id
-        WHERE a.account_type = 'EXPENSE' AND e.posting_date BETWEEN ${q.from}::date AND ${q.to}::date ${sql.raw("AND e.voucher_id NOT IN (SELECT id FROM voucher WHERE voucher_type = 'YEC')")} ${this.brSql(q.branchId)} ${q.account ? sql`AND a.code = ${q.account}` : sql``} ORDER BY a.code, e.posting_date, v.voucher_no`.execute(trx);
+        WHERE a.account_type = 'EXPENSE' AND e.posting_date BETWEEN ${q.from}::date AND ${q.to}::date ${sql.raw("AND e.voucher_id NOT IN (SELECT id FROM voucher WHERE voucher_type = 'YEC')")} ${br} ${q.account ? sql`AND a.code = ${q.account}` : sql``} ORDER BY a.code, e.posting_date, v.voucher_no`.execute(trx);
       const rows: TRow[] = []; let cur2 = ''; let sub = 0n; let all = 0n;
       const flush = () => { if (cur2) rows.push({ cells: ['', '', '', '', `Total ${cur2}`, '', this.f(sub, cur)], kind: 'total' }); };
       for (const x of r.rows) { const h = `${x.code} ${x.name}`; if (h !== cur2) { flush(); cur2 = h; sub = 0n; rows.push({ cells: [h, '', '', '', '', '', ''], kind: 'head' }); } sub += BigInt(x.amt); all += BigInt(x.amt); rows.push({ cells: ['', x.date, x.no, x.branch ?? 'Head office', x.narration, x.ref ?? '', this.f(BigInt(x.amt), cur)], kind: 'row' }); }
@@ -169,11 +170,12 @@ export class FinanceReportsService {
 
   async register(q: z.infer<typeof Register>): Promise<Table> {
     return this.tdb.tx(async (trx) => {
-      const cur = await this.cur(trx);
+      const cur = await this.cur(trx); const sc = await this.scope.of('finance.view'); if (q.branchId && !this.scope.allows(sc, q.branchId)) throw err(403, 'BRANCH_NOT_ALLOWED', 'You do not have this permission for that branch.');
+      const only = sc.all ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM voucher_line l2 WHERE l2.voucher_id = v.id AND ${sc.ids.length ? sql`(l2.property_id IS NULL OR l2.property_id NOT IN (${sql.join(sc.ids.map((i) => sql`${i}::uuid`))}))` : sql`true`})`;
       const r = await sql<{ no: string | null; type: string; date: string; status: string; narration: string; total: string; maker: string | null; checker: string | null; branches: string | null }>`SELECT v.voucher_no AS no, v.voucher_type AS type, v.posting_date::text AS date, v.status, v.narration, v.total_minor::text AS total, u.full_name AS maker, ap.full_name AS checker,
         (SELECT string_agg(DISTINCT coalesce(p.name, 'Head office'), ', ') FROM voucher_line l LEFT JOIN property p ON p.tenant_id = l.tenant_id AND p.id = l.property_id WHERE l.voucher_id = v.id) AS branches
         FROM voucher v LEFT JOIN staff_user u ON u.tenant_id = v.tenant_id AND u.id = v.created_by LEFT JOIN staff_user ap ON ap.tenant_id = v.tenant_id AND ap.id = v.approved_by
-        WHERE v.posting_date BETWEEN ${q.from}::date AND ${q.to}::date ${q.type ? sql`AND v.voucher_type = ${q.type}` : sql``} ${q.status ? sql`AND v.status = ${q.status}` : sql``} ${q.branchId ? sql`AND EXISTS (SELECT 1 FROM voucher_line l WHERE l.voucher_id = v.id AND l.property_id = ${q.branchId})` : sql``} ORDER BY v.posting_date, v.voucher_no NULLS LAST LIMIT 1000`.execute(trx);
+        WHERE v.posting_date BETWEEN ${q.from}::date AND ${q.to}::date ${only} ${q.type ? sql`AND v.voucher_type = ${q.type}` : sql``} ${q.status ? sql`AND v.status = ${q.status}` : sql``} ${q.branchId ? sql`AND EXISTS (SELECT 1 FROM voucher_line l WHERE l.voucher_id = v.id AND l.property_id = ${q.branchId})` : sql``} ORDER BY v.posting_date, v.voucher_no NULLS LAST LIMIT 1000`.execute(trx);
       const rows = r.rows.map((x): TRow => ({ cells: [x.no ?? 'draft', x.type, x.date, x.branches ?? '', x.narration, this.f(BigInt(x.total), cur), x.status.toLowerCase(), x.maker ?? '', x.checker ?? ''], kind: 'row' }));
       return { title: 'Voucher register', currency: cur, from: q.from, to: q.to, columns: ['Voucher', 'Type', 'Date', 'Branches', 'What for', 'Amount', 'Status', 'Prepared by', 'Approved by'], numeric: [false, false, false, false, false, true, false, false, false], rows, ok: true, notes: r.rows.length >= 1000 ? ['Only the first 1,000 are shown. Narrow the dates.'] : [] };
     });
@@ -193,10 +195,10 @@ export class FinanceReportsService {
   }
   async budgetVsActual(q: z.infer<typeof BudgetVs>): Promise<Table> {
     return this.tdb.tx(async (trx) => {
-      const cur = await this.cur(trx); const from = `${q.from}-01`; const last = new Date(Date.UTC(Number(q.to.slice(0, 4)), Number(q.to.slice(5, 7)), 0)).toISOString().slice(0, 10);
+      const cur = await this.cur(trx); const br = await this.fin.br(q.branchId); const from = `${q.from}-01`; const last = new Date(Date.UTC(Number(q.to.slice(0, 4)), Number(q.to.slice(5, 7)), 0)).toISOString().slice(0, 10);
       const b = await sql<{ code: string; name: string; type: string; amt: string }>`SELECT a.code, a.name, a.account_type AS type, sum(g.amount_minor)::text AS amt FROM gl_budget g JOIN gl_account a ON a.tenant_id = g.tenant_id AND a.id = g.account_id WHERE g.month BETWEEN ${from}::date AND ${`${q.to}-01`}::date ${q.branchId ? sql`AND g.property_id = ${q.branchId}` : sql``} GROUP BY 1, 2, 3`.execute(trx);
       const a = await sql<{ code: string; name: string; type: string; amt: string }>`SELECT a.code, a.name, a.account_type AS type, sum(CASE WHEN a.account_type = 'REVENUE' THEN e.credit_minor - e.debit_minor ELSE e.debit_minor - e.credit_minor END)::text AS amt
-        FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id WHERE a.account_type IN ('REVENUE','EXPENSE') AND e.posting_date BETWEEN ${from}::date AND ${last}::date ${sql.raw("AND e.voucher_id NOT IN (SELECT id FROM voucher WHERE voucher_type = 'YEC')")} ${this.brSql(q.branchId)} GROUP BY 1, 2, 3`.execute(trx);
+        FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id WHERE a.account_type IN ('REVENUE','EXPENSE') AND e.posting_date BETWEEN ${from}::date AND ${last}::date ${sql.raw("AND e.voucher_id NOT IN (SELECT id FROM voucher WHERE voucher_type = 'YEC')")} ${br} GROUP BY 1, 2, 3`.execute(trx);
       const keys = [...new Set([...b.rows, ...a.rows].map((x) => `${x.type}|${x.code}|${x.name}`))].sort((x, y) => (x.split('|')[0] === y.split('|')[0] ? x.split('|')[1]!.localeCompare(y.split('|')[1]!) : x.split('|')[0]! < y.split('|')[0]! ? 1 : -1));
       const rows: TRow[] = keys.map((k): TRow => { const [type, code, name] = k.split('|') as [string, string, string]; const bu = BigInt(b.rows.find((x) => x.code === code)?.amt ?? 0), ac = BigInt(a.rows.find((x) => x.code === code)?.amt ?? 0); const v = ac - bu;
         return { cells: [`${code} ${name}`, type === 'REVENUE' ? 'Revenue' : 'Expense', this.f(bu, cur), this.f(ac, cur), this.f(v, cur), bu > 0n ? `${Math.round(Number((v * 1000n) / bu)) / 10}%` : '—'], kind: 'row' }; });
@@ -207,23 +209,23 @@ export class FinanceReportsService {
   // ---- the owner's dashboard
   async dashboard(q: z.infer<typeof Dash>) {
     return this.tdb.tx(async (trx) => {
-      const cur = await this.cur(trx); const f = (v: bigint) => this.f(v, cur);
+      const cur = await this.cur(trx); const f = (v: bigint) => this.f(v, cur); const sc = await this.scope.of('finance.view'); const bf = this.scope.filter(sc, 'e.property_id');
       const today = q.date ?? (await trx.selectFrom('property').select('business_date').orderBy('business_date', 'desc').limit(1).executeTakeFirst())?.business_date ?? new Date().toISOString().slice(0, 10);
       const d = new Date(`${today}T00:00:00Z`); const from = q.period === 'day' ? today : q.period === 'week' ? new Date(d.getTime() - ((d.getUTCDay() + 6) % 7) * 86_400_000).toISOString().slice(0, 10) : q.period === 'month' ? `${today.slice(0, 8)}01` : `${today.slice(0, 4)}-01-01`;
       const pl = await sql<{ pid: string | null; type: string; v: string }>`SELECT e.property_id AS pid, a.account_type AS type, sum(CASE WHEN a.account_type = 'REVENUE' THEN e.credit_minor - e.debit_minor ELSE e.debit_minor - e.credit_minor END)::text AS v
-        FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id WHERE a.account_type IN ('REVENUE','EXPENSE') AND e.posting_date BETWEEN ${from}::date AND ${today}::date ${sql.raw("AND e.voucher_id NOT IN (SELECT id FROM voucher WHERE voucher_type = 'YEC')")} GROUP BY 1, 2`.execute(trx);
+        FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id WHERE a.account_type IN ('REVENUE','EXPENSE') AND e.posting_date BETWEEN ${from}::date AND ${today}::date ${sql.raw("AND e.voucher_id NOT IN (SELECT id FROM voucher WHERE voucher_type = 'YEC')")} ${bf} GROUP BY 1, 2`.execute(trx);
       const bal = await sql<{ pid: string | null; ctl: string; v: string }>`SELECT e.property_id AS pid, a.control_type AS ctl, sum(e.debit_minor - e.credit_minor)::text AS v FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id
-        WHERE a.control_type IN ('CASH','PETTY_CASH','BANK','RECEIVABLE','PAYABLE','GUEST_ADVANCE') AND e.posting_date <= ${today}::date GROUP BY 1, 2`.execute(trx);
+        WHERE a.control_type IN ('CASH','PETTY_CASH','BANK','RECEIVABLE','PAYABLE','GUEST_ADVANCE') AND e.posting_date <= ${today}::date ${bf} GROUP BY 1, 2`.execute(trx);
       const names = await this.names(trx); const ids = [...new Set([...pl.rows.map((x) => x.pid), ...bal.rows.map((x) => x.pid)])];
       const card = (pid: string | 'ALL') => { const inB = (x: { pid: string | null }) => pid === 'ALL' || (x.pid ?? HO) === pid; const sum = (rows: Array<{ pid: string | null; v: string }>) => rows.filter(inB).reduce((s, x) => s + BigInt(x.v), 0n);
         const rev = sum(pl.rows.filter((x) => x.type === 'REVENUE')), exp = sum(pl.rows.filter((x) => x.type === 'EXPENSE')); const b = (c: string[]) => sum(bal.rows.filter((x) => c.includes(x.ctl)));
         return { revenue: f(rev), expenses: f(exp), profit: f(rev - exp), cash: f(b(['CASH', 'PETTY_CASH'])), bank: f(b(['BANK'])), receivables: f(b(['RECEIVABLE'])), payables: f(-b(['PAYABLE'])), advances: f(-b(['GUEST_ADVANCE'])) }; };
       const branches = ids.map((p) => ({ id: p ?? HO, name: p ? names.get(p) ?? p : 'Head office', ...card(p ?? HO) })).sort((a, b) => (a.id === HO ? 1 : b.id === HO ? -1 : a.name.localeCompare(b.name)));
       const trend = await sql<{ m: string; type: string; v: string }>`SELECT to_char(e.posting_date, 'YYYY-MM') AS m, a.account_type AS type, sum(CASE WHEN a.account_type = 'REVENUE' THEN e.credit_minor - e.debit_minor ELSE e.debit_minor - e.credit_minor END)::text AS v
-        FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id WHERE a.account_type IN ('REVENUE','EXPENSE') AND e.posting_date >= (${`${today.slice(0, 8)}01`}::date - interval '5 months') AND e.posting_date <= ${today}::date ${sql.raw("AND e.voucher_id NOT IN (SELECT id FROM voucher WHERE voucher_type = 'YEC')")} GROUP BY 1, 2 ORDER BY 1`.execute(trx);
+        FROM gl_entry e JOIN gl_account a ON a.tenant_id = e.tenant_id AND a.id = e.account_id WHERE a.account_type IN ('REVENUE','EXPENSE') AND e.posting_date >= (${`${today.slice(0, 8)}01`}::date - interval '5 months') AND e.posting_date <= ${today}::date ${sql.raw("AND e.voucher_id NOT IN (SELECT id FROM voucher WHERE voucher_type = 'YEC')")} ${bf} GROUP BY 1, 2 ORDER BY 1`.execute(trx);
       const months = [...new Set(trend.rows.map((x) => x.m))];
       const count = async (s: ReturnType<typeof sql>) => Number((await sql<{ n: number }>`${s}`.execute(trx)).rows[0]!.n);
-      const alerts = {
+      const alerts = !sc.all ? { vouchersWaiting: 0, cashDifferences: 0, unallocatedOver3Days: 0, unmatchedBankLines: 0, postingExceptions: 0, interBranchDifferences: 0 } : {
         vouchersWaiting: await count(sql`SELECT count(*)::int AS n FROM voucher WHERE status = 'SUBMITTED'`), cashDifferences: await count(sql`SELECT count(*)::int AS n FROM cash_closing WHERE status = 'PENDING_APPROVAL'`),
         unallocatedOver3Days: await count(sql`SELECT count(*)::int AS n FROM bank_suspense_item s JOIN bank_statement_line l ON l.tenant_id = s.tenant_id AND l.id = s.statement_line_id WHERE s.status <> 'ALLOCATED' AND l.value_date <= ${today}::date - 3`),
         unmatchedBankLines: await count(sql`SELECT count(*)::int AS n FROM bank_statement_line WHERE status = 'UNMATCHED'`), postingExceptions: await count(sql`SELECT count(*)::int AS n FROM finance_exception WHERE status = 'OPEN'`),
@@ -241,10 +243,10 @@ export class FinanceReportsController {
   @Get('balance-sheet') @RequirePermission('finance.view', ANY) bs(@Query() q: unknown) { return this.svc.balanceSheet(parse(AsAt, q)); }
   @Get('cash-flow') @RequirePermission('finance.view', ANY) cf(@Query() q: unknown) { return this.svc.cashFlow(parse(Range, q)); }
   @Get('daily-cash') @RequirePermission('finance.view', ANY) dc(@Query() q: unknown) { return this.svc.dailyCash(parse(Daily, q)); }
-  @Get('bank-book') @RequirePermission('finance.view', ANY) bb(@Query() q: unknown) { return this.svc.bankBook(parse(BankBook, q)); }
+  @Get('bank-book') @RequirePermission('finance.view') bb(@Query() q: unknown) { return this.svc.bankBook(parse(BankBook, q)); }
   @Get('expenses') @RequirePermission('finance.view', ANY) ex(@Query() q: unknown) { return this.svc.expenses(parse(Expenses, q)); }
   @Get('voucher-register') @RequirePermission('finance.view', ANY) vr(@Query() q: unknown) { return this.svc.register(parse(Register, q)); }
   @Get('budget-vs-actual') @RequirePermission('finance.view', ANY) bva(@Query() q: unknown) { return this.svc.budgetVsActual(parse(BudgetVs, q)); }
-  @Put('budget') @RequirePermission('finance.setup', ANY) sb(@Body() b: unknown) { return this.svc.setBudget(currentTenant().actorId!, parse(BudgetSet, b)); }
+  @Put('budget') @RequirePermission('finance.setup') sb(@Body() b: unknown) { return this.svc.setBudget(currentTenant().actorId!, parse(BudgetSet, b)); }
   @Get('dashboard') @RequirePermission('finance.view', ANY) dash(@Query() q: unknown) { return this.svc.dashboard(parse(Dash, q)); }
 }

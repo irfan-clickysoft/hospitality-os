@@ -10,6 +10,7 @@ import { TenantDb } from '../db/tenant-db.js';
 import { currentTenant } from '../tenancy/tenant-context.js';
 import { BankingService } from './banking.js';
 import { FinanceService } from './finance.js';
+import { FinanceScope } from './scope.js';
 
 type Trx = Transaction<DB>;
 const ANY = { anyScope: true } as const;
@@ -33,14 +34,15 @@ const AgeQ = z.object({ asAt: date });
 /** What the hotels owe their suppliers. A bill and a payment are vouchers, so a second person approves each; the payables account is always broken down by supplier. */
 @Injectable()
 export class SuppliersService {
-  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(FinanceService) private readonly fin: FinanceService, @Inject(BankingService) private readonly bank: BankingService) {}
+  constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService, @Inject(FinanceService) private readonly fin: FinanceService, @Inject(BankingService) private readonly bank: BankingService, @Inject(FinanceScope) private readonly scope: FinanceScope) {}
   private cur(trx: Trx) { return this.fin.settings(trx).then((s) => s.base_currency); }
 
   async list() {
     return this.tdb.tx(async (trx) => {
       const cur = await this.cur(trx); const f = (v: string) => Money.ofMinor(BigInt(v), cur).toDecimalString();
       const rows = await trx.selectFrom('supplier').selectAll().orderBy('name').execute();
-      const owed = await sql<{ id: string; v: string }>`SELECT supplier_id AS id, sum(credit_minor - debit_minor)::text AS v FROM gl_entry WHERE supplier_id IS NOT NULL GROUP BY 1`.execute(trx);
+      const sc = await this.scope.of('finance.view');
+      const owed = await sql<{ id: string; v: string }>`SELECT supplier_id AS id, sum(credit_minor - debit_minor)::text AS v FROM gl_entry e WHERE supplier_id IS NOT NULL ${this.scope.filter(sc, 'e.property_id')} GROUP BY 1`.execute(trx);
       return { items: rows.map((s) => ({ id: s.id, name: s.name, legalName: s.legal_name, contactName: s.contact_name, phone: s.phone, email: s.email, ntn: s.ntn, termsDays: s.payment_terms_days, status: s.status, note: s.note, bankName: s.bank_name, accountTitle: s.account_title, iban: mask(s.iban), accountNumber: mask(s.account_number), owed: f(owed.rows.find((o) => o.id === s.id)?.v ?? '0') })) };
     });
   }
@@ -102,11 +104,12 @@ export class SuppliersService {
     return this.tdb.tx(async (trx) => {
       const cur = await this.cur(trx); const f = (v: bigint) => Money.ofMinor(v, cur).toDecimalString();
       const today = (await trx.selectFrom('property').select('business_date').orderBy('business_date', 'desc').limit(1).executeTakeFirst())?.business_date ?? new Date().toISOString().slice(0, 10);
+      const sc = await this.scope.of('finance.view');
       const rows = await sql<{ id: string; sid: string; supplier: string; branch: string; no: string; bdate: string; due: string; total: string; paid: string; pending: string; vstatus: string; vid: string; reversed: boolean; narration: string }>`
         SELECT b.id, b.supplier_id AS sid, s.name AS supplier, p.name AS branch, b.bill_no AS no, b.bill_date::text AS bdate, b.due_date::text AS due, b.total_minor::text AS total, b.paid_minor::text AS paid, b.reversed, b.narration, v.status AS vstatus, v.id AS vid,
           coalesce((SELECT sum(a.amount_minor) FROM supplier_payment_alloc a JOIN supplier_payment sp ON sp.tenant_id = a.tenant_id AND sp.id = a.payment_id JOIN voucher pv ON pv.tenant_id = sp.tenant_id AND pv.id = sp.voucher_id WHERE a.bill_id = b.id AND pv.status IN ('DRAFT','SUBMITTED','REJECTED')),0)::text AS pending
         FROM supplier_bill b JOIN supplier s ON s.tenant_id = b.tenant_id AND s.id = b.supplier_id JOIN property p ON p.tenant_id = b.tenant_id AND p.id = b.property_id JOIN voucher v ON v.tenant_id = b.tenant_id AND v.id = b.voucher_id
-        WHERE v.status <> 'CANCELLED' ${q.supplierId ? sql`AND b.supplier_id = ${q.supplierId}` : sql``} ORDER BY b.due_date, b.bill_no LIMIT 500`.execute(trx);
+        WHERE v.status <> 'CANCELLED' ${this.scope.filter(sc, 'b.property_id')} ${q.supplierId ? sql`AND b.supplier_id = ${q.supplierId}` : sql``} ORDER BY b.due_date, b.bill_no LIMIT 500`.execute(trx);
       const items = rows.rows.map((b) => { const out = BigInt(b.total) - BigInt(b.paid); const od = b.vstatus === 'POSTED' && !b.reversed && out > 0n ? Math.max(0, Math.round((Date.parse(today) - Date.parse(b.due)) / 86_400_000)) : 0;
         return { id: b.id, supplierId: b.sid, supplier: b.supplier, branch: b.branch, billNo: b.no, billDate: b.bdate, dueDate: b.due, total: f(BigInt(b.total)), paid: f(BigInt(b.paid)), outstanding: f(b.reversed ? 0n : out), available: f(b.vstatus === 'POSTED' && !b.reversed ? out - BigInt(b.pending) : 0n), status: b.reversed ? 'REVERSED' : b.vstatus !== 'POSTED' ? b.vstatus : out === 0n ? 'PAID' : BigInt(b.paid) > 0n ? 'PART_PAID' : 'OPEN', overdueDays: od, voucherId: b.vid, narration: b.narration }; });
       return { items: q.unpaid === 'true' ? items.filter((x) => x.status === 'OPEN' || x.status === 'PART_PAID') : items };
@@ -147,10 +150,11 @@ export class SuppliersService {
     return this.tdb.tx(async (trx) => {
       const cur = await this.cur(trx); const f = (v: bigint) => Money.ofMinor(v, cur).toDecimalString();
       const s = await trx.selectFrom('supplier').select(['name']).where('id', '=', q.supplierId).executeTakeFirst(); if (!s) throw err(404, 'NOT_FOUND', 'No such supplier');
-      const o = await sql<{ v: string }>`SELECT coalesce(sum(credit_minor - debit_minor),0)::text AS v FROM gl_entry WHERE supplier_id = ${q.supplierId} AND posting_date < ${q.from}::date`.execute(trx);
+      const sc = await this.scope.of('finance.view'); const bf = this.scope.filter(sc, 'e.property_id');
+      const o = await sql<{ v: string }>`SELECT coalesce(sum(e.credit_minor - e.debit_minor),0)::text AS v FROM gl_entry e WHERE e.supplier_id = ${q.supplierId} AND e.posting_date < ${q.from}::date ${bf}`.execute(trx);
       const e = await sql<{ date: string; no: string; narration: string; d: string; c: string; ref: string | null; branch: string | null }>`SELECT e.posting_date::text AS date, v.voucher_no AS no, v.narration, e.debit_minor::text AS d, e.credit_minor::text AS c, l.reference AS ref, p.name AS branch
         FROM gl_entry e JOIN voucher v ON v.tenant_id = e.tenant_id AND v.id = e.voucher_id JOIN voucher_line l ON l.tenant_id = e.tenant_id AND l.id = e.line_id LEFT JOIN property p ON p.tenant_id = e.tenant_id AND p.id = e.property_id
-        WHERE e.supplier_id = ${q.supplierId} AND e.posting_date BETWEEN ${q.from}::date AND ${q.to}::date ORDER BY e.posting_date, v.voucher_no, e.id`.execute(trx);
+        WHERE e.supplier_id = ${q.supplierId} AND e.posting_date BETWEEN ${q.from}::date AND ${q.to}::date ${bf} ORDER BY e.posting_date, v.voucher_no, e.id`.execute(trx);
       let run = BigInt(o.rows[0]!.v); const opening = run;
       return { currency: cur, supplier: s.name, opening: f(opening), rows: e.rows.map((x) => { run += BigInt(x.c) - BigInt(x.d); return { date: x.date, voucherNo: x.no, narration: x.narration, reference: x.ref, branch: x.branch ?? 'Head office', billed: f(BigInt(x.c)), paid: f(BigInt(x.d)), balance: f(run) }; }), closing: f(run) };
     });
@@ -172,10 +176,10 @@ export class SuppliersController {
   constructor(@Inject(SuppliersService) private readonly svc: SuppliersService) {}
   private me() { return currentTenant().actorId!; }
   @Get('suppliers') @RequirePermission('finance.view', ANY) list() { return this.svc.list(); }
-  @Post('suppliers') @RequirePermission('finance.prepare', ANY) create(@Body() b: unknown) { return this.svc.create(this.me(), parse(SupplierIn, b)); }
-  @Put('suppliers/:id') @RequirePermission('finance.prepare', ANY) edit(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.edit(this.me(), id, parse(SupplierEdit, b)); }
-  @Put('suppliers/:id/bank') @RequirePermission('finance.bank_details', ANY) bank(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.setBank(this.me(), id, parse(BankIn, b)); }
-  @Get('suppliers/:id/reveal') @RequirePermission('finance.bank_details', ANY) reveal(@Param('id', new ParseUUIDPipe()) id: string) { return this.svc.reveal(this.me(), id); }
+  @Post('suppliers') @RequirePermission('finance.prepare') create(@Body() b: unknown) { return this.svc.create(this.me(), parse(SupplierIn, b)); }
+  @Put('suppliers/:id') @RequirePermission('finance.prepare') edit(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.edit(this.me(), id, parse(SupplierEdit, b)); }
+  @Put('suppliers/:id/bank') @RequirePermission('finance.bank_details') bank(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.setBank(this.me(), id, parse(BankIn, b)); }
+  @Get('suppliers/:id/reveal') @RequirePermission('finance.bank_details') reveal(@Param('id', new ParseUUIDPipe()) id: string) { return this.svc.reveal(this.me(), id); }
   @Get('supplier-bills') @RequirePermission('finance.view', ANY) bills(@Query() q: unknown) { return this.svc.bills(parse(BillsQ, q)); }
   @Post('supplier-bills') @RequirePermission('finance.prepare', ANY) addBill(@Body() b: unknown) { return this.svc.addBill(this.me(), parse(BillIn, b)); }
   @Post('supplier-payments') @RequirePermission('finance.prepare', ANY) pay(@Body() b: unknown) { return this.svc.pay(this.me(), parse(PayIn, b)); }
