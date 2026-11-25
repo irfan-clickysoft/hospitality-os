@@ -509,3 +509,88 @@ export function FinUnallocated() {
     </section>
   );
 }
+
+interface DashCard { revenue: string; expenses: string; profit: string; cash: string; bank: string; receivables: string; payables: string; advances: string }
+interface Dash { currency: string; from: string; to: string; total: DashCard; branches: Array<DashCard & { id: string; name: string }>; trend: Array<{ month: string; revenue: string; expenses: string; profit: string }>; alerts: Record<string, number> }
+const num = (v: string) => Number(v.replace(/,/g, ''));
+
+/** The owner's view: the money in and out, what is held, how each branch is doing, and what needs attention. */
+export function FinDashboard() {
+  const { t } = useT(); const { property } = useAuth(); const { problem, run } = useAction();
+  const [period, setPeriod] = useState<'day' | 'week' | 'month' | 'year'>('month'); const [d, setD] = useState<Dash | null>(null);
+  useEffect(() => { void run(() => api<Dash>('GET', `/v1/finance/reports/dashboard?period=${period}&date=${property!.businessDate}`)).then((r) => r && setD(r)); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [period]);
+  const go = (tab: string) => { window.location.hash = `/finance?tab=${tab}`; };
+  const alerts: Array<[string, string, string]> = d ? [['vouchersWaiting', 'vouchers', 'fin.al.vouchers'], ['cashDifferences', 'cash', 'fin.al.cash'], ['unallocatedOver3Days', 'unallocated', 'fin.al.unalloc'], ['unmatchedBankLines', 'recon', 'fin.al.unmatched'], ['postingExceptions', 'posting', 'fin.al.posting'], ['interBranchDifferences', 'interbranch', 'fin.al.ib']] : [];
+  const max = d ? Math.max(1, ...d.trend.flatMap((x) => [num(x.revenue), num(x.expenses)])) : 1;
+  const kpi = (label: string, v: string) => <div className="card inner" key={label}><div className="muted small">{label}</div><div className="big" dir="ltr">{fmt(v)}</div></div>;
+  return (
+    <section className="stack">
+      <h2>{t('fin.dashboard')}</h2>
+      <div className="row" role="group" aria-label={t('fin.period')}>{(['day', 'week', 'month', 'year'] as const).map((p) => <button key={p} className={period === p ? 'primary' : ''} onClick={() => setPeriod(p)}>{t(`fin.pd.${p}` as never)}</button>)}</div>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      {!d ? <Spinner /> : (<>
+        <p className="muted small" dir="ltr">{d.from} → {d.to} · {d.currency}</p>
+        <div className="grid2">{[kpi(t('fin.k.revenue'), d.total.revenue), kpi(t('fin.k.expenses'), d.total.expenses), kpi(t('fin.k.profit'), d.total.profit), kpi(t('fin.k.cash'), d.total.cash), kpi(t('fin.k.bank'), d.total.bank), kpi(t('fin.k.receivables'), d.total.receivables), kpi(t('fin.k.payables'), d.total.payables), kpi(t('fin.k.advances'), d.total.advances)]}</div>
+        <h3>{t('fin.branchCompare')}</h3>
+        <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.branch')}</th><th scope="col">{t('fin.k.revenue')}</th><th scope="col">{t('fin.k.expenses')}</th><th scope="col">{t('fin.k.profit')}</th><th scope="col">{t('fin.k.cash')}</th><th scope="col">{t('fin.k.bank')}</th></tr></thead>
+          <tbody>{d.branches.length === 0 && <tr><td colSpan={6} className="muted">{t('fin.none')}</td></tr>}{d.branches.map((b) => <tr key={b.id}><th scope="row">{b.name}</th><td dir="ltr">{fmt(b.revenue)}</td><td dir="ltr">{fmt(b.expenses)}</td><td dir="ltr">{fmt(b.profit)}</td><td dir="ltr">{fmt(b.cash)}</td><td dir="ltr">{fmt(b.bank)}</td></tr>)}</tbody></table></div>
+        <h3>{t('fin.trend')}</h3>
+        <div className="stack" role="img" aria-label={t('fin.trend')}>{d.trend.map((x) => <div key={x.month} className="stack"><span className="small" dir="ltr">{x.month} · {fmt(x.profit)}</span>
+          <div style={{ background: 'var(--ok, #2e7d32)', height: 8, width: `${(num(x.revenue) / max) * 100}%`, minWidth: 2, borderRadius: 4 }} title={`${t('fin.k.revenue')} ${fmt(x.revenue)}`} /><div style={{ background: 'var(--warn, #c77700)', height: 8, width: `${(num(x.expenses) / max) * 100}%`, minWidth: 2, borderRadius: 4 }} title={`${t('fin.k.expenses')} ${fmt(x.expenses)}`} /></div>)}</div>
+        <p className="muted small">{t('fin.trendKey')}</p>
+        <h3>{t('fin.needs')}</h3>
+        {alerts.every(([k]) => !d.alerts[k]) ? <p className="okbox">{t('fin.nothingNeeds')}</p> : <ul>{alerts.filter(([k]) => d.alerts[k]).map(([k, tab, label]) => <li key={k}><button className="link" onClick={() => go(tab)}>{t(label as never, { n: d.alerts[k]! })}</button></li>)}</ul>}
+      </>)}
+    </section>
+  );
+}
+
+interface RTable { title: string; currency: string; from?: string; to?: string; columns: string[]; numeric: boolean[]; rows: Array<{ cells: string[]; kind?: string }>; notes: string[]; ok: boolean }
+const STATEMENTS = ['profit-loss', 'balance-sheet', 'cash-flow', 'daily-cash', 'bank-book', 'expenses', 'voucher-register', 'budget-vs-actual'] as const;
+type Stmt = (typeof STATEMENTS)[number];
+const csvCell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+/** The statements and registers, for the company or one branch, each downloadable as a spreadsheet file. */
+export function FinStatements() {
+  const { t } = useT(); const { property, can } = useAuth(); const withStepUp = useStepUp(); const { busy, problem, run } = useAction(); const branches = useBranches();
+  const bd = property!.businessDate;
+  const [kind, setKind] = useState<Stmt>('profit-loss'); const [from, setFrom] = useState(first(bd)); const [to, setTo] = useState(bd); const [branch, setBranch] = useState(''); const [bankId, setBankId] = useState(''); const [banks, setBanks] = useState<Bank[]>([]); const [res, setRes] = useState<RTable | null>(null);
+  const [bud, setBud] = useState({ account: '', branchId: '', month: bd.slice(0, 7), amount: '' }); const [accts, setAccts] = useState<Account[]>([]);
+  useEffect(() => { void api<{ items: Bank[] }>('GET', '/v1/finance/banks').then((r) => { const ok = r.items.filter((b) => b.ledger); setBanks(ok); if (ok[0]) setBankId(ok[0].id); }); void api<{ items: Account[] }>('GET', '/v1/finance/accounts').then((r) => setAccts(r.items.filter((a) => !a.isGroup && a.active && (a.type === 'EXPENSE' || a.type === 'REVENUE')))); }, []);
+  const url = () => {
+    const b = branch ? `&branchId=${branch}` : '';
+    switch (kind) {
+      case 'balance-sheet': return `/v1/finance/reports/balance-sheet?to=${to}${b}`; case 'daily-cash': return `/v1/finance/reports/daily-cash?date=${to}${b}`; case 'bank-book': return `/v1/finance/reports/bank-book?bankId=${bankId}&from=${from}&to=${to}`;
+      case 'budget-vs-actual': return `/v1/finance/reports/budget-vs-actual?from=${from.slice(0, 7)}&to=${to.slice(0, 7)}${b}`; default: return `/v1/finance/reports/${kind}?from=${from}&to=${to}${b}`;
+    }
+  };
+  const load = async () => { setRes(null); const r = await run(() => api<RTable>('GET', url())); if (r) setRes(r); };
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [kind, from, to, branch, bankId]);
+  const download = () => { if (!res) return; const text = [res.columns, ...res.rows.map((r) => r.cells)].map((r) => r.map(csvCell).join(',')).join('\r\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv' })); a.download = `${kind}-${to}.csv`; a.click(); URL.revokeObjectURL(a.href); };
+  const asAt = kind === 'balance-sheet' || kind === 'daily-cash';
+  return (
+    <section className="stack">
+      <h2>{t('fin.statements')}</h2>
+      <label>{t('fin.whichReport')}<select value={kind} onChange={(e) => setKind(e.target.value as Stmt)}>{STATEMENTS.map((s) => <option key={s} value={s}>{t(`fin.st2.${s}` as never)}</option>)}</select></label>
+      <div className="grid2">{!asAt && <label>{t('fin.from')}<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} dir="ltr" /></label>}<label>{asAt ? t('fin.asAt') : t('fin.to')}<input type="date" value={to} onChange={(e) => setTo(e.target.value)} dir="ltr" /></label></div>
+      {kind === 'bank-book' ? <label>{t('fin.bankAcct')}<select value={bankId} onChange={(e) => setBankId(e.target.value)}>{banks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+        : kind !== 'voucher-register' || true ? <label>{t('fin.branch')}<select value={branch} onChange={(e) => setBranch(e.target.value)}><option value="">{t('fin.allBranches')}</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label> : null}
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      {!res ? <Spinner /> : (
+        <div className="stack">
+          <div className="row between"><h3>{res.title}</h3><button onClick={download}>{t('fin.download')}</button></div>
+          {!res.ok && <p className="warnbox" role="alert">{t('fin.reportBad')}</p>}
+          <div className="tablewrap"><table className="nighttable small"><thead><tr>{res.columns.map((c, i) => <th key={i} scope="col">{c}</th>)}</tr></thead>
+            <tbody>{res.rows.length === 0 && <tr><td colSpan={res.columns.length} className="muted">{t('fin.none')}</td></tr>}{res.rows.map((r, i) => <tr key={i} style={r.kind === 'head' ? { fontWeight: 700 } : r.kind === 'total' ? { fontWeight: 700, borderTop: '2px solid currentColor' } : undefined}>{r.cells.map((c, j) => (j === 0 ? <th key={j} scope="row" style={{ fontWeight: 'inherit' }}>{c}</th> : <td key={j} dir={res.numeric[j] ? 'ltr' : undefined} style={res.numeric[j] ? { textAlign: 'end' } : undefined}>{res.numeric[j] && c && c !== '—' && c !== 'eliminated' ? fmt(c) : c}</td>))}</tr>)}</tbody></table></div>
+          {res.notes.map((n, i) => <p key={i} className="muted small">{n}</p>)}
+        </div>)}
+      {kind === 'budget-vs-actual' && can('finance.setup') && (
+        <form className="card inner stack" onSubmit={async (e) => { e.preventDefault(); if (await run(() => withStepUp(() => api('PUT', '/v1/finance/reports/budget', { branchId: bud.branchId || null, account: bud.account, month: bud.month, amount: bud.amount })))) { setBud({ ...bud, amount: '' }); void load(); } }}>
+          <h3>{t('fin.setBudget')}</h3>
+          <div className="grid2"><label>{t('fin.account')}<select value={bud.account} onChange={(e) => setBud({ ...bud, account: e.target.value })}><option value="">—</option>{accts.map((a) => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}</select></label><label>{t('fin.branch')}<select value={bud.branchId} onChange={(e) => setBud({ ...bud, branchId: e.target.value })}><option value="">{t('fin.headOffice')}</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label></div>
+          <div className="grid2"><label>{t('fin.month')}<input type="month" value={bud.month} onChange={(e) => setBud({ ...bud, month: e.target.value })} dir="ltr" /></label><label>{t('fin.amount')}<input inputMode="decimal" value={bud.amount} onChange={(e) => setBud({ ...bud, amount: clean(e.target.value) })} dir="ltr" /></label></div>
+          <div className="actions"><button className="primary" type="submit" disabled={busy || !bud.account || !bud.amount}>{t('common.save')}</button></div>
+        </form>)}
+    </section>
+  );
+}

@@ -43,6 +43,13 @@ await page.getByRole('heading', { name: 'Cash and petty cash' }).waitFor({ timeo
 await page.getByLabel('Branch').last().selectOption({ index: 1 }); await page.getByLabel('Account name').fill('Front desk cash');
 await page.getByRole('button', { name: 'Add a cash drawer' }).last().click();
 await page.getByText('Front desk cash').first().waitFor({ timeout: 15000 }); check('a cash drawer is added', true);
+await page.evaluate(() => { window.location.hash = '/finance?tab=dashboard'; });
+await page.getByRole('heading', { name: 'Dashboard' }).waitFor({ timeout: 15000 }); check('the finance dashboard opens', true);
+check('it shows revenue and the branch comparison', await page.getByText('Branches side by side').first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false));
+await page.evaluate(() => { window.location.hash = '/finance?tab=statements'; });
+await page.getByRole('heading', { name: 'Profit and loss' }).waitFor({ timeout: 15000 }); check('the profit and loss opens', true);
+await page.getByLabel('Which report').selectOption('balance-sheet'); await page.getByRole('heading', { name: 'Balance sheet' }).waitFor({ timeout: 15000 }); check('the balance sheet opens', true);
+await page.getByLabel('Which report').selectOption('cash-flow'); await page.getByRole('heading', { name: 'Cash flow' }).waitFor({ timeout: 15000 }); check('the cash flow opens', true);
 await page.evaluate(() => { window.location.hash = '/finance?tab=recon'; });
 await page.getByRole('heading', { name: 'Bank reconciliation' }).waitFor({ timeout: 15000 }); check('the Bank reconciliation tab opens', true);
 await page.evaluate(() => { window.location.hash = '/finance?tab=unallocated'; });
