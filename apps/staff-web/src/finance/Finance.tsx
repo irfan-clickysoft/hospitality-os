@@ -415,3 +415,97 @@ function InterBranchForm({ kind, onClose, onSaved }: { kind: 'transfer' | 'expen
     </Sheet>
   );
 }
+
+interface RLine { id: string; date: string; narration: string; reference: string | null; in: string; out: string; direction: 'IN' | 'OUT'; balance: string | null; status: string; matchedTo: string[]; suspense: string | null; note: string | null }
+interface Cand { id: string; date: string; voucherNo: string | null; narration: string; in: string; out: string }
+interface RSum { statement: string; ledger: string; booksOnlyReceipts: string; booksOnlyPayments: string; statementOnlyCredits: string; statementOnlyDebits: string; adjusted: string; difference: string; reconciled: boolean; booksOnlyCount: number; statementOnlyCount: number; signOff: { id: string; status: string } | null }
+
+/** Bank statement against the books: import a CSV file, see what matches by itself, settle the rest by hand, then sign off the month. */
+export function FinRecon() {
+  const { t } = useT(); const { property, can, me } = useAuth(); const withStepUp = useStepUp(); const { busy, problem, run } = useAction();
+  const [banks, setBanks] = useState<Bank[] | null>(null); const [bankId, setBankId] = useState(''); const [status, setStatus] = useState('UNMATCHED'); const [lines, setLines] = useState<RLine[]>([]); const [locked, setLocked] = useState<string | null>(null); const [msg, setMsg] = useState<string | null>(null);
+  const [to, setTo] = useState(property!.businessDate); const [bal, setBal] = useState(''); const [sum, setSum] = useState<RSum | null>(null); const [match, setMatch] = useState<{ line: RLine; cands: Cand[]; sel: string[] } | null>(null);
+  useEffect(() => { void api<{ items: Bank[] }>('GET', '/v1/finance/banks').then((r) => { const ok = r.items.filter((b) => b.ledger); setBanks(ok); if (ok[0]) setBankId(ok[0].id); else setBanks([]); }); }, []);
+  const loadLines = async () => { if (!bankId) return; const r = await run(() => api<{ items: RLine[]; locked: string | null }>('GET', `/v1/finance/bank/lines?bankId=${bankId}${status ? `&status=${status}` : ''}`)); if (r) { setLines(r.items); setLocked(r.locked); } };
+  useEffect(() => { setSum(null); void loadLines(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [bankId, status]);
+  if (!banks) return <Spinner />;
+  const prep = can('finance.prepare'); const appr = can('finance.approve');
+  const upload = async (f: File | undefined) => { if (!f) return; const csv = await f.text(); const r = await run(() => api<{ added: number; duplicates: number; autoMatched: number }>('POST', '/v1/finance/bank/statements', { bankId, filename: f.name, csv })); if (r) { setMsg(t('fin.imported', { a: r.added, d: r.duplicates, m: r.autoMatched })); void loadLines(); } };
+  const calc = async () => { const r = await run(() => api<RSum>('GET', `/v1/finance/bank/summary?bankId=${bankId}&to=${to}&statementBalance=${bal}`)); if (r) setSum(r); };
+  const openMatch = async (l: RLine) => { const r = await run(() => api<{ items: Cand[] }>('GET', `/v1/finance/bank/ledger?bankId=${bankId}&to=${to}`)); if (r) setMatch({ line: l, cands: r.items.filter((c) => (l.direction === 'IN' ? c.in !== '0.00' : c.out !== '0.00')), sel: [] }); };
+  const act = async (l: RLine, path: string, body: object, sensitive = false) => { const call = () => api('POST', `/v1/finance/bank/lines/${l.id}/${path}`, body); if (await run(() => (sensitive ? withStepUp(call) : call()))) void loadLines(); };
+  const total = match ? match.cands.filter((c) => match.sel.includes(c.id)).reduce((s, c) => s + Math.round(Number(match.line.direction === 'IN' ? c.in : c.out) * 100), 0) : 0;
+  const want = match ? Math.round(Number(match.line.direction === 'IN' ? match.line.in : match.line.out) * 100) : 0;
+  return (
+    <section className="stack">
+      <h2>{t('fin.recon2')}</h2><p className="muted">{t('fin.recon2Help')}</p>
+      {banks.length === 0 ? <p className="warnbox">{t('fin.noLedgerBanks')}</p> : (<>
+        <label>{t('fin.bankAcct')}<select value={bankId} onChange={(e) => setBankId(e.target.value)}>{banks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+        {prep && <label>{t('fin.importCsv')}<input type="file" accept=".csv,text/csv,text/plain" disabled={busy} onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ''; }} /></label>}
+        <ErrorLine code={problem?.code} detail={problem?.detail} />
+        {msg && <p className="okbox" role="status">{msg}</p>}
+        <div className="card inner stack"><h3>{t('fin.recStatement')}</h3>
+          <div className="grid2"><label>{t('fin.asAt')}<input type="date" value={to} onChange={(e) => setTo(e.target.value)} dir="ltr" /></label><label>{t('fin.stmtBalance')}<input inputMode="decimal" value={bal} onChange={(e) => setBal(e.target.value.replace(/[^\d.-]/g, ''))} dir="ltr" /></label></div>
+          <div className="actions"><button disabled={busy || !bal} onClick={() => void calc()}>{t('fin.check')}</button></div>
+          {sum && (<>
+            <table className="nighttable small"><tbody>
+              <tr><th scope="row">{t('fin.stmtBalance')}</th><td dir="ltr">{fmt(sum.statement)}</td></tr><tr><th scope="row">+ {t('fin.booksOnlyIn')} ({sum.booksOnlyCount})</th><td dir="ltr">{fmt(sum.booksOnlyReceipts)}</td></tr><tr><th scope="row">− {t('fin.booksOnlyOut')}</th><td dir="ltr">{fmt(sum.booksOnlyPayments)}</td></tr>
+              <tr><th scope="row">− {t('fin.stmtOnlyIn')} ({sum.statementOnlyCount})</th><td dir="ltr">{fmt(sum.statementOnlyCredits)}</td></tr><tr><th scope="row">+ {t('fin.stmtOnlyOut')}</th><td dir="ltr">{fmt(sum.statementOnlyDebits)}</td></tr>
+              <tr><th scope="row">{t('fin.adjusted')}</th><td dir="ltr">{fmt(sum.adjusted)}</td></tr><tr><th scope="row">{t('fin.ledgerBal')}</th><td dir="ltr">{fmt(sum.ledger)}</td></tr></tbody></table>
+            <p className={sum.reconciled ? 'okbox' : 'warnbox'} role="status">{sum.reconciled ? t('fin.reconciled') : t('fin.notReconciled', { n: fmt(sum.difference) })}</p>
+            {sum.signOff ? <p><Badge tone={sum.signOff.status === 'APPROVED' ? 'clean' : 'warn'}>{sum.signOff.status === 'APPROVED' ? t('fin.signedOff') : t('fin.waitingSign')}</Badge></p> : null}
+            <div className="actions">
+              {prep && sum.reconciled && !sum.signOff && <button className="primary" disabled={busy} onClick={async () => { if (await run(() => api('POST', '/v1/finance/bank/reconciliations', { bankId, to, statementBalance: bal }))) void calc(); }}>{t('fin.sendSign')}</button>}
+              {appr && sum.signOff?.status === 'PENDING' && <button className="primary" disabled={busy} onClick={async () => { if (await run(() => withStepUp(() => api('POST', `/v1/finance/bank/reconciliations/${sum.signOff!.id}/approve`)))) void calc(); }}>{t('fin.signOff')}</button>}
+            </div></>)}
+        </div>
+        <label>{t('fin.status')}<select value={status} onChange={(e) => setStatus(e.target.value)}><option value="UNMATCHED">{t('fin.rs.UNMATCHED')}</option><option value="MATCHED">{t('fin.rs.MATCHED')}</option><option value="IGNORED">{t('fin.rs.IGNORED')}</option><option value="">{t('fin.all')}</option></select></label>
+        {locked && <p className="muted small">{t('fin.lockedTo', { d: locked })}</p>}
+        <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.date')}</th><th scope="col">{t('fin.narration')}</th><th scope="col">{t('fin.in')}</th><th scope="col">{t('fin.out')}</th><th scope="col">{t('fin.status')}</th><th scope="col"><span className="sr-only">{t('fin.actions')}</span></th></tr></thead>
+          <tbody>{lines.length === 0 && <tr><td colSpan={6} className="muted">{t('fin.none')}</td></tr>}{lines.map((l) => (
+            <tr key={l.id}><td dir="ltr">{l.date}</td><td>{l.narration}{l.reference ? ` · ${l.reference}` : ''}{l.matchedTo.length > 0 && <div className="muted small">{l.matchedTo.join(', ')}</div>}</td><td dir="ltr">{l.direction === 'IN' ? fmt(l.in) : ''}</td><td dir="ltr">{l.direction === 'OUT' ? fmt(l.out) : ''}</td><td><Badge tone={l.status === 'MATCHED' ? 'clean' : l.status === 'IGNORED' ? 'neutral' : 'warn'}>{t(`fin.rs.${l.status}` as never)}</Badge></td>
+              <td>{prep && l.status === 'UNMATCHED' && <div className="row"><button className="link" onClick={() => void openMatch(l)}>{t('fin.matchBtn')}</button>{appr && l.direction === 'IN' && <button className="link" onClick={() => void act(l, 'book', { kind: 'SUSPENSE' }, true)}>{t('fin.toQueue')}</button>}{appr && l.direction === 'OUT' && <button className="link" onClick={() => void act(l, 'book', { kind: 'CHARGE' }, true)}>{t('fin.asCharge')}</button>}<button className="link" onClick={() => { const r = window.prompt(t('fin.ignoreWhy')); if (r && r.trim().length >= 3) void act(l, 'ignore', { reason: r.trim() }); }}>{t('fin.ignore')}</button></div>}
+                {prep && l.status === 'MATCHED' && !l.matchedTo.some((m) => m.includes('statement')) && <button className="link" onClick={() => { const r = window.prompt(t('fin.unmatchWhy')); if (r && r.trim().length >= 3) void act(l, 'unmatch', { reason: r.trim() }); }}>{t('fin.unmatch')}</button>}</td></tr>))}</tbody></table></div></>)}
+      {match && (
+        <Sheet title={t('fin.matchTitle', { n: fmt(match.line.direction === 'IN' ? match.line.in : match.line.out) })} onClose={() => setMatch(null)} wide>
+          <p className="muted small">{t('fin.matchHelp')}</p>
+          <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col" /><th scope="col">{t('fin.date')}</th><th scope="col">{t('fin.no')}</th><th scope="col">{t('fin.narration')}</th><th scope="col">{match.line.direction === 'IN' ? t('fin.in') : t('fin.out')}</th></tr></thead>
+            <tbody>{match.cands.map((c) => <tr key={c.id}><td><input type="checkbox" aria-label={c.voucherNo ?? c.narration} checked={match.sel.includes(c.id)} onChange={(e) => setMatch({ ...match, sel: e.target.checked ? [...match.sel, c.id] : match.sel.filter((x) => x !== c.id) })} /></td><td dir="ltr">{c.date}</td><td dir="ltr">{c.voucherNo}</td><td>{c.narration}</td><td dir="ltr">{fmt(match.line.direction === 'IN' ? c.in : c.out)}</td></tr>)}</tbody></table></div>
+          <p className={total === want && want > 0 ? 'okbox' : 'warnbox'} role="status">{t('fin.picked', { a: (total / 100).toFixed(2), b: (want / 100).toFixed(2) })}</p>
+          <ErrorLine code={problem?.code} detail={problem?.detail} />
+          <div className="actions"><button onClick={() => setMatch(null)}>{t('common.cancel')}</button><button className="primary" disabled={busy || total !== want || want === 0} onClick={async () => { if (await run(() => api('POST', `/v1/finance/bank/lines/${match.line.id}/match`, { entryIds: match.sel }))) { setMatch(null); void loadLines(); } }}>{t('fin.matchBtn')}</button></div>
+        </Sheet>)}
+      {me ? null : null}
+    </section>
+  );
+}
+
+interface SItem { id: string; amount: string; status: string; note: string | null; owner: string | null; date: string; narration: string; reference: string | null; bank: string; ageDays: number; alert: string | null }
+/** Money that reached the bank without a known source. It waits here, with its age, until someone finds out whose it is and allocates it. */
+export function FinUnallocated() {
+  const { t } = useT(); const { can } = useAuth(); const { busy, problem, run } = useAction(); const branches = useBranches();
+  const [rows, setRows] = useState<SItem[] | null>(null); const [accts, setAccts] = useState<Account[]>([]); const [f, setF] = useState<{ item: SItem; account: string; branchId: string; reason: string } | null>(null); const [made, setMade] = useState<string | null>(null);
+  const load = () => api<{ items: SItem[] }>('GET', '/v1/finance/bank/suspense').then((r) => setRows(r.items));
+  useEffect(() => { void load(); void api<{ items: Account[] }>('GET', '/v1/finance/accounts').then((r) => setAccts(r.items.filter((a) => !a.isGroup && a.active && a.control !== 'SUSPENSE'))); }, []);
+  if (!rows) return <Spinner />;
+  return (
+    <section className="stack">
+      <h2>{t('fin.unalloc')}</h2><p className="muted">{t('fin.unallocHelp')}</p>
+      {made && <p className="okbox" role="status">{t('fin.allocMade')}</p>}
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.date')}</th><th scope="col">{t('fin.bankAcct')}</th><th scope="col">{t('fin.narration')}</th><th scope="col">{t('fin.amount')}</th><th scope="col">{t('fin.age')}</th><th scope="col"><span className="sr-only">{t('fin.actions')}</span></th></tr></thead>
+        <tbody>{rows.length === 0 && <tr><td colSpan={6} className="muted">{t('fin.none')}</td></tr>}{rows.map((r) => (
+          <tr key={r.id}><td dir="ltr">{r.date}</td><td>{r.bank}</td><td>{r.narration}{r.reference ? ` · ${r.reference}` : ''}{r.note ? <div className="muted small">{r.note}</div> : null}</td><td dir="ltr">{fmt(r.amount)}</td><td><Badge tone={r.alert === 'SEVEN' ? 'urgent' : r.alert === 'THREE' ? 'warn' : 'neutral'}>{t('fin.days', { n: r.ageDays })}</Badge></td>
+            <td>{can('finance.prepare') && r.status === 'OPEN' ? <button onClick={() => setF({ item: r, account: '', branchId: branches[0]?.id ?? '', reason: '' })}>{t('fin.allocate')}</button> : <Badge tone="warn">{t('fin.allocating')}</Badge>}</td></tr>))}</tbody></table></div>
+      {f && (
+        <Sheet title={`${t('fin.allocate')}: ${fmt(f.item.amount)}`} onClose={() => setF(null)}>
+          <p className="muted small">{f.item.narration}</p>
+          <label>{t('fin.paidFor')}<select value={f.account} onChange={(e) => setF({ ...f, account: e.target.value })}><option value="">—</option>{accts.map((a) => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}</select></label>
+          <label>{t('fin.branch')}<select value={f.branchId} onChange={(e) => setF({ ...f, branchId: e.target.value })}>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+          <label>{t('fin.evidence')}<input value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} maxLength={300} /></label>
+          <ErrorLine code={problem?.code} detail={problem?.detail} />
+          <div className="actions"><button onClick={() => setF(null)}>{t('common.cancel')}</button><button className="primary" disabled={busy || !f.account || f.reason.trim().length < 5} onClick={async () => { const r = await run(() => api<{ voucherId: string }>('POST', `/v1/finance/bank/suspense/${f.item.id}/allocate`, { account: f.account, branchId: f.branchId || null, reason: f.reason.trim() })); if (r) { setMade(r.voucherId); setF(null); void load(); } }}>{t('fin.allocate')}</button></div>
+        </Sheet>)}
+    </section>
+  );
+}

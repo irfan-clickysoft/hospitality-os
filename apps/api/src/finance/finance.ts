@@ -248,6 +248,7 @@ export class FinanceService {
       await trx.insertInto('gl_entry').values(lines.map((l) => ({ tenant_id: currentTenant().tenantId, voucher_id: id, line_id: l.id, account_id: l.account_id, property_id: l.property_id, counterparty_property_id: l.counterparty_property_id, posting_date: v.posting_date, debit_minor: l.debit_minor, credit_minor: l.credit_minor })) as never).execute();
       const now = new Date();
       await trx.updateTable('voucher').set({ status: 'POSTED', approved_by: userId, approved_at: now, posted_by: userId, posted_at: now } as never).where('id', '=', id).execute();
+      await sql`UPDATE bank_suspense_item SET status = 'ALLOCATED' WHERE allocated_voucher_id = ${id}`.execute(trx);
       await this.audit.record(trx, { action: 'finance.voucher.post', resourceType: 'voucher', resourceId: id, after: { voucherNo: v.voucher_no, total: dec(v.total_minor, v.currency), postingDate: v.posting_date } });
       return { id, voucherNo: v.voucher_no, status: 'POSTED' };
     });
