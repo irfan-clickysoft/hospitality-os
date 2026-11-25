@@ -59,6 +59,7 @@ export const SECTIONS: Section[] = [
     { id: 'vouchers', label: 'fin.vouchers', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinVouchers') },
     { id: 'reports', label: 'fin.reports', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinReports') },
     { id: 'accounts', label: 'fin.accounts', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinAccounts') },
+    { id: 'posting', label: 'fin.posting', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinPosting') },
     { id: 'periods', label: 'fin.periods', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinPeriods') },
   ] },
   { id: 'admin', path: '/admin', label: 'nav.admin', icon: 'admin', show: any('property.manage', 'rate.manage', 'tax.configure', 'tax.approve', 'paymentaccount.view', 'management.view', 'user.manage', 'data.import', 'fnb.manage'), tabs: [

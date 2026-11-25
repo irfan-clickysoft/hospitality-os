@@ -1,3 +1,4 @@
+import { PmsPostingService } from '../finance/pms-posting.js';
 import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { sql } from 'kysely';
 import type { z } from 'zod';
@@ -24,6 +25,7 @@ export class ArService {
     @Inject(IdempotencyService) private readonly idem: IdempotencyService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(PmsPostingService) private readonly pms: PmsPostingService,
     @Inject(AuthorizationService) private readonly authz: AuthorizationService,
     @Inject(PaymentAccountsService) private readonly accounts: PaymentAccountsService,
   ) {}
@@ -156,7 +158,7 @@ export class ArService {
       if (r.created_by === userId) throw fail(403, 'SELF_VERIFICATION', 'A different person must verify this entry');
       if (!i.approve && !i.note) throw fail(422, 'NOTE_REQUIRED', 'Say why the receipt is rejected');
       const u = await trx.updateTable('ar_receipt').set({ status: i.approve ? 'CAPTURED' : 'REJECTED', verified_by: userId, verified_at: new Date(), decision_note: i.note || null } as never).where('id', '=', receiptId).returningAll().executeTakeFirstOrThrow();
-      if (i.approve) await this.applyCredit(trx, r.company_id);
+      if (i.approve) { await this.applyCredit(trx, r.company_id); await this.pms.onCompanyReceipt(trx, receiptId); }
       await this.audit.record(trx, { action: i.approve ? 'ar.receipt_verify' : 'ar.receipt_reject', resourceType: 'ar_receipt', resourceId: receiptId, after: { companyId: r.company_id, amount: r.amount_minor, withheld: r.withheld_minor }, note: i.note ?? undefined });
       if (i.approve) await this.outbox.publish(trx, { aggregateType: 'ar_receipt', aggregateId: receiptId, eventType: 'CompanyReceiptCaptured', payload: { receiptId, companyId: r.company_id, amountMinor: r.amount_minor, withheldMinor: r.withheld_minor, currency: r.currency } });
       const al = await sql<{ s: string }>`SELECT coalesce(sum(applied_minor),0)::text AS s FROM ar_allocation WHERE tenant_id = ${currentTenant().tenantId} AND receipt_id = ${receiptId}`.execute(trx);

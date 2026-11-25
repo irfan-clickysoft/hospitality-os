@@ -60,10 +60,40 @@ const dec = (m: bigint | string, cur: string) => Money.ofMinor(BigInt(m), cur).t
 export class FinanceService {
   constructor(@Inject(TenantDb) private readonly tdb: TenantDb, @Inject(AuditService) private readonly audit: AuditService) {}
 
-  private async settings(trx: Trx) {
+  async settings(trx: Trx) {
     const t = currentTenant().tenantId;
     await sql`INSERT INTO gl_settings (tenant_id) VALUES (${t}) ON CONFLICT DO NOTHING`.execute(trx);
     return trx.selectFrom('gl_settings').selectAll().executeTakeFirstOrThrow();
+  }
+  async nextVoucherNo(trx: Trx, type: string, year: number): Promise<string> {
+    const n = await sql<{ n: number }>`INSERT INTO voucher_counter (tenant_id, voucher_type, year, last_no) VALUES (${currentTenant().tenantId}, ${type}, ${year}, 1) ON CONFLICT (tenant_id, voucher_type, year) DO UPDATE SET last_no = voucher_counter.last_no + 1 RETURNING last_no AS n`.execute(trx);
+    return `${type}-${year}-${String(n.rows[0]!.n).padStart(6, '0')}`;
+  }
+  /** The date a system posting lands on: its own date, or the first day of the next open month when that month is closed (the posting is never refused). */
+  async openDateFrom(trx: Trx, date: string): Promise<string> {
+    let d = date;
+    for (let i = 0; i < 36; i++) {
+      const p = await trx.selectFrom('gl_period').select('status').where('month', '=', `${d.slice(0, 7)}-01`).executeTakeFirst();
+      if (p?.status !== 'CLOSED') return d;
+      const [y, m] = d.split('-').map(Number) as [number, number]; d = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+    }
+    return d;
+  }
+  /** Writes a balanced, already-approved voucher straight to the ledger for a system source (one voucher per source event: a repeat does nothing). Returns the voucher id, or null if it already existed. */
+  async postSystem(trx: Trx, a: { type: 'PMS'; date: string; narration: string; module: string; eventId: string; userId?: string | null; lines: Array<{ accountId: string; propertyId: string | null; debit: bigint; credit: bigint; description?: string | null; reference?: string | null }> }): Promise<string | null> {
+    if (await trx.selectFrom('voucher').select('id').where('source_module', '=', a.module).where('source_event_id', '=', a.eventId).executeTakeFirst()) return null;
+    const d = a.lines.reduce((s, l) => s + l.debit, 0n), c = a.lines.reduce((s, l) => s + l.credit, 0n);
+    if (d !== c || d === 0n) throw err(409, 'NOT_BALANCED', `System posting is not balanced (${d} vs ${c})`);
+    const s = await this.settings(trx);
+    const by = a.userId ?? currentTenant().actorId ?? (await trx.selectFrom('staff_user').select('id').orderBy('created_at').limit(1).executeTakeFirstOrThrow()).id;
+    const posting = await this.openDateFrom(trx, a.date); const late = posting !== a.date;
+    const no = await this.nextVoucherNo(trx, a.type, Number(posting.slice(0, 4)));
+    const v = await trx.insertInto('voucher').values({ tenant_id: currentTenant().tenantId, voucher_no: no, voucher_type: a.type, voucher_date: a.date, posting_date: posting, narration: (late ? `${a.narration} (month ${a.date.slice(0, 7)} was closed)` : a.narration).slice(0, 500), currency: s.base_currency, total_minor: d.toString(), source_module: a.module, source_event_id: a.eventId, created_by: by, submitted_by: by, submitted_at: new Date() } as never).returning('id').executeTakeFirstOrThrow();
+    const lines = await trx.insertInto('voucher_line').values(a.lines.map((l, i) => ({ tenant_id: currentTenant().tenantId, voucher_id: v.id, line_no: i + 1, account_id: l.accountId, property_id: l.propertyId, debit_minor: l.debit.toString(), credit_minor: l.credit.toString(), description: l.description ?? null, reference: l.reference ?? null })) as never).returning(['id', 'account_id', 'property_id', 'debit_minor', 'credit_minor']).execute();
+    await trx.insertInto('gl_entry').values(lines.map((l) => ({ tenant_id: currentTenant().tenantId, voucher_id: v.id, line_id: l.id, account_id: l.account_id, property_id: l.property_id, posting_date: posting, debit_minor: l.debit_minor, credit_minor: l.credit_minor })) as never).execute();
+    const now = new Date();
+    await trx.updateTable('voucher').set({ status: 'POSTED', approved_by: by, approved_at: now, posted_by: by, posted_at: now } as never).where('id', '=', v.id).execute();
+    return v.id;
   }
   private async assertOpen(trx: Trx, postingDate: string) {
     const p = await trx.selectFrom('gl_period').select('status').where('month', '=', `${postingDate.slice(0, 7)}-01`).executeTakeFirst();
@@ -180,12 +210,7 @@ export class FinanceService {
       const sums = await sql<{ d: string; c: string }>`SELECT coalesce(sum(debit_minor),0)::text AS d, coalesce(sum(credit_minor),0)::text AS c FROM voucher_line WHERE voucher_id = ${id}`.execute(trx);
       const d = BigInt(sums.rows[0]!.d), c = BigInt(sums.rows[0]!.c);
       if (d !== c || d === 0n) throw err(409, 'NOT_BALANCED', `Debits ${dec(d, v.currency)} and credits ${dec(c, v.currency)} differ by ${dec(d > c ? d - c : c - d, v.currency)}`);
-      let no = v.voucher_no;
-      if (!no) {
-        const year = Number(v.voucher_date.slice(0, 4));
-        const n = await sql<{ n: number }>`INSERT INTO voucher_counter (tenant_id, voucher_type, year, last_no) VALUES (${currentTenant().tenantId}, ${v.voucher_type}, ${year}, 1) ON CONFLICT (tenant_id, voucher_type, year) DO UPDATE SET last_no = voucher_counter.last_no + 1 RETURNING last_no AS n`.execute(trx);
-        no = `${v.voucher_type}-${year}-${String(n.rows[0]!.n).padStart(6, '0')}`;
-      }
+      const no = v.voucher_no ?? (await this.nextVoucherNo(trx, v.voucher_type, Number(v.voucher_date.slice(0, 4))));
       await trx.updateTable('voucher').set({ status: 'SUBMITTED', voucher_no: no, submitted_by: userId, submitted_at: new Date(), reject_reason: null } as never).where('id', '=', id).execute();
       await this.audit.record(trx, { action: 'finance.voucher.submit', resourceType: 'voucher', resourceId: id, after: { voucherNo: no } });
       return { id, voucherNo: no, status: 'SUBMITTED' };

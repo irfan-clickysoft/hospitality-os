@@ -1,3 +1,4 @@
+import { PmsPostingService } from '../finance/pms-posting.js';
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { sql } from 'kysely';
 import type { z } from 'zod';
@@ -25,6 +26,7 @@ export class OtaService {
     @Inject(IdempotencyService) private readonly idem: IdempotencyService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(PmsPostingService) private readonly pms: PmsPostingService,
     @Inject(PaymentAccountsService) private readonly accounts: PaymentAccountsService,
   ) {}
 
@@ -112,6 +114,7 @@ export class OtaService {
       if (amt > remaining) throw fail(422, 'AMOUNT_TOO_LARGE', 'That is more than is still owed', { remaining: fmt(remaining, r.currency) });
       const accountId = await this.accounts.resolve(trx, propertyId, 'BANK_TRANSFER', i.paymentAccountId, r.currency);
       await this.event(trx, id, 'RECEIVE', i.receivedOn ?? bd, userId, { amount: amt, reference: i.reference, note: i.note, accountId });
+      await this.pms.onOtaReceipt(trx, { propertyId, eventId: `${id}:${BigInt(r.received_minor) + amt}`, amount: amt, date: i.receivedOn ?? bd, paymentAccountId: accountId ?? null, reference: i.reference ?? null });
       const done = amt === remaining;
       return { received_minor: (BigInt(r.received_minor) + amt).toString(), status: done ? (BigInt(r.written_off_minor) > 0n ? 'WRITTEN_OFF' : 'RECEIVED') : r.status };
     });

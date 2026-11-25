@@ -183,3 +183,43 @@ export function FinPeriods() {
     </section>
   );
 }
+
+interface PmsMap { key: string; label: string; account: string | null; accountName: string | null }
+interface PmsStatus { enabledFrom: string | null; openExceptions: number; mappings: PmsMap[]; paymentAccounts: PmsMap[] }
+interface PmsRec { pmsEntries: number; postedEntries: number; pmsNet: string; ledgerNet: string; difference: string; agrees: boolean; openExceptions: number; from: string; to: string }
+interface PmsExc { id: string; module: string; reason: string; attempts: number }
+
+/** Sends the money the hotel already records (payments, deposits, charges, taxes, refunds, company and online-agent receipts) to the books, and shows whether the two agree. */
+export function FinPosting() {
+  const { t } = useT(); const { property, can } = useAuth(); const withStepUp = useStepUp(); const { busy, problem, run } = useAction();
+  const [st, setSt] = useState<PmsStatus | null>(null); const [accts, setAccts] = useState<Account[]>([]); const [from, setFrom] = useState(property!.businessDate); const [rec, setRec] = useState<PmsRec | null>(null); const [exc, setExc] = useState<PmsExc[]>([]);
+  const load = async () => {
+    setSt(await api<PmsStatus>('GET', '/v1/finance/pms')); setAccts((await api<{ items: Account[] }>('GET', '/v1/finance/accounts')).items.filter((a) => !a.isGroup && a.active));
+    setExc((await api<{ items: PmsExc[] }>('GET', '/v1/finance/pms/exceptions')).items);
+    const d = property!.businessDate; setRec(await api<PmsRec>('GET', `/v1/finance/pms/reconciliation?from=${first(d)}&to=${d}`));
+  };
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  if (!st) return <Spinner />;
+  const setup = can('finance.setup');
+  const row = (m: PmsMap) => (
+    <tr key={m.key}><th scope="row">{m.label}</th>
+      <td><select aria-label={m.label} value={m.account ?? ''} disabled={!setup || busy} onChange={async (e) => { if (await run(() => withStepUp(() => api('PUT', `/v1/finance/pms/map/${encodeURIComponent(m.key)}`, { account: e.target.value || null })))) void load(); }}><option value="">{t('fin.notSet')}</option>{accts.map((a) => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}</select></td></tr>);
+  return (
+    <section className="stack">
+      <h2>{t('fin.posting')}</h2><p className="muted">{t('fin.postingHelp')}</p>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      {st.enabledFrom
+        ? <div className="card inner stack"><p><Badge tone="clean">{t('fin.on')}</Badge> {t('fin.onFrom', { d: st.enabledFrom })}</p>{setup && <div className="actions"><button disabled={busy} onClick={async () => { if (window.confirm(t('fin.offConfirm')) && await run(() => withStepUp(() => api('POST', '/v1/finance/pms/disable')))) void load(); }}>{t('fin.turnOff')}</button></div>}</div>
+        : <div className="card inner stack"><p><Badge tone="neutral">{t('fin.offP')}</Badge> {t('fin.offHelp')}</p>{setup && <><label>{t('fin.startDate')}<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} dir="ltr" /></label><div className="actions"><button className="primary" disabled={busy} onClick={async () => { if (await run(() => withStepUp(() => api('POST', '/v1/finance/pms/enable', { from })))) void load(); }}>{t('fin.turnOn')}</button></div></>}</div>}
+      {rec && st.enabledFrom && (
+        <div className="card inner stack"><h3>{t('fin.recon')}</h3>
+          <p className={rec.agrees ? 'okbox' : 'warnbox'} role="status">{rec.agrees ? t('fin.reconOk', { n: rec.pmsEntries }) : t('fin.reconBad', { d: fmt(rec.difference), a: rec.pmsEntries, b: rec.postedEntries })}</p></div>)}
+      {exc.length > 0 && (
+        <div className="card inner stack"><h3>{t('fin.exceptions')} ({exc.length})</h3><p className="muted small">{t('fin.exceptionsHelp')}</p>
+          <ul>{exc.slice(0, 10).map((x) => <li key={x.id}>{x.reason}</li>)}</ul>
+          {setup && <div className="actions"><button className="primary" disabled={busy} onClick={async () => { if (await run(() => withStepUp(() => api('POST', '/v1/finance/pms/retry')))) void load(); }}>{t('fin.retry')}</button></div>}</div>)}
+      <h3>{t('fin.accountsFor')}</h3>
+      <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.kind')}</th><th scope="col">{t('fin.account')}</th></tr></thead><tbody>{st.mappings.map(row)}{st.paymentAccounts.map(row)}</tbody></table></div>
+    </section>
+  );
+}

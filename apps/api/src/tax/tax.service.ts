@@ -1,3 +1,4 @@
+import { PmsPostingService } from '../finance/pms-posting.js';
 import { ConflictException, ForbiddenException, HttpException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { sql, type Transaction } from 'kysely';
 import type { z } from 'zod';
@@ -22,6 +23,7 @@ export class TaxService {
     @Inject(TenantDb) private readonly tdb: TenantDb,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(PmsPostingService) private readonly pms: PmsPostingService,
   ) {}
 
   // ───────────── configuration (maker–checker) ─────────────
@@ -146,9 +148,10 @@ export class TaxService {
     if (!rules.length) return [];
     const lines = computeTax(rules, { txnCode: p.txnCode, date: p.date, residency: await this.residencyOf(trx, p.folioId) }, p.amount);
     for (const l of lines) {
-      await trx.insertInto('folio_posting').values({ tenant_id: currentTenant().tenantId, property_id: p.propertyId, folio_id: p.folioId, posting_type: 'TAX', txn_code: 'TAX', description: `${l.code} ${l.rateBp / 100}%`,
+      const taxRow = await trx.insertInto('folio_posting').values({ tenant_id: currentTenant().tenantId, property_id: p.propertyId, folio_id: p.folioId, posting_type: 'TAX', txn_code: 'TAX', description: `${l.code} ${l.rateBp / 100}%`,
         amount_minor: l.taxMinor.toString(), currency: p.currency, business_date: p.date, source_type: 'TAX', parent_posting_id: p.id, reservation_room_id: p.lineId ?? null, tax_code: l.code, tax_version_id: l.versionId,
-        tax_rate_bp: l.rateBp, taxable_minor: l.taxableMinor.toString(), created_by: p.userId ?? currentTenant().actorId ?? null } as never).execute();
+        tax_rate_bp: l.rateBp, taxable_minor: l.taxableMinor.toString(), created_by: p.userId ?? currentTenant().actorId ?? null } as never).returning('id').executeTakeFirstOrThrow();
+      await this.pms.onFolioPosting(trx, taxRow.id);
     }
     return lines;
   }
