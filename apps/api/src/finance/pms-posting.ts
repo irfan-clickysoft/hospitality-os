@@ -18,13 +18,13 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-11-20
 /** Where each kind of PMS money lands by default, as account codes of the standard hotel chart. */
 export const DEFAULT_MAP: Record<string, { code: string; label: string }> = {
   GUEST_LEDGER: { code: '1250', label: 'What in-house guests owe (guest ledger)' }, ADVANCE: { code: '2100', label: 'Money guests paid before it was earned (advances)' },
-  CASH: { code: '1010', label: 'Cash received' }, CARD: { code: '2130', label: 'Card payments (until the bank settles)' }, WALLET: { code: '2130', label: 'Wallet payments (until settled)' }, BANK_TRANSFER: { code: '1800', label: 'Bank transfers to an account not yet mapped' },
+  CASH: { code: '1010', label: 'Cash received' }, PETTY: { code: '1040', label: 'Petty cash' }, SHORTOVER: { code: '5210', label: 'Cash shortages and excesses' }, CARD: { code: '2130', label: 'Card payments (until the bank settles)' }, WALLET: { code: '2130', label: 'Wallet payments (until settled)' }, BANK_TRANSFER: { code: '1800', label: 'Bank transfers to an account not yet mapped' },
   AR: { code: '1200', label: 'Billed to a company (receivable)' }, OTA: { code: '1210', label: 'Billed to an online travel agent (receivable)' }, TAX: { code: '2140', label: 'Tax charged to guests' }, WHT: { code: '1310', label: 'Tax withheld by a company paying us' },
   'REV:ROOM': { code: '4010', label: 'Room charges' }, 'REV:ROOM_EXTRAS': { code: '4030', label: 'Extra person, bed, meals' }, 'REV:FNB': { code: '4060', label: 'Food and beverage' }, 'REV:FNB_DIGITAL': { code: '4060', label: 'Food and beverage (paid digitally)' },
   'REV:LAUNDRY': { code: '4040', label: 'Laundry' }, 'REV:TRANSPORT_OWNED': { code: '4070', label: 'Transport (our vehicle)' }, 'REV:TRANSPORT_THIRDPARTY': { code: '4070', label: 'Transport (hired)' }, 'REV:MINIBAR': { code: '4080', label: 'Minibar' },
   'REV:MISC': { code: '4080', label: 'Miscellaneous' }, 'REV:HALL': { code: '4080', label: 'Conference room hire' }, 'REV:CANCEL_FEE': { code: '4090', label: 'Late cancellation fees' }, 'REV:NOSHOW_FEE': { code: '4090', label: 'No-show fees' }, 'REV:DEFAULT': { code: '4080', label: 'Any other charge' },
 };
-const KEY = /^(GUEST_LEDGER|ADVANCE|CASH|CARD|WALLET|BANK_TRANSFER|AR|OTA|TAX|WHT|REV:[A-Z_]+|PAYACC:[0-9a-f-]{36})$/;
+const KEY = /^(GUEST_LEDGER|ADVANCE|CASH|PETTY|SHORTOVER|CARD|WALLET|BANK_TRANSFER|AR|OTA|TAX|WHT|REV:[A-Z_]+|PAYACC:[0-9a-f-]{36})$/;
 const Enable = z.object({ from: date }).strict();
 const MapIn = z.object({ account: z.string().regex(/^[0-9]{4,8}$/).nullable() }).strict();
 const RangeQ = z.object({ from: date, to: date });
@@ -147,6 +147,10 @@ export class PmsPostingService {
       const base = await trx.selectFrom('gl_account').select('id').where('code', '=', '1000').executeTakeFirst();
       if (!(await trx.selectFrom('gl_account').select('id').where('code', '=', '1250').executeTakeFirst())) {
         await trx.insertInto('gl_account').values({ tenant_id: currentTenant().tenantId, code: '1250', name: 'Guest Ledger (in-house guests)', parent_id: base?.id ?? null, account_type: 'ASSET', normal_balance: 'DEBIT', is_group: false, control_type: 'RECEIVABLE', created_by: userId } as never).execute();
+      }
+      if (!(await trx.selectFrom('gl_account').select('id').where('code', '=', '5210').executeTakeFirst())) {
+        const exp = await trx.selectFrom('gl_account').select('id').where('code', '=', '5000').executeTakeFirst();
+        await trx.insertInto('gl_account').values({ tenant_id: currentTenant().tenantId, code: '5210', name: 'Cash Short and Over', parent_id: exp?.id ?? null, account_type: 'EXPENSE', normal_balance: 'DEBIT', is_group: false, created_by: userId } as never).execute();
       }
       let filled = 0;
       for (const [key, d] of Object.entries(DEFAULT_MAP)) {

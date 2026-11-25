@@ -20,7 +20,7 @@ function useBranches(): Branch[] { const { properties } = useAuth(); return prop
 /** Journal vouchers: prepared by one person, approved (and posted) by another. A posted voucher is never edited; it is reversed. */
 export function FinVouchers() {
   const { t } = useT(); const { property, can, me: auth } = useAuth(); const withStepUp = useStepUp(); const { busy, problem, run } = useAction();
-  const [rows, setRows] = useState<VRow[] | null>(null); const [status, setStatus] = useState(''); const [open, setOpen] = useState<VFull | null>(null); const [editing, setEditing] = useState<VFull | 'new' | null>(null); const [err, setErr] = useState<string | null>(null);
+  const [rows, setRows] = useState<VRow[] | null>(null); const [status, setStatus] = useState(''); const [open, setOpen] = useState<VFull | null>(null); const [editing, setEditing] = useState<VFull | 'new' | null>(null); const [quick, setQuick] = useState(false); const [err, setErr] = useState<string | null>(null);
   const load = () => api<{ items: VRow[] }>('GET', `/v1/finance/vouchers${status ? `?status=${status}` : ''}`).then((r) => setRows(r.items)).catch((e) => setErr(String(e?.message ?? e)));
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [status]);
   const view = async (id: string) => setOpen(await api<VFull>('GET', `/v1/finance/vouchers/${id}`));
@@ -30,7 +30,7 @@ export function FinVouchers() {
   const me = auth?.user.id; const prep = can('finance.prepare'); const appr = can('finance.approve');
   return (
     <section className="stack">
-      <div className="row between"><h2>{t('fin.vouchers')}</h2>{prep && <button className="primary" onClick={() => setEditing('new')}>{t('fin.newJv')}</button>}</div>
+      <div className="row between"><h2>{t('fin.vouchers')}</h2>{prep && <div className="row"><button onClick={() => setQuick(true)}>{t('fin.newQuick')}</button><button className="primary" onClick={() => setEditing('new')}>{t('fin.newJv')}</button></div>}</div>
       <p className="muted">{t('fin.vouchersHelp')}</p>
       <label>{t('fin.status')}<select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">{t('fin.all')}</option>{['DRAFT', 'SUBMITTED', 'POSTED', 'REJECTED', 'CANCELLED'].map((s) => <option key={s} value={s}>{t(`fin.st.${s}` as never)}</option>)}</select></label>
       <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.no')}</th><th scope="col">{t('fin.date')}</th><th scope="col">{t('fin.narration')}</th><th scope="col">{t('fin.total')}</th><th scope="col">{t('fin.by')}</th><th scope="col">{t('fin.status')}</th></tr></thead>
@@ -51,6 +51,7 @@ export function FinVouchers() {
             {open.reversal && <span className="muted small">{t('fin.reversedBy')} {open.reversal.voucherNo ?? t('fin.draftNo')}</span>}
           </div>
         </Sheet>)}
+      {quick && <QuickVoucherForm onClose={() => setQuick(false)} onSaved={async (id) => { setQuick(false); void load(); await view(id); }} />}
       {editing && <VoucherForm initial={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={async (id) => { setEditing(null); void load(); await view(id); }} />}
     </section>
   );
@@ -221,5 +222,131 @@ export function FinPosting() {
       <h3>{t('fin.accountsFor')}</h3>
       <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.kind')}</th><th scope="col">{t('fin.account')}</th></tr></thead><tbody>{st.mappings.map(row)}{st.paymentAccounts.map(row)}</tbody></table></div>
     </section>
+  );
+}
+
+interface Bank { id: string; name: string; bankName: string | null; bankBranch: string | null; accountTitle: string | null; iban: string | null; accountNumber: string | null; ownerType: string; ownerName: string | null; accountType: string | null; purpose: string | null; branches: Branch[]; ledger: { code: string; name: string } | null; authorised: { at: string; by: string | null; note: string | null } | null; status: 'NEEDS_SETUP' | 'NEEDS_AUTHORISATION' | 'READY' }
+const BANK_TONE: Record<string, 'warn' | 'urgent' | 'clean'> = { NEEDS_SETUP: 'warn', NEEDS_AUTHORISATION: 'urgent', READY: 'clean' };
+
+/** Bank accounts as the books use them: which branches, what for, a ledger account, and (if held in someone else's name) a recorded authorisation. Identifiers are masked unless you may see them. */
+export function FinBanks() {
+  const { t } = useT(); const { can } = useAuth(); const withStepUp = useStepUp(); const { busy, problem, run } = useAction(); const branches = useBranches();
+  const [rows, setRows] = useState<Bank[] | null>(null); const [edit, setEdit] = useState<Bank | null>(null); const [shown, setShown] = useState<Record<string, { iban: string | null; accountNumber: string | null }>>({});
+  const load = () => api<{ items: Bank[] }>('GET', '/v1/finance/banks').then((r) => setRows(r.items));
+  useEffect(() => { void load(); }, []);
+  if (!rows) return <Spinner />;
+  const setup = can('finance.setup'); const details = can('finance.bank_details');
+  return (
+    <section className="stack">
+      <h2>{t('fin.banks')}</h2><p className="muted">{t('fin.banksHelp')}</p>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      {rows.length === 0 && <p className="muted">{t('fin.noBanks')}</p>}
+      {rows.map((b) => (
+        <div key={b.id} className="card inner stack">
+          <div className="row between"><strong>{b.name}</strong><Badge tone={BANK_TONE[b.status]!}>{t(`fin.bs.${b.status}` as never)}</Badge></div>
+          <p className="small">{[b.bankName, b.bankBranch].filter(Boolean).join(' · ')}{b.accountTitle ? ` · ${b.accountTitle}` : ''}</p>
+          <p className="small" dir="ltr">IBAN {shown[b.id]?.iban ?? b.iban ?? '—'} · {t('fin.acctNo')} {shown[b.id]?.accountNumber ?? b.accountNumber ?? '—'}</p>
+          {b.ownerType !== 'COMPANY' && <p className="warnbox">{t('fin.heldBy', { n: b.ownerName ?? '' })}{b.authorised ? ` ${t('fin.authBy', { n: b.authorised.by ?? '' })}` : ''}</p>}
+          <p className="small">{b.purpose ? t(`fin.pu.${b.purpose}` as never) : t('fin.noPurpose')} · {b.accountType ? t(`fin.at.${b.accountType}` as never) : t('fin.noType')} · {b.branches.length ? b.branches.map((x) => x.name).join(', ') : t('fin.noBranches')}{b.ledger ? ` · ${t('fin.ledgerIs')} ${b.ledger.code}` : ''}</p>
+          <div className="actions">
+            {setup && <button onClick={() => setEdit(b)}>{t('fin.setUp')}</button>}
+            {setup && !b.ledger && <button disabled={busy} onClick={async () => { if (await run(() => withStepUp(() => api('POST', `/v1/finance/banks/${b.id}/ledger-account`)))) void load(); }}>{t('fin.makeLedger')}</button>}
+            {details && b.ownerType !== 'COMPANY' && !b.authorised && <button disabled={busy} onClick={async () => { const n = window.prompt(t('fin.authWhy')); if (n && n.trim().length >= 5 && await run(() => withStepUp(() => api('POST', `/v1/finance/banks/${b.id}/authorise`, { note: n.trim() })))) void load(); }}>{t('fin.authorise')}</button>}
+            {details && <button disabled={busy} onClick={async () => { const r = await run(() => withStepUp(() => api<{ iban: string | null; accountNumber: string | null }>('GET', `/v1/finance/banks/${b.id}/reveal`))); if (r) setShown({ ...shown, [b.id]: r }); }}>{t('fin.reveal')}</button>}
+          </div>
+        </div>))}
+      {edit && <BankSetup bank={edit} branches={branches} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); void load(); }} />}
+    </section>
+  );
+}
+function BankSetup({ bank, branches, onClose, onSaved }: { bank: Bank; branches: Branch[]; onClose: () => void; onSaved: () => void }) {
+  const { t } = useT(); const withStepUp = useStepUp(); const { busy, problem, run } = useAction();
+  const [type, setType] = useState(bank.accountType ?? 'CURRENT'); const [purpose, setPurpose] = useState(bank.purpose ?? 'COLLECTIONS'); const [sel, setSel] = useState<string[]>(bank.branches.map((x) => x.id));
+  return (
+    <Sheet title={bank.name} onClose={onClose}>
+      <label>{t('fin.accType')}<select value={type} onChange={(e) => setType(e.target.value)}>{['CURRENT', 'SAVINGS', 'OTHER'].map((x) => <option key={x} value={x}>{t(`fin.at.${x}` as never)}</option>)}</select></label>
+      <label>{t('fin.purpose')}<select value={purpose} onChange={(e) => setPurpose(e.target.value)}>{['COLLECTIONS', 'EXPENSES', 'BOTH', 'PAYROLL', 'REFUNDS', 'OTHER'].map((x) => <option key={x} value={x}>{t(`fin.pu.${x}` as never)}</option>)}</select></label>
+      <fieldset><legend>{t('fin.usedBy')}</legend>{branches.map((b) => <label key={b.id} className="check"><input type="checkbox" checked={sel.includes(b.id)} onChange={(e) => setSel(e.target.checked ? [...sel, b.id] : sel.filter((x) => x !== b.id))} /> {b.name}</label>)}</fieldset>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      <div className="actions"><button onClick={onClose}>{t('common.cancel')}</button><button className="primary" disabled={busy || sel.length === 0} onClick={async () => { if (await run(() => withStepUp(() => api('PUT', `/v1/finance/banks/${bank.id}`, { accountType: type, purpose, branchIds: sel })))) onSaved(); }}>{t('common.save')}</button></div>
+    </Sheet>
+  );
+}
+
+interface Drawer { id: string; propertyId: string; branch: string; kind: string; name: string; custodian: string | null; openingFloat: string; maxLimit: string | null; balance: string; overLimit: boolean; last: { date: string; status: string; variance: string } | null }
+interface Closing { id: string; date: string; branch: string; kind: string; drawer: string; expected: string; counted: string; variance: string; note: string | null; status: string; by: string | null; byId: string }
+
+/** Branch cash and petty cash: the balance the books expect, the daily count, and who approves a difference. */
+export function FinCash() {
+  const { t } = useT(); const { property, can, me } = useAuth(); const withStepUp = useStepUp(); const { busy, problem, run } = useAction(); const branches = useBranches();
+  const [drawers, setDrawers] = useState<Drawer[] | null>(null); const [closings, setClosings] = useState<Closing[]>([]); const [form, setForm] = useState<{ d: Drawer; counted: string; note: string; date: string } | null>(null); const [msg, setMsg] = useState<string | null>(null);
+  const [nd, setNd] = useState({ propertyId: '', kind: 'CASH', name: '', openingFloat: '0', maxLimit: '' });
+  const load = async () => { setDrawers((await api<{ items: Drawer[] }>('GET', '/v1/finance/cash/drawers')).items); setClosings((await api<{ items: Closing[] }>('GET', '/v1/finance/cash/closings?status=PENDING_APPROVAL')).items); };
+  useEffect(() => { void load(); }, []);
+  if (!drawers) return <Spinner />;
+  const setup = can('finance.setup'); const approve = can('finance.approve');
+  return (
+    <section className="stack">
+      <h2>{t('fin.cash')}</h2><p className="muted">{t('fin.cashHelp')}</p>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      {msg && <p className="okbox" role="status">{msg}</p>}
+      {drawers.length === 0 && <p className="muted">{t('fin.noDrawers')}</p>}
+      <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.branch')}</th><th scope="col">{t('fin.drawer')}</th><th scope="col">{t('fin.custodian')}</th><th scope="col">{t('fin.expected')}</th><th scope="col">{t('fin.lastClose')}</th><th scope="col"><span className="sr-only">{t('fin.closeDay')}</span></th></tr></thead>
+        <tbody>{drawers.map((d) => (
+          <tr key={d.id}><th scope="row">{d.branch}</th><td>{d.name}{d.kind === 'PETTY' ? ` (${t('fin.petty')})` : ''}</td><td>{d.custodian ?? '—'}</td><td dir="ltr">{fmt(d.balance)}{d.overLimit && <Badge tone="warn">{t('fin.overLimit')}</Badge>}</td><td>{d.last ? `${d.last.date} · ${d.last.status === 'CLOSED' || d.last.status === 'APPROVED' ? t('fin.balanced') : t(`fin.cs.${d.last.status}` as never)}` : '—'}</td>
+            <td><button onClick={() => { setMsg(null); setForm({ d, counted: '', note: '', date: property!.businessDate }); }}>{t('fin.closeDay')}</button></td></tr>))}</tbody></table></div>
+      {form && (
+        <Sheet title={`${t('fin.closeDay')}: ${form.d.branch} · ${form.d.name}`} onClose={() => setForm(null)}>
+          <label>{t('fin.date')}<input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} dir="ltr" /></label>
+          <label>{t('fin.counted')}<input inputMode="decimal" value={form.counted} onChange={(e) => setForm({ ...form, counted: clean(e.target.value) })} dir="ltr" /></label>
+          <label>{t('fin.whyDiff')}<input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} maxLength={500} /></label>
+          <ErrorLine code={problem?.code} detail={problem?.detail} />
+          <div className="actions"><button onClick={() => setForm(null)}>{t('common.cancel')}</button><button className="primary" disabled={busy || !form.counted} onClick={async () => { const r = await run(() => api<{ status: string; variance: string }>('POST', `/v1/finance/cash/drawers/${form.d.id}/close`, { date: form.date, counted: form.counted, ...(form.note ? { note: form.note } : {}) })); if (r) { setMsg(r.status === 'CLOSED' ? t('fin.closedOk') : t('fin.closedDiff', { n: fmt(r.variance) })); setForm(null); void load(); } }}>{t('fin.closeDay')}</button></div>
+        </Sheet>)}
+      {closings.length > 0 && (
+        <div className="card inner stack"><h3>{t('fin.pendingDiffs')}</h3>
+          {closings.map((c) => (
+            <div key={c.id} className="stack"><p><strong>{c.branch} · {c.drawer}</strong> · <span dir="ltr">{c.date}</span> · {t('fin.variance')} <span dir="ltr">{fmt(c.variance)}</span> ({t('fin.expected')} <span dir="ltr">{fmt(c.expected)}</span>, {t('fin.counted')} <span dir="ltr">{fmt(c.counted)}</span>)<br /><span className="muted small">{c.by}: {c.note}</span></p>
+              {approve && c.byId !== me?.user.id && <div className="actions"><button className="primary" disabled={busy} onClick={async () => { if (await run(() => withStepUp(() => api('POST', `/v1/finance/cash/closings/${c.id}/decide`, { approve: true })))) void load(); }}>{t('fin.accept')}</button><button disabled={busy} onClick={async () => { const n = window.prompt(t('fin.rejectWhy')); if (n && n.trim().length >= 3 && await run(() => withStepUp(() => api('POST', `/v1/finance/cash/closings/${c.id}/decide`, { approve: false, note: n.trim() })))) void load(); }}>{t('fin.reject')}</button></div>}</div>))}</div>)}
+      {setup && (
+        <form className="card inner stack" onSubmit={async (e) => { e.preventDefault(); if (await run(() => withStepUp(() => api('POST', '/v1/finance/cash/drawers', { propertyId: nd.propertyId, kind: nd.kind, name: nd.name, openingFloat: nd.openingFloat || '0', ...(nd.maxLimit ? { maxLimit: nd.maxLimit } : {}) })))) { setNd({ ...nd, name: '' }); void load(); } }}>
+          <h3>{t('fin.addDrawer')}</h3>
+          <div className="grid2"><label>{t('fin.branch')}<select value={nd.propertyId} onChange={(e) => setNd({ ...nd, propertyId: e.target.value })}><option value="">—</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+            <label>{t('fin.type')}<select value={nd.kind} onChange={(e) => setNd({ ...nd, kind: e.target.value })}><option value="CASH">{t('fin.cashDrawer')}</option><option value="PETTY">{t('fin.petty')}</option></select></label></div>
+          <label>{t('fin.accountName')}<input value={nd.name} onChange={(e) => setNd({ ...nd, name: e.target.value })} /></label>
+          <div className="grid2"><label>{t('fin.float')}<input inputMode="decimal" value={nd.openingFloat} onChange={(e) => setNd({ ...nd, openingFloat: clean(e.target.value) })} dir="ltr" /></label><label>{t('fin.maxLimit')}<input inputMode="decimal" value={nd.maxLimit} onChange={(e) => setNd({ ...nd, maxLimit: clean(e.target.value) })} dir="ltr" /></label></div>
+          <div className="actions"><button className="primary" type="submit" disabled={busy || !nd.propertyId || nd.name.trim().length < 2}>{t('fin.addDrawer')}</button></div>
+        </form>)}
+    </section>
+  );
+}
+
+/** Receipt, payment and transfer vouchers: pick the cash or bank account and the other side; the debits and credits are written for you. */
+export function QuickVoucherForm({ onClose, onSaved }: { onClose: () => void; onSaved: (id: string) => void | Promise<void> }) {
+  const { t } = useT(); const { property } = useAuth(); const { busy, problem, run } = useAction(); const branches = useBranches();
+  const [accts, setAccts] = useState<Account[]>([]); const [banks, setBanks] = useState<Bank[]>([]);
+  const [f, setF] = useState({ type: 'CRV', date: property!.businessDate, narration: '', amount: '', money: 'CASH', branchId: branches[0]?.id ?? '', other: '', to: 'BANK' });
+  useEffect(() => { void api<{ items: Account[] }>('GET', '/v1/finance/accounts').then((r) => setAccts(r.items.filter((a) => !a.isGroup && a.active))); void api<{ items: Bank[] }>('GET', '/v1/finance/banks').then((r) => setBanks(r.items.filter((b) => b.ledger))); }, []);
+  useEffect(() => { if (!f.branchId && branches[0]) setF((x) => ({ ...x, branchId: branches[0]!.id })); }, [branches, f.branchId]);
+  const contra = f.type === 'CTV'; const isBank = f.type === 'BRV' || f.type === 'BPV';
+  const ref = (v: string) => { const [k, id] = v.split(':'); return k === 'BANK' ? { kind: 'BANK', bankId: id, branchId: f.branchId } : { kind: k, branchId: f.branchId }; };
+  const opts = (kinds: string[]) => [...(kinds.includes('CASH') ? [{ v: 'CASH', l: t('fin.cashDrawer') }, { v: 'PETTY', l: t('fin.petty') }] : []), ...(kinds.includes('BANK') ? banks.map((b) => ({ v: `BANK:${b.id}`, l: b.name })) : [])];
+  const send = async () => {
+    const body = contra ? { type: 'CTV', date: f.date, narration: f.narration, amount: f.amount, from: ref(f.money), to: ref(f.to) } : { type: f.type, date: f.date, narration: f.narration, amount: f.amount, money: ref(f.money), other: f.other };
+    const r = await run(() => api<{ id: string }>('POST', '/v1/finance/vouchers/quick', body)); if (r) await onSaved(r.id);
+  };
+  return (
+    <Sheet title={t('fin.newQuick')} onClose={onClose} sticky>
+      <label>{t('fin.vtype')}<select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value, money: e.target.value === 'BRV' || e.target.value === 'BPV' ? (banks[0] ? `BANK:${banks[0].id}` : 'BANK:') : 'CASH' })}>{['CRV', 'BRV', 'CPV', 'BPV', 'CTV'].map((x) => <option key={x} value={x}>{t(`fin.vt.${x}` as never)}</option>)}</select></label>
+      <div className="grid2"><label>{t('fin.date')}<input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} dir="ltr" /></label><label>{t('fin.amount')}<input inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: clean(e.target.value) })} dir="ltr" /></label></div>
+      <label>{t('fin.narration')}<input value={f.narration} onChange={(e) => setF({ ...f, narration: e.target.value })} maxLength={500} /></label>
+      <label>{t('fin.branch')}<select value={f.branchId} onChange={(e) => setF({ ...f, branchId: e.target.value })}>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+      <label>{contra ? t('fin.from') : isBank ? t('fin.bankAcct') : t('fin.cashAcct')}<select value={f.money} onChange={(e) => setF({ ...f, money: e.target.value })}>{opts(contra ? ['CASH', 'BANK'] : isBank ? ['BANK'] : ['CASH']).map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}</select></label>
+      {contra
+        ? <label>{t('fin.to')}<select value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })}>{opts(['CASH', 'BANK']).map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}</select></label>
+        : <label>{f.type === 'CRV' || f.type === 'BRV' ? t('fin.receivedFor') : t('fin.paidFor')}<select value={f.other} onChange={(e) => setF({ ...f, other: e.target.value })}><option value="">—</option>{accts.map((a) => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}</select></label>}
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      <div className="actions"><button onClick={onClose}>{t('common.cancel')}</button><button className="primary" disabled={busy || !f.amount || f.narration.trim().length < 3 || (!contra && !f.other)} onClick={() => void send()}>{t('fin.saveDraft')}</button></div>
+    </Sheet>
   );
 }

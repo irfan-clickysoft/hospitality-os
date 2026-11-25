@@ -32,6 +32,9 @@ const TbQ = z.object({ from: date, to: date, branchId: z.string().uuid().optiona
 const GlQ = z.object({ account: z.string().regex(/^[0-9]{4,8}$/), from: date, to: date, branchId: z.string().uuid().optional() });
 
 /** Starter chart of accounts for a hotel company. The branch is a dimension on each line, so one cash account serves every branch. The finance controller approves the final list. */
+export type VType = 'JV' | 'CRV' | 'BRV' | 'CPV' | 'BPV' | 'CTV';
+export type CreateArgs = Omit<z.infer<typeof VoucherIn>, 'type'> & { type: VType };
+
 export const STARTER_COA: ReadonlyArray<[string, string, string, boolean, string | null, string | null]> = [
   // code, name, type, group, parent, control
   ['1000', 'Assets', 'ASSET', true, null, null], ['1010', 'Cash in Hand', 'ASSET', false, '1000', 'CASH'], ['1040', 'Petty Cash', 'ASSET', false, '1000', 'PETTY_CASH'], ['1100', 'Bank Accounts', 'ASSET', true, '1000', 'BANK'],
@@ -80,7 +83,7 @@ export class FinanceService {
     return d;
   }
   /** Writes a balanced, already-approved voucher straight to the ledger for a system source (one voucher per source event: a repeat does nothing). Returns the voucher id, or null if it already existed. */
-  async postSystem(trx: Trx, a: { type: 'PMS'; date: string; narration: string; module: string; eventId: string; userId?: string | null; lines: Array<{ accountId: string; propertyId: string | null; debit: bigint; credit: bigint; description?: string | null; reference?: string | null }> }): Promise<string | null> {
+  async postSystem(trx: Trx, a: { type: 'PMS' | 'JV'; date: string; narration: string; module: string; eventId: string; userId?: string | null; lines: Array<{ accountId: string; propertyId: string | null; debit: bigint; credit: bigint; description?: string | null; reference?: string | null }> }): Promise<string | null> {
     if (await trx.selectFrom('voucher').select('id').where('source_module', '=', a.module).where('source_event_id', '=', a.eventId).executeTakeFirst()) return null;
     const d = a.lines.reduce((s, l) => s + l.debit, 0n), c = a.lines.reduce((s, l) => s + l.credit, 0n);
     if (d !== c || d === 0n) throw err(409, 'NOT_BALANCED', `System posting is not balanced (${d} vs ${c})`);
@@ -162,9 +165,19 @@ export class FinanceService {
       if (a.is_group) throw err(400, 'ACCOUNT_IS_HEADING', `Line ${n + 1}: account ${l.account} is a heading; post to one of the accounts under it`);
       if (!a.active) throw err(400, 'ACCOUNT_INACTIVE', `Line ${n + 1}: account ${l.account} is switched off`);
       if (l.branchId) { const p = await trx.selectFrom('property').select('id').where('id', '=', l.branchId).executeTakeFirst(); if (!p) throw err(400, 'BRANCH_UNKNOWN', `Line ${n + 1}: that branch does not exist`); }
+      await this.checkBank(trx, a.id, l.branchId ?? null, n + 1);
       out.push({ account_id: a.id, property_id: l.branchId ?? null, debit_minor: d.toString(), credit_minor: c.toString(), description: l.description ?? null, reference: l.reference ?? null });
     }
     return out;
+  }
+  /** A bank account's ledger account can be used only once it is set up: branches and purpose confirmed, and (if it is held in someone else's name) authorised. */
+  private async checkBank(trx: Trx, accountId: string, branchId: string | null, n: number) {
+    const b = await trx.selectFrom('payment_account').select(['id', 'name', 'purpose', 'owner_type', 'authorised_at']).where('gl_account_id', '=', accountId).executeTakeFirst();
+    if (!b) return;
+    const maps = await trx.selectFrom('payment_account_branch').select('property_id').where('payment_account_id', '=', b.id).execute();
+    if (!b.purpose || maps.length === 0) throw err(409, 'BANK_NOT_MAPPED', `Line ${n}: the bank account “${b.name}” has no branch or purpose set yet`);
+    if (b.owner_type !== 'COMPANY' && !b.authorised_at) throw err(409, 'BANK_NOT_AUTHORISED', `Line ${n}: the bank account “${b.name}” is held in someone else's name and has not been authorised for company use`);
+    if (branchId && !maps.some((m) => m.property_id === branchId)) throw err(409, 'BANK_BRANCH_NOT_MAPPED', `Line ${n}: the bank account “${b.name}” is not set up for that branch`);
   }
   private async writeLines(trx: Trx, voucherId: string, rows: Awaited<ReturnType<FinanceService['lines']>>) {
     await trx.deleteFrom('voucher_line').where('voucher_id', '=', voucherId).execute();
@@ -173,7 +186,7 @@ export class FinanceService {
     return d;
   }
 
-  async create(userId: string, i: z.infer<typeof VoucherIn>, source?: { module: string; eventId: string }) {
+  async create(userId: string, i: CreateArgs, source?: { module: string; eventId: string }) {
     return this.tdb.tx(async (trx) => {
       const s = await this.settings(trx); const cur = s.base_currency; const posting = i.postingDate ?? i.date;
       await this.assertOpen(trx, posting);
@@ -223,7 +236,8 @@ export class FinanceService {
       const v = await this.load(trx, id);
       if (v.status !== 'SUBMITTED') throw err(409, 'VOUCHER_NOT_SUBMITTED', 'Only a submitted voucher can be approved');
       const s = await this.settings(trx);
-      if (v.created_by === userId && BigInt(v.total_minor) > BigInt(s.self_approve_limit_minor)) throw err(403, 'FINANCE_SELF_APPROVAL', 'You prepared this voucher, so someone else has to approve it');
+      const ownerTitled = await sql<{ n: number }>`SELECT count(*)::int AS n FROM voucher_line l JOIN payment_account b ON b.tenant_id = l.tenant_id AND b.gl_account_id = l.account_id WHERE l.voucher_id = ${id} AND b.owner_type <> 'COMPANY'`.execute(trx);
+      if (v.created_by === userId && (ownerTitled.rows[0]!.n > 0 || BigInt(v.total_minor) > BigInt(s.self_approve_limit_minor))) throw err(403, 'FINANCE_SELF_APPROVAL', 'You prepared this voucher, so someone else has to approve it');
       await this.assertOpen(trx, v.posting_date);
       const lines = await trx.selectFrom('voucher_line').selectAll().where('voucher_id', '=', id).orderBy('line_no').execute();
       await trx.insertInto('gl_entry').values(lines.map((l) => ({ tenant_id: currentTenant().tenantId, voucher_id: id, line_id: l.id, account_id: l.account_id, property_id: l.property_id, posting_date: v.posting_date, debit_minor: l.debit_minor, credit_minor: l.credit_minor })) as never).execute();
