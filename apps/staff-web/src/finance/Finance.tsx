@@ -739,3 +739,59 @@ function YearEnd() {
     </div>
   );
 }
+
+interface FAsset { id: string; assetNo: string; name: string; category: string; propertyId: string; branch: string; acquiredOn: string; cost: string; lifeMonths: number; accumulated: string; netBookValue: string; monthly: string; status: 'IN_SERVICE' | 'DISPOSED'; disposedOn: string | null; disposalPending: boolean }
+interface ASummary { register: { cost: string; accumulated: string; netBookValue: string }; ledger: { cost: string; accumulated: string; netBookValue: string }; difference: { cost: string; accumulated: string }; agrees: boolean }
+const CATS: Record<string, number> = { FURNITURE: 60, EQUIPMENT: 60, ELECTRONICS: 36, VEHICLE: 60, BUILDING_IMPROVEMENT: 120, OTHER: 60 };
+
+/** The equipment, furniture and vehicles the hotels own: what each cost, what it has used up, and what is left. */
+export function FinAssets() {
+  const { t } = useT(); const { property, can } = useAuth(); const withStepUp = useStepUp(); const { busy, problem, run } = useAction(); const branches = useBranches();
+  const [rows, setRows] = useState<FAsset[] | null>(null); const [sum, setSum] = useState<ASummary | null>(null); const [month, setMonth] = useState(property!.businessDate.slice(0, 7)); const [msg, setMsg] = useState<string | null>(null); const [disp, setDisp] = useState<FAsset | null>(null);
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [f, setF] = useState({ name: '', category: 'EQUIPMENT', branchId: property!.id, acquiredOn: property!.businessDate, cost: '', salvage: '', life: '60', opening: '' });
+  const load = async () => { setRows((await api<{ items: FAsset[] }>('GET', '/v1/finance/assets')).items); setSum(await api<ASummary>('GET', '/v1/finance/assets/summary')); };
+  useEffect(() => { void load(); void api<{ items: Bank[] }>('GET', '/v1/finance/banks').then((r) => setBanks(r.items.filter((b) => b.ledger))).catch(() => undefined); }, []);
+  if (!rows) return <Spinner />;
+  const setup = can('finance.setup'); const prep = can('finance.prepare');
+  return (
+    <section className="stack">
+      <h2>{t('fin.assets')}</h2><p className="muted">{t('fin.assetsHelp')}</p>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      {msg && <p className="okbox" role="status">{msg}</p>}
+      {sum && <p className={sum.agrees ? 'okbox' : 'warnbox'} role="status">{sum.agrees ? t('fin.assetsAgree') : t('fin.assetsDiffer', { c: fmt(sum.difference.cost), a: fmt(sum.difference.accumulated) })}</p>}
+      {prep && <div className="card inner stack"><h3>{t('fin.runDep')}</h3><p className="muted small">{t('fin.runDepHelp')}</p>
+        <div className="row"><input type="month" aria-label={t('fin.month')} value={month} onChange={(e) => setMonth(e.target.value)} dir="ltr" /><button className="primary" disabled={busy} onClick={async () => { setMsg(null); const r = await run(() => withStepUp(() => api<{ assets: number; total: string }>('POST', '/v1/finance/assets/depreciation', { month }))); if (r) { setMsg(t('fin.depMade', { n: r.assets, a: fmt(r.total) })); void load(); } }}>{t('fin.runDep')}</button></div></div>}
+      <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.assetNo')}</th><th scope="col">{t('fin.accountName')}</th><th scope="col">{t('fin.branch')}</th><th scope="col">{t('fin.cost')}</th><th scope="col">{t('fin.usedUp')}</th><th scope="col">{t('fin.worthNow')}</th><th scope="col">{t('fin.perMonth')}</th><th scope="col"><span className="sr-only">{t('fin.actions')}</span></th></tr></thead>
+        <tbody>{rows.length === 0 && <tr><td colSpan={8} className="muted">{t('fin.none')}</td></tr>}{rows.map((a) => (
+          <tr key={a.id}><th scope="row" dir="ltr">{a.assetNo}</th><td>{a.name}{a.status === 'DISPOSED' && <Badge tone="neutral">{t('fin.disposed')}</Badge>}</td><td>{a.branch}</td><td dir="ltr">{fmt(a.cost)}</td><td dir="ltr">{fmt(a.accumulated)}</td><td dir="ltr">{fmt(a.netBookValue)}</td><td dir="ltr">{a.status === 'IN_SERVICE' ? fmt(a.monthly) : ''}</td>
+            <td>{prep && a.status === 'IN_SERVICE' && !a.disposalPending && <button className="link" onClick={() => setDisp(a)}>{t('fin.dispose')}</button>}{a.disposalPending && <Badge tone="warn">{t('fin.disposalWaiting')}</Badge>}</td></tr>))}</tbody></table></div>
+      {setup && (
+        <form className="card inner stack" onSubmit={async (e) => { e.preventDefault(); if (await run(() => withStepUp(() => api('POST', '/v1/finance/assets', { name: f.name, category: f.category, branchId: f.branchId, acquiredOn: f.acquiredOn, cost: f.cost, salvage: f.salvage || '0', lifeMonths: Number(f.life), openingAccumulated: f.opening || '0' })))) { setF({ ...f, name: '', cost: '', salvage: '', opening: '' }); void load(); } }}>
+          <h3>{t('fin.addAsset')}</h3><p className="muted small">{t('fin.addAssetHelp')}</p>
+          <div className="grid2"><label>{t('fin.accountName')}<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} maxLength={120} /></label><label>{t('fin.branch')}<select value={f.branchId} onChange={(e) => setF({ ...f, branchId: e.target.value })}>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label></div>
+          <div className="grid2"><label>{t('fin.type')}<select value={f.category} onChange={(e) => setF({ ...f, category: e.target.value, life: String(CATS[e.target.value] ?? 60) })}>{Object.keys(CATS).map((c) => <option key={c} value={c}>{t(`fin.ac.${c}` as never)}</option>)}</select></label><label>{t('fin.boughtOn')}<input type="date" value={f.acquiredOn} onChange={(e) => setF({ ...f, acquiredOn: e.target.value })} dir="ltr" /></label></div>
+          <div className="grid2"><label>{t('fin.cost')}<input inputMode="decimal" value={f.cost} onChange={(e) => setF({ ...f, cost: clean(e.target.value) })} dir="ltr" /></label><label>{t('fin.lifeMonths')}<input inputMode="numeric" value={f.life} onChange={(e) => setF({ ...f, life: e.target.value.replace(/\D/g, '') })} dir="ltr" /></label></div>
+          <div className="grid2"><label>{t('fin.salvage')}<input inputMode="decimal" value={f.salvage} onChange={(e) => setF({ ...f, salvage: clean(e.target.value) })} dir="ltr" /></label><label>{t('fin.alreadyUsed')}<input inputMode="decimal" value={f.opening} onChange={(e) => setF({ ...f, opening: clean(e.target.value) })} dir="ltr" /></label></div>
+          <div className="actions"><button className="primary" type="submit" disabled={busy || f.name.trim().length < 2 || !f.cost || !f.life}>{t('fin.addAsset')}</button></div>
+        </form>)}
+      {disp && <DisposeSheet asset={disp} banks={banks} onClose={() => setDisp(null)} onDone={(m) => { setDisp(null); setMsg(m); void load(); }} />}
+    </section>
+  );
+}
+
+function DisposeSheet({ asset, banks, onClose, onDone }: { asset: FAsset; banks: Bank[]; onClose: () => void; onDone: (msg: string) => void }) {
+  const { t } = useT(); const { property } = useAuth(); const { busy, problem, run } = useAction();
+  const [f, setF] = useState({ date: property!.businessDate, proceeds: '', money: 'CASH', reason: '' });
+  const ref = () => { const [k, id] = f.money.split(':'); return k === 'BANK' ? { kind: 'BANK', bankId: id } : { kind: k }; };
+  return (
+    <Sheet title={`${t('fin.dispose')}: ${asset.assetNo} ${asset.name}`} onClose={onClose}>
+      <p className="muted small">{t('fin.disposeHelp', { n: fmt(asset.netBookValue) })}</p>
+      <div className="grid2"><label>{t('fin.date')}<input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} dir="ltr" /></label><label>{t('fin.proceeds')}<input inputMode="decimal" value={f.proceeds} onChange={(e) => setF({ ...f, proceeds: clean(e.target.value) })} dir="ltr" /></label></div>
+      {Number(f.proceeds) > 0 && <label>{t('fin.receivedInto')}<select value={f.money} onChange={(e) => setF({ ...f, money: e.target.value })}><option value="CASH">{t('fin.cashDrawer')}</option><option value="PETTY">{t('fin.petty')}</option>{banks.map((b) => <option key={b.id} value={`BANK:${b.id}`}>{b.name}</option>)}</select></label>}
+      <label>{t('fin.disposeWhy')}<input value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} maxLength={300} /></label>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      <div className="actions"><button onClick={onClose}>{t('common.cancel')}</button><button className="primary" disabled={busy || f.reason.trim().length < 3} onClick={async () => { const r = await run(() => api<{ gainOrLoss: string }>('POST', `/v1/finance/assets/${asset.id}/dispose`, { date: f.date, proceeds: f.proceeds || '0', ...(Number(f.proceeds) > 0 ? { money: ref() } : {}), reason: f.reason.trim() })); if (r) onDone(t('fin.disposeMade', { n: fmt(r.gainOrLoss) })); }}>{t('fin.dispose')}</button></div>
+    </Sheet>
+  );
+}

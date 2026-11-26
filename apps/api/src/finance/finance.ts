@@ -26,14 +26,14 @@ const Line = z.object({ account: z.string().regex(/^[0-9]{4,8}$/, 'Use the accou
 const VoucherIn = z.object({ type: z.literal('JV'), date, postingDate: date.optional(), narration: z.string().trim().min(3).max(500), lines: z.array(Line).min(2).max(100) }).strict();
 const Reverse = z.object({ date, reason: z.string().trim().min(3).max(300) }).strict();
 const Reject = z.object({ reason: z.string().trim().min(3).max(300) }).strict();
-const Settings = z.object({ selfApproveLimit: amount.optional(), fiscalYearStartMonth: z.number().int().min(1).max(12).optional() }).strict().refine((v) => v.selfApproveLimit !== undefined || v.fiscalYearStartMonth !== undefined, 'Nothing to save');
+const Settings = z.object({ selfApproveLimit: amount.optional(), fiscalYearStartMonth: z.number().int().min(1).max(12).optional(), capitalisationThreshold: amount.optional() }).strict().refine((v) => v.selfApproveLimit !== undefined || v.fiscalYearStartMonth !== undefined || v.capitalisationThreshold !== undefined, 'Nothing to save');
 const Period = z.object({ reason: z.string().trim().min(3).max(300).optional() }).strict();
 const ListQ = z.object({ status: z.enum(['DRAFT', 'SUBMITTED', 'POSTED', 'REJECTED', 'CANCELLED']).optional(), from: date.optional(), to: date.optional() });
 const TbQ = z.object({ from: date, to: date, branchId: z.string().uuid().optional() });
 const GlQ = z.object({ account: z.string().regex(/^[0-9]{4,8}$/), from: date, to: date, branchId: z.string().uuid().optional() });
 
 /** Starter chart of accounts for a hotel company. The branch is a dimension on each line, so one cash account serves every branch. The finance controller approves the final list. */
-export type VType = 'JV' | 'CRV' | 'BRV' | 'CPV' | 'BPV' | 'CTV' | 'IBEV' | 'IBTV' | 'SBV' | 'SPV' | 'YEC';
+export type VType = 'JV' | 'CRV' | 'BRV' | 'CPV' | 'BPV' | 'CTV' | 'IBEV' | 'IBTV' | 'SBV' | 'SPV' | 'YEC' | 'DEP' | 'DSP';
 export type CreateArgs = Omit<z.infer<typeof VoucherIn>, 'type'> & { type: VType };
 
 export const STARTER_COA: ReadonlyArray<[string, string, string, boolean, string | null, string | null]> = [
@@ -149,11 +149,12 @@ export class FinanceService {
       return { loaded: STARTER_COA.length };
     });
   }
-  async getSettings() { return this.tdb.tx(async (trx) => { const s = await this.settings(trx); return { baseCurrency: s.base_currency, fiscalYearStartMonth: s.fiscal_year_start_month, selfApproveLimit: dec(s.self_approve_limit_minor, s.base_currency) }; }); }
+  async getSettings() { return this.tdb.tx(async (trx) => { const s = await this.settings(trx); return { baseCurrency: s.base_currency, fiscalYearStartMonth: s.fiscal_year_start_month, capitalisationThreshold: dec(s.capitalisation_threshold_minor, s.base_currency), selfApproveLimit: dec(s.self_approve_limit_minor, s.base_currency) }; }); }
   async saveSettings(userId: string, i: z.infer<typeof Settings>) {
     return this.tdb.tx(async (trx) => {
       const s = await this.settings(trx); const set: Record<string, unknown> = { updated_by: userId, updated_at: new Date() };
       if (i.selfApproveLimit !== undefined) set.self_approve_limit_minor = minor(i.selfApproveLimit, s.base_currency).toString();
+      if (i.capitalisationThreshold !== undefined) set.capitalisation_threshold_minor = minor(i.capitalisationThreshold, s.base_currency).toString();
       if (i.fiscalYearStartMonth !== undefined) {
         if (i.fiscalYearStartMonth !== s.fiscal_year_start_month && (await trx.selectFrom('fiscal_year_close').select('fy_end').where('status', '=', 'CLOSED').executeTakeFirst())) throw err(409, 'YEAR_CLOSED', 'A financial year has already been closed, so the year start cannot change.');
         set.fiscal_year_start_month = i.fiscalYearStartMonth;
@@ -279,6 +280,16 @@ export class FinanceService {
       const now = new Date();
       await trx.updateTable('voucher').set({ status: 'POSTED', approved_by: userId, approved_at: now, posted_by: userId, posted_at: now } as never).where('id', '=', id).execute();
       await sql`UPDATE bank_suspense_item SET status = 'ALLOCATED' WHERE allocated_voucher_id = ${id}`.execute(trx);
+      if (v.voucher_type === 'DEP') {                          // depreciation adds to what each asset has used up; reversing it takes it back and frees the month
+        if (v.reverses_voucher_id) {
+          await sql`UPDATE fixed_asset a SET accumulated_minor = a.accumulated_minor - l.amount_minor FROM depreciation_line l JOIN depreciation_run r ON r.tenant_id = l.tenant_id AND r.id = l.run_id WHERE r.voucher_id = ${v.reverses_voucher_id} AND a.tenant_id = l.tenant_id AND a.id = l.asset_id`.execute(trx);
+          await sql`UPDATE depreciation_run SET voided = true WHERE voucher_id = ${v.reverses_voucher_id}`.execute(trx);
+        } else await sql`UPDATE fixed_asset a SET accumulated_minor = a.accumulated_minor + l.amount_minor FROM depreciation_line l JOIN depreciation_run r ON r.tenant_id = l.tenant_id AND r.id = l.run_id WHERE r.voucher_id = ${id} AND a.tenant_id = l.tenant_id AND a.id = l.asset_id`.execute(trx);
+      }
+      if (v.voucher_type === 'DSP') {
+        if (v.reverses_voucher_id) await sql`UPDATE fixed_asset SET status = 'IN_SERVICE', disposed_on = NULL, disposal_voucher_id = NULL WHERE disposal_voucher_id = ${v.reverses_voucher_id}`.execute(trx);
+        else await sql`UPDATE fixed_asset SET status = 'DISPOSED', disposed_on = ${v.voucher_date}::date WHERE disposal_voucher_id = ${id}`.execute(trx);
+      }
       if (v.voucher_type === 'YEC') {                         // closing the year, or reopening it by reversing the closing
         if (v.reverses_voucher_id) await sql`UPDATE fiscal_year_close SET status = 'REOPENED' WHERE voucher_id = ${v.reverses_voucher_id}`.execute(trx);
         else await sql`UPDATE fiscal_year_close SET status = 'CLOSED', closed_by = ${userId}, closed_at = now() WHERE voucher_id = ${id}`.execute(trx);
@@ -309,6 +320,8 @@ export class FinanceService {
       if (!['DRAFT', 'REJECTED'].includes(v.status)) throw err(409, 'VOUCHER_LOCKED', 'Only a draft or rejected voucher can be cancelled; a posted one is reversed');
       if (v.created_by !== userId) throw err(403, 'FIN_NOT_YOURS', 'Only the person who prepared this voucher can cancel it');
       await trx.updateTable('voucher').set({ status: 'CANCELLED' } as never).where('id', '=', id).execute();
+      await sql`UPDATE depreciation_run SET voided = true WHERE voucher_id = ${id}`.execute(trx);
+      await sql`UPDATE fixed_asset SET disposal_voucher_id = NULL WHERE disposal_voucher_id = ${id} AND status = 'IN_SERVICE'`.execute(trx);
       await this.audit.record(trx, { action: 'finance.voucher.cancel', resourceType: 'voucher', resourceId: id, after: {} });
       return { id, status: 'CANCELLED' };
     });

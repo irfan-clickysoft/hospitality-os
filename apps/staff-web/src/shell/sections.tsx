@@ -67,6 +67,7 @@ export const SECTIONS: Section[] = [
     { id: 'unallocated', label: 'fin.unalloc', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinUnallocated') },
     { id: 'suppliers', label: 'fin.suppliers', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinSuppliers') },
     { id: 'payables', label: 'fin.payables', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinPayables') },
+    { id: 'assets', label: 'fin.assets', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinAssets') },
     { id: 'interbranch', label: 'fin.interbranch', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinInterBranch') },
     { id: 'posting', label: 'fin.posting', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinPosting') },
     { id: 'periods', label: 'fin.periods', show: any('finance.view'), Page: L(() => import('../finance/Finance.js'), 'FinPeriods') },
