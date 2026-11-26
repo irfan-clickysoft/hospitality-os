@@ -11,7 +11,6 @@ import { currentTenant } from '../tenancy/tenant-context.js';
 import { FinanceService } from './finance.js';
 
 type Trx = Transaction<DB>;
-const ANY = { anyScope: true } as const;
 const err = (status: number, code: string, message: string) => new HttpException({ code, message }, status);
 const End = z.object({ end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-12-31') });
 const iso = (y: number, m: number, d: number) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -91,7 +90,7 @@ export class YearEndService {
 @Controller('v1/finance/year-end')
 export class YearEndController {
   constructor(@Inject(YearEndService) private readonly svc: YearEndService) {}
-  @Get() @RequirePermission('finance.view', ANY) list() { return this.svc.list(); }
-  @Get('preview') @RequirePermission('finance.view', ANY) preview(@Query() q: unknown) { return this.svc.preview(parse(End, q).end); }
-  @Post('close') @RequirePermission('finance.period', ANY) close(@Body() b: unknown) { return this.svc.close(currentTenant().actorId!, parse(End, b).end); }
+  @Get() @RequirePermission('finance.view') list() { return this.svc.list(); }
+  @Get('preview') @RequirePermission('finance.view') preview(@Query() q: unknown) { return this.svc.preview(parse(End, q).end); }
+  @Post('close') @RequirePermission('finance.period') close(@Body() b: unknown) { return this.svc.close(currentTenant().actorId!, parse(End, b).end); }
 }

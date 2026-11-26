@@ -11,7 +11,6 @@ import { currentTenant } from '../tenancy/tenant-context.js';
 import { FinanceService } from './finance.js';
 
 type Trx = Transaction<DB>;
-const ANY = { anyScope: true } as const;
 const err = (status: number, code: string, message: string) => new HttpException({ code, message }, status);
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-11-20');
 
@@ -227,11 +226,11 @@ export class PmsPostingService {
 export class PmsFinanceController {
   constructor(@Inject(PmsPostingService) private readonly svc: PmsPostingService) {}
   private me() { return currentTenant().actorId!; }
-  @Get() @RequirePermission('finance.view', ANY) status() { return this.svc.status(); }
-  @Post('enable') @HttpCode(200) @RequirePermission('finance.setup', ANY) enable(@Body() b: unknown) { return this.svc.enable(this.me(), parse(Enable, b).from); }
-  @Post('disable') @HttpCode(200) @RequirePermission('finance.setup', ANY) disable() { return this.svc.disable(this.me()); }
-  @Put('map/:key') @RequirePermission('finance.setup', ANY) map(@Param('key') key: string, @Body() b: unknown) { return this.svc.setMap(this.me(), key, parse(MapIn, b).account); }
-  @Get('exceptions') @RequirePermission('finance.view', ANY) exceptions() { return this.svc.exceptions(); }
-  @Post('retry') @HttpCode(200) @RequirePermission('finance.setup', ANY) retry() { return this.svc.retry(this.me()); }
-  @Get('reconciliation') @RequirePermission('finance.view', ANY) rec(@Query() q: unknown) { const r = parse(RangeQ, q); return this.svc.reconciliation(r.from, r.to); }
+  @Get() @RequirePermission('finance.view') status() { return this.svc.status(); }
+  @Post('enable') @HttpCode(200) @RequirePermission('finance.setup') enable(@Body() b: unknown) { return this.svc.enable(this.me(), parse(Enable, b).from); }
+  @Post('disable') @HttpCode(200) @RequirePermission('finance.setup') disable() { return this.svc.disable(this.me()); }
+  @Put('map/:key') @RequirePermission('finance.setup') map(@Param('key') key: string, @Body() b: unknown) { return this.svc.setMap(this.me(), key, parse(MapIn, b).account); }
+  @Get('exceptions') @RequirePermission('finance.view') exceptions() { return this.svc.exceptions(); }
+  @Post('retry') @HttpCode(200) @RequirePermission('finance.setup') retry() { return this.svc.retry(this.me()); }
+  @Get('reconciliation') @RequirePermission('finance.view') rec(@Query() q: unknown) { const r = parse(RangeQ, q); return this.svc.reconciliation(r.from, r.to); }
 }

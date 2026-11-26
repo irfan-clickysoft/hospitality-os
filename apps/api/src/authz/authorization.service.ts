@@ -32,6 +32,19 @@ export class AuthorizationService {
     return { ...scope, propertyId: row.id, legalEntityId: row.legal_entity_id };
   }
 
+  /**
+   * The branches a user may use a permission on: every branch (a company-wide grant), or just the listed ones (grants for a branch, or for a legal entity, which covers its branches).
+   * Head office (entries with no branch) needs the company-wide grant.
+   */
+  async allowedBranches(userId: string, permission: string): Promise<{ all: true } | { all: false; ids: string[] }> {
+    const grants = (await this.loadGrants(userId)).filter((g) => g.permission === permission && g.validFrom <= new Date() && (g.validTo === null || new Date() < g.validTo));
+    if (grants.some((g) => g.scopeType === 'TENANT')) return { all: true };
+    const ids = new Set<string>(grants.filter((g) => g.scopeType === 'PROPERTY' && g.scopeId).map((g) => g.scopeId!));
+    const les = grants.filter((g) => g.scopeType === 'LEGAL_ENTITY' && g.scopeId).map((g) => g.scopeId!);
+    if (les.length) for (const r of await this.tdb.tx((trx) => trx.selectFrom('property').select('id').where('legal_entity_id', 'in', les).execute())) ids.add(r.id);
+    return { all: false, ids: [...ids] };
+  }
+
   async holdsAnywhere(userId: string, permission: string): Promise<boolean> {
     return holdsAnywhere(await this.loadGrants(userId), permission);
   }

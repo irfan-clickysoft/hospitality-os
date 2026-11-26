@@ -12,7 +12,6 @@ import { currentTenant } from '../tenancy/tenant-context.js';
 import { FinanceService } from './finance.js';
 
 type Trx = Transaction<DB>;
-const ANY = { anyScope: true } as const;
 const err = (status: number, code: string, message: string) => new HttpException({ code, message }, status);
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-11-20');
 const amount = z.string().trim().regex(/^-?\d{1,13}(\.\d{1,2})?$/, 'Use an amount like 15000 or 15000.50');
@@ -302,19 +301,19 @@ export class ReconService {
 export class ReconController {
   constructor(@Inject(ReconService) private readonly svc: ReconService) {}
   private me() { return currentTenant().actorId!; }
-  @Post('statements') @RequirePermission('finance.prepare', ANY) import(@Body() b: unknown) { return this.svc.importStatement(this.me(), parse(Import, b)); }
-  @Post('automatch') @HttpCode(200) @RequirePermission('finance.prepare', ANY) auto(@Body() b: unknown) { return this.svc.autoMatchNow(this.me(), parse(z.object({ bankId: uuid }), b).bankId); }
-  @Get('lines') @RequirePermission('finance.view', ANY) lines(@Query() q: unknown) { return this.svc.lines(parse(LinesQ, q)); }
-  @Get('ledger') @RequirePermission('finance.view', ANY) ledger(@Query() q: unknown) { return this.svc.ledger(parse(LedgerQ, q)); }
-  @Post('lines/:id/match') @HttpCode(200) @RequirePermission('finance.prepare', ANY) match(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.match(this.me(), id, parse(MatchIn, b).entryIds); }
-  @Post('lines/:id/unmatch') @HttpCode(200) @RequirePermission('finance.prepare', ANY) unmatch(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.unmatch(this.me(), id, parse(Reason, b).reason); }
-  @Post('lines/:id/ignore') @HttpCode(200) @RequirePermission('finance.prepare', ANY) ignore(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.ignore(this.me(), id, parse(Reason, b).reason); }
-  @Post('lines/:id/book') @HttpCode(200) @RequirePermission('finance.approve', ANY) book(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.book(this.me(), id, parse(Book, b)); }
-  @Get('summary') @RequirePermission('finance.view', ANY) summary(@Query() q: unknown) { return this.svc.summary(parse(SummaryQ, q)); }
-  @Post('reconciliations') @RequirePermission('finance.prepare', ANY) prepare(@Body() b: unknown) { return this.svc.prepare(this.me(), parse(ReconIn, b)); }
-  @Post('reconciliations/:id/approve') @HttpCode(200) @RequirePermission('finance.approve', ANY) approve(@Param('id', new ParseUUIDPipe()) id: string) { return this.svc.approve(this.me(), id); }
-  @Get('reconciliations') @RequirePermission('finance.view', ANY) list(@Query('bankId') bankId: string) { return this.svc.reconciliations(parse(uuid, bankId)); }
-  @Get('suspense') @RequirePermission('finance.view', ANY) suspense() { return this.svc.suspense(); }
-  @Post('suspense/:id/assign') @HttpCode(200) @RequirePermission('finance.prepare', ANY) assign(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.assign(this.me(), id, parse(Assign, b)); }
-  @Post('suspense/:id/allocate') @RequirePermission('finance.prepare', ANY) allocate(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.allocate(this.me(), id, parse(Allocate, b)); }
+  @Post('statements') @RequirePermission('finance.prepare') import(@Body() b: unknown) { return this.svc.importStatement(this.me(), parse(Import, b)); }
+  @Post('automatch') @HttpCode(200) @RequirePermission('finance.prepare') auto(@Body() b: unknown) { return this.svc.autoMatchNow(this.me(), parse(z.object({ bankId: uuid }), b).bankId); }
+  @Get('lines') @RequirePermission('finance.view') lines(@Query() q: unknown) { return this.svc.lines(parse(LinesQ, q)); }
+  @Get('ledger') @RequirePermission('finance.view') ledger(@Query() q: unknown) { return this.svc.ledger(parse(LedgerQ, q)); }
+  @Post('lines/:id/match') @HttpCode(200) @RequirePermission('finance.prepare') match(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.match(this.me(), id, parse(MatchIn, b).entryIds); }
+  @Post('lines/:id/unmatch') @HttpCode(200) @RequirePermission('finance.prepare') unmatch(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.unmatch(this.me(), id, parse(Reason, b).reason); }
+  @Post('lines/:id/ignore') @HttpCode(200) @RequirePermission('finance.prepare') ignore(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.ignore(this.me(), id, parse(Reason, b).reason); }
+  @Post('lines/:id/book') @HttpCode(200) @RequirePermission('finance.approve') book(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.book(this.me(), id, parse(Book, b)); }
+  @Get('summary') @RequirePermission('finance.view') summary(@Query() q: unknown) { return this.svc.summary(parse(SummaryQ, q)); }
+  @Post('reconciliations') @RequirePermission('finance.prepare') prepare(@Body() b: unknown) { return this.svc.prepare(this.me(), parse(ReconIn, b)); }
+  @Post('reconciliations/:id/approve') @HttpCode(200) @RequirePermission('finance.approve') approve(@Param('id', new ParseUUIDPipe()) id: string) { return this.svc.approve(this.me(), id); }
+  @Get('reconciliations') @RequirePermission('finance.view') list(@Query('bankId') bankId: string) { return this.svc.reconciliations(parse(uuid, bankId)); }
+  @Get('suspense') @RequirePermission('finance.view') suspense() { return this.svc.suspense(); }
+  @Post('suspense/:id/assign') @HttpCode(200) @RequirePermission('finance.prepare') assign(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.assign(this.me(), id, parse(Assign, b)); }
+  @Post('suspense/:id/allocate') @RequirePermission('finance.prepare') allocate(@Param('id', new ParseUUIDPipe()) id: string, @Body() b: unknown) { return this.svc.allocate(this.me(), id, parse(Allocate, b)); }
 }
