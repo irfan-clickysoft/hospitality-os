@@ -177,6 +177,7 @@ export function FinPeriods() {
             <td>{can('finance.period') && (c
               ? <button disabled={busy} onClick={async () => { const r = window.prompt(t('fin.reopenWhy')); if (r && r.trim().length >= 3 && await run(() => withStepUp(() => api('POST', `/v1/finance/periods/${m}/reopen`, { reason: r.trim() })))) load(); }}>{t('fin.reopen')}</button>
               : <button disabled={busy} onClick={async () => { if (await run(() => withStepUp(() => api('POST', `/v1/finance/periods/${m}/close`)))) load(); }}>{t('fin.close')}</button>)}</td></tr>); })}</tbody></table></div>
+      <YearEnd />
       {can('finance.setup') && (
         <div className="card inner stack"><h3>{t('fin.selfLimit')}</h3><p className="muted small">{t('fin.selfLimitHelp')}</p>
           <label>{t('fin.amount')}<input inputMode="decimal" value={limit} onChange={(e) => { setSaved(false); setLimit(clean(e.target.value)); }} dir="ltr" /></label>
@@ -702,5 +703,38 @@ export function FinPayables() {
         <tbody>{d.rows.length === 0 && <tr><td colSpan={7} className="muted">{t('fin.none')}</td></tr>}{d.rows.map((r) => <tr key={r.supplierId}><th scope="row">{r.supplier}</th>{[r.current, r.d30, r.d60, r.d90, r.over90, r.total].map((v, i) => <td key={i} dir="ltr">{v === '0.00' ? '' : fmt(v)}</td>)}</tr>)}</tbody>
         <tfoot><tr><th scope="row">{t('fin.total')}</th>{[d.totals.current, d.totals.d30, d.totals.d60, d.totals.d90, d.totals.over90, d.totals.total].map((v, i) => <td key={i} dir="ltr">{fmt(v)}</td>)}</tr></tfoot></table></div>}
     </section>
+  );
+}
+
+interface FyRow { start: string; end: string; current: boolean; monthsClosed: number; months: number; status: 'OPEN' | 'PENDING' | 'CLOSED'; voucherId: string | null }
+interface FyPreview { start: string; end: string; blockers: Array<{ code: string; message: string }>; canClose: boolean; result: string; byBranch: Array<{ branch: string; result: string }> }
+
+/** The financial year: when it starts, and closing it once every month is closed. */
+function YearEnd() {
+  const { t } = useT(); const { can } = useAuth(); const withStepUp = useStepUp(); const { busy, problem, run } = useAction();
+  const [data, setData] = useState<{ startMonth: number; items: FyRow[] } | null>(null); const [pv, setPv] = useState<FyPreview | null>(null); const [made, setMade] = useState(false);
+  const load = () => api<{ startMonth: number; items: FyRow[] }>('GET', '/v1/finance/year-end').then(setData);
+  useEffect(() => { void load(); }, []);
+  if (!data) return <Spinner />;
+  const monthName = (m: number) => new Date(Date.UTC(2000, m - 1, 1)).toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
+  return (
+    <div className="card inner stack">
+      <h3>{t('fin.fy')}</h3><p className="muted small">{t('fin.fyHelp')}</p>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      {made && <p className="okbox" role="status">{t('fin.fyMade')}</p>}
+      {can('finance.setup') && <label>{t('fin.fyStart')}<select value={data.startMonth} onChange={async (e) => { if (await run(() => withStepUp(() => api('PUT', '/v1/finance/settings', { fiscalYearStartMonth: Number(e.target.value) })))) void load(); }}>{Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{monthName(m)}</option>)}</select></label>}
+      <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.fy')}</th><th scope="col">{t('fin.monthsClosed')}</th><th scope="col">{t('fin.status')}</th><th scope="col"><span className="sr-only">{t('fin.actions')}</span></th></tr></thead>
+        <tbody>{data.items.map((y) => <tr key={y.end}><th scope="row" dir="ltr">{y.start} → {y.end}</th><td>{y.monthsClosed} / {y.months}</td><td><Badge tone={y.status === 'CLOSED' ? 'clean' : y.status === 'PENDING' ? 'warn' : 'neutral'}>{t(`fin.fys.${y.status}` as never)}</Badge></td>
+          <td>{can('finance.period') && y.status === 'OPEN' && !y.current && <button disabled={busy} onClick={async () => { setMade(false); const r = await run(() => api<FyPreview>('GET', `/v1/finance/year-end/preview?end=${y.end}`)); if (r) setPv(r); }}>{t('fin.closeYear')}</button>}</td></tr>)}</tbody></table></div>
+      {pv && (
+        <Sheet title={`${t('fin.closeYear')}: ${pv.start} → ${pv.end}`} onClose={() => setPv(null)}>
+          {pv.blockers.length > 0 && <ul>{pv.blockers.map((b) => <li key={b.code} className="warnbox">{b.message}</li>)}</ul>}
+          <p>{t('fin.fyResult')}: <strong dir="ltr">{fmt(pv.result)}</strong></p>
+          <ul>{pv.byBranch.map((b) => <li key={b.branch}>{b.branch}: <span dir="ltr">{fmt(b.result)}</span></li>)}</ul>
+          <p className="muted small">{t('fin.fyWhat')}</p>
+          <ErrorLine code={problem?.code} detail={problem?.detail} />
+          <div className="actions"><button onClick={() => setPv(null)}>{t('common.cancel')}</button><button className="primary" disabled={busy || !pv.canClose} onClick={async () => { if (await run(() => withStepUp(() => api('POST', '/v1/finance/year-end/close', { end: pv.end })))) { setPv(null); setMade(true); void load(); } }}>{t('fin.prepareClose')}</button></div>
+        </Sheet>)}
+    </div>
   );
 }

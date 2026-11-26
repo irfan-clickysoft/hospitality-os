@@ -25,14 +25,14 @@ const Line = z.object({ account: z.string().regex(/^[0-9]{4,8}$/, 'Use the accou
 const VoucherIn = z.object({ type: z.literal('JV'), date, postingDate: date.optional(), narration: z.string().trim().min(3).max(500), lines: z.array(Line).min(2).max(100) }).strict();
 const Reverse = z.object({ date, reason: z.string().trim().min(3).max(300) }).strict();
 const Reject = z.object({ reason: z.string().trim().min(3).max(300) }).strict();
-const Settings = z.object({ selfApproveLimit: amount }).strict();
+const Settings = z.object({ selfApproveLimit: amount.optional(), fiscalYearStartMonth: z.number().int().min(1).max(12).optional() }).strict().refine((v) => v.selfApproveLimit !== undefined || v.fiscalYearStartMonth !== undefined, 'Nothing to save');
 const Period = z.object({ reason: z.string().trim().min(3).max(300).optional() }).strict();
 const ListQ = z.object({ status: z.enum(['DRAFT', 'SUBMITTED', 'POSTED', 'REJECTED', 'CANCELLED']).optional(), from: date.optional(), to: date.optional() });
 const TbQ = z.object({ from: date, to: date, branchId: z.string().uuid().optional() });
 const GlQ = z.object({ account: z.string().regex(/^[0-9]{4,8}$/), from: date, to: date, branchId: z.string().uuid().optional() });
 
 /** Starter chart of accounts for a hotel company. The branch is a dimension on each line, so one cash account serves every branch. The finance controller approves the final list. */
-export type VType = 'JV' | 'CRV' | 'BRV' | 'CPV' | 'BPV' | 'CTV' | 'IBEV' | 'IBTV' | 'SBV' | 'SPV';
+export type VType = 'JV' | 'CRV' | 'BRV' | 'CPV' | 'BPV' | 'CTV' | 'IBEV' | 'IBTV' | 'SBV' | 'SPV' | 'YEC';
 export type CreateArgs = Omit<z.infer<typeof VoucherIn>, 'type'> & { type: VType };
 
 export const STARTER_COA: ReadonlyArray<[string, string, string, boolean, string | null, string | null]> = [
@@ -98,7 +98,11 @@ export class FinanceService {
     await trx.updateTable('voucher').set({ status: 'POSTED', approved_by: by, approved_at: now, posted_by: by, posted_at: now } as never).where('id', '=', v.id).execute();
     return v.id;
   }
-  private async assertOpen(trx: Trx, postingDate: string) {
+  /** Posting is refused into a closed month and into a closed financial year. The year-end closing voucher itself is exempt (it lands on the last day of the year it closes). */
+  private async assertOpen(trx: Trx, postingDate: string, type?: string) {
+    if (type === 'YEC') return;
+    const y = await trx.selectFrom('fiscal_year_close').select('fy_end').where('status', '=', 'CLOSED').where('fy_start', '<=', postingDate).where('fy_end', '>=', postingDate).executeTakeFirst();
+    if (y) throw err(409, 'YEAR_CLOSED', `The financial year ending ${String(y.fy_end).slice(0, 10)} is closed. Reverse its closing voucher to reopen it.`);
     const p = await trx.selectFrom('gl_period').select('status').where('month', '=', `${postingDate.slice(0, 7)}-01`).executeTakeFirst();
     if (p?.status === 'CLOSED') throw err(409, 'PERIOD_CLOSED', `The month ${postingDate.slice(0, 7)} is closed. A finance manager must reopen it first.`);
   }
@@ -144,12 +148,17 @@ export class FinanceService {
       return { loaded: STARTER_COA.length };
     });
   }
-  async getSettings() { return this.tdb.tx(async (trx) => { const s = await this.settings(trx); return { baseCurrency: s.base_currency, selfApproveLimit: dec(s.self_approve_limit_minor, s.base_currency) }; }); }
+  async getSettings() { return this.tdb.tx(async (trx) => { const s = await this.settings(trx); return { baseCurrency: s.base_currency, fiscalYearStartMonth: s.fiscal_year_start_month, selfApproveLimit: dec(s.self_approve_limit_minor, s.base_currency) }; }); }
   async saveSettings(userId: string, i: z.infer<typeof Settings>) {
     return this.tdb.tx(async (trx) => {
-      const s = await this.settings(trx); const v = minor(i.selfApproveLimit, s.base_currency);
-      await trx.updateTable('gl_settings').set({ self_approve_limit_minor: v.toString(), updated_by: userId, updated_at: new Date() } as never).execute();
-      await this.audit.record(trx, { action: 'finance.settings', resourceType: 'gl_settings', resourceId: currentTenant().tenantId, before: { selfApproveLimit: dec(s.self_approve_limit_minor, s.base_currency) }, after: { selfApproveLimit: i.selfApproveLimit } });
+      const s = await this.settings(trx); const set: Record<string, unknown> = { updated_by: userId, updated_at: new Date() };
+      if (i.selfApproveLimit !== undefined) set.self_approve_limit_minor = minor(i.selfApproveLimit, s.base_currency).toString();
+      if (i.fiscalYearStartMonth !== undefined) {
+        if (i.fiscalYearStartMonth !== s.fiscal_year_start_month && (await trx.selectFrom('fiscal_year_close').select('fy_end').where('status', '=', 'CLOSED').executeTakeFirst())) throw err(409, 'YEAR_CLOSED', 'A financial year has already been closed, so the year start cannot change.');
+        set.fiscal_year_start_month = i.fiscalYearStartMonth;
+      }
+      await trx.updateTable('gl_settings').set(set as never).execute();
+      await this.audit.record(trx, { action: 'finance.settings', resourceType: 'gl_settings', resourceId: currentTenant().tenantId, before: { selfApproveLimit: dec(s.self_approve_limit_minor, s.base_currency), fiscalYearStartMonth: s.fiscal_year_start_month }, after: { selfApproveLimit: i.selfApproveLimit, fiscalYearStartMonth: i.fiscalYearStartMonth } });
       return { saved: true };
     });
   }
@@ -197,7 +206,7 @@ export class FinanceService {
   async create(userId: string, i: CreateArgs, source?: { module: string; eventId: string }) {
     return this.tdb.tx(async (trx) => {
       const s = await this.settings(trx); const cur = s.base_currency; const posting = i.postingDate ?? i.date;
-      await this.assertOpen(trx, posting);
+      await this.assertOpen(trx, posting, i.type);
       const rows = await this.lines(trx, cur, i.lines);
       const d = rows.reduce((t, r) => t + BigInt(r.debit_minor), 0n), c = rows.reduce((t, r) => t + BigInt(r.credit_minor), 0n);
       const v = await trx.insertInto('voucher').values({ tenant_id: currentTenant().tenantId, voucher_type: i.type, voucher_date: i.date, posting_date: posting, narration: i.narration, currency: cur, total_minor: d.toString(), created_by: userId, source_module: source?.module ?? null, source_event_id: source?.eventId ?? null } as never).returning('id').executeTakeFirstOrThrow();
@@ -214,7 +223,7 @@ export class FinanceService {
       const v = await this.load(trx, id);
       if (!['DRAFT', 'REJECTED'].includes(v.status)) throw err(409, 'VOUCHER_LOCKED', `A ${v.status.toLowerCase()} voucher cannot be edited`);
       if (v.created_by !== userId) throw err(403, 'FIN_NOT_YOURS', 'Only the person who prepared this voucher can edit it');
-      const posting = i.postingDate ?? i.date; await this.assertOpen(trx, posting);
+      const posting = i.postingDate ?? i.date; await this.assertOpen(trx, posting, v.voucher_type);
       const rows = await this.lines(trx, v.currency, i.lines);
       const d = await this.writeLines(trx, id, rows); const c = rows.reduce((t, r) => t + BigInt(r.credit_minor), 0n);
       await trx.updateTable('voucher').set({ voucher_date: i.date, posting_date: posting, narration: i.narration, total_minor: d.toString(), status: 'DRAFT', reject_reason: null } as never).where('id', '=', id).execute();
@@ -227,7 +236,7 @@ export class FinanceService {
     return this.tdb.tx(async (trx) => {
       const v = await this.load(trx, id);
       if (!['DRAFT', 'REJECTED'].includes(v.status)) throw err(409, 'VOUCHER_LOCKED', `A ${v.status.toLowerCase()} voucher cannot be submitted`);
-      await this.assertOpen(trx, v.posting_date);
+      await this.assertOpen(trx, v.posting_date, v.voucher_type);
       const sums = await sql<{ d: string; c: string }>`SELECT coalesce(sum(debit_minor),0)::text AS d, coalesce(sum(credit_minor),0)::text AS c FROM voucher_line WHERE voucher_id = ${id}`.execute(trx);
       const d = BigInt(sums.rows[0]!.d), c = BigInt(sums.rows[0]!.c);
       if (d !== c || d === 0n) throw err(409, 'NOT_BALANCED', `Debits ${dec(d, v.currency)} and credits ${dec(c, v.currency)} differ by ${dec(d > c ? d - c : c - d, v.currency)}`);
@@ -246,12 +255,16 @@ export class FinanceService {
       const s = await this.settings(trx);
       const ownerTitled = await sql<{ n: number }>`SELECT count(*)::int AS n FROM voucher_line l JOIN payment_account b ON b.tenant_id = l.tenant_id AND b.gl_account_id = l.account_id WHERE l.voucher_id = ${id} AND b.owner_type <> 'COMPANY'`.execute(trx);
       if (v.created_by === userId && (ownerTitled.rows[0]!.n > 0 || v.voucher_type === 'IBEV' || v.voucher_type === 'IBTV' || BigInt(v.total_minor) > BigInt(s.self_approve_limit_minor))) throw err(403, 'FINANCE_SELF_APPROVAL', 'You prepared this voucher, so someone else has to approve it');
-      await this.assertOpen(trx, v.posting_date);
+      await this.assertOpen(trx, v.posting_date, v.voucher_type);
       const lines = await trx.selectFrom('voucher_line').selectAll().where('voucher_id', '=', id).orderBy('line_no').execute();
       await trx.insertInto('gl_entry').values(lines.map((l) => ({ tenant_id: currentTenant().tenantId, voucher_id: id, line_id: l.id, account_id: l.account_id, property_id: l.property_id, counterparty_property_id: l.counterparty_property_id, supplier_id: l.supplier_id, posting_date: v.posting_date, debit_minor: l.debit_minor, credit_minor: l.credit_minor })) as never).execute();
       const now = new Date();
       await trx.updateTable('voucher').set({ status: 'POSTED', approved_by: userId, approved_at: now, posted_by: userId, posted_at: now } as never).where('id', '=', id).execute();
       await sql`UPDATE bank_suspense_item SET status = 'ALLOCATED' WHERE allocated_voucher_id = ${id}`.execute(trx);
+      if (v.voucher_type === 'YEC') {                         // closing the year, or reopening it by reversing the closing
+        if (v.reverses_voucher_id) await sql`UPDATE fiscal_year_close SET status = 'REOPENED' WHERE voucher_id = ${v.reverses_voucher_id}`.execute(trx);
+        else await sql`UPDATE fiscal_year_close SET status = 'CLOSED', closed_by = ${userId}, closed_at = now() WHERE voucher_id = ${id}`.execute(trx);
+      }
       if (v.reverses_voucher_id) {                           // undoing a supplier payment gives the bills back what was paid; undoing a bill voids it
         await sql`UPDATE supplier_bill b SET paid_minor = b.paid_minor - a.amount_minor FROM supplier_payment p JOIN supplier_payment_alloc a ON a.tenant_id = p.tenant_id AND a.payment_id = p.id WHERE p.voucher_id = ${v.reverses_voucher_id} AND b.tenant_id = a.tenant_id AND b.id = a.bill_id`.execute(trx);
         await sql`UPDATE supplier_bill SET reversed = true WHERE voucher_id = ${v.reverses_voucher_id}`.execute(trx);
@@ -290,7 +303,7 @@ export class FinanceService {
       if (v.voucher_type === 'SBV') { const b = await trx.selectFrom('supplier_bill').select(['id', 'paid_minor']).where('voucher_id', '=', id).executeTakeFirst(); const pend = b ? await sql<{ n: number }>`SELECT count(*)::int AS n FROM supplier_payment_alloc a JOIN supplier_payment p ON p.tenant_id = a.tenant_id AND p.id = a.payment_id JOIN voucher pv ON pv.tenant_id = p.tenant_id AND pv.id = p.voucher_id WHERE a.bill_id = ${b.id} AND pv.status IN ('DRAFT','SUBMITTED','REJECTED','POSTED') AND NOT EXISTS (SELECT 1 FROM voucher r WHERE r.reverses_voucher_id = pv.id AND r.status = 'POSTED')`.execute(trx) : null; if (b && (BigInt(b.paid_minor) > 0n || (pend?.rows[0]?.n ?? 0) > 0)) throw err(409, 'SUPPLIER_BILL_HAS_PAYMENTS', 'This bill has payments against it. Reverse those first.'); }
       const live = await trx.selectFrom('voucher').select('id').where('reverses_voucher_id', '=', id).where('status', 'in', ['DRAFT', 'SUBMITTED', 'POSTED']).executeTakeFirst();
       if (live) throw err(409, 'ALREADY_REVERSED', 'This voucher already has a reversal');
-      await this.assertOpen(trx, i.date);
+      await this.assertOpen(trx, i.date, v.voucher_type);
       const lines = await trx.selectFrom('voucher_line').selectAll().where('voucher_id', '=', id).orderBy('line_no').execute();
       const r = await trx.insertInto('voucher').values({ tenant_id: currentTenant().tenantId, voucher_type: v.voucher_type, voucher_date: i.date, posting_date: i.date, narration: `Reversal of ${v.voucher_no}: ${i.reason}`.slice(0, 500), currency: v.currency, total_minor: v.total_minor, reverses_voucher_id: id, created_by: userId } as never).returning('id').executeTakeFirstOrThrow();
       await this.writeLines(trx, r.id, lines.map((l) => ({ account_id: l.account_id, property_id: l.property_id, counterparty_property_id: l.counterparty_property_id, supplier_id: l.supplier_id, debit_minor: l.credit_minor, credit_minor: l.debit_minor, description: l.description, reference: l.reference })));
@@ -326,7 +339,11 @@ export class FinanceService {
       if (status === 'CLOSED') {
         const pending = await trx.selectFrom('voucher').select('id').where('status', '=', 'SUBMITTED').where('posting_date', '>=', `${m}-01`).where(sql<boolean>`posting_date < (${m + '-01'}::date + interval '1 month')`).limit(1).executeTakeFirst();
         if (pending) throw err(409, 'PENDING_VOUCHERS', 'Vouchers for this month are still waiting for approval');
-      } else if (!reason) throw err(400, 'VALIDATION_FAILED', 'Say why the month is being reopened');
+      } else {
+        if (!reason) throw err(400, 'VALIDATION_FAILED', 'Say why the month is being reopened');
+        const y = await trx.selectFrom('fiscal_year_close').select('fy_end').where('status', '=', 'CLOSED').where('fy_start', '<=', `${m}-01`).where('fy_end', '>=', `${m}-01`).executeTakeFirst();
+        if (y) throw err(409, 'YEAR_CLOSED', `This month is in the financial year ending ${String(y.fy_end).slice(0, 10)}, which is closed. Reverse its closing voucher first.`);
+      }
       await trx.insertInto('gl_period').values({ tenant_id: currentTenant().tenantId, month: `${m}-01`, status, changed_by: userId, reason: reason ?? null } as never).onConflict((oc) => oc.columns(['tenant_id', 'month']).doUpdateSet({ status, changed_by: userId, changed_at: new Date(), reason: reason ?? null } as never)).execute();
       await this.audit.record(trx, { action: status === 'CLOSED' ? 'finance.period.close' : 'finance.period.reopen', resourceType: 'gl_period', resourceId: m, after: { reason: reason ?? null } });
       return { month: m, status };
