@@ -795,3 +795,48 @@ function DisposeSheet({ asset, banks, onClose, onDone }: { asset: FAsset; banks:
     </Sheet>
   );
 }
+
+interface RTemplate { id: string; code: string; name: string; supplier: string; branch: string; frequency: string; dayOfMonth: number; startMonth: string; endMonth: string | null; total: string; active: boolean; lastPrepared?: string | null; lines: Array<{ account: string; amount: string; description?: string }>; billDate?: string; billNo?: string }
+
+/** Bills that come round again (rent, internet, software). Each period's bill is prepared as a draft for someone to check and a second person to approve. */
+export function FinRecurring() {
+  const { t } = useT(); const { property, can } = useAuth(); const { busy, problem, run } = useAction(); const branches = useBranches();
+  const [month, setMonth] = useState(property!.businessDate.slice(0, 7)); const [rows, setRows] = useState<RTemplate[] | null>(null); const [due, setDue] = useState<RTemplate[]>([]); const [msg, setMsg] = useState<string | null>(null); const [sups, setSups] = useState<Supp[]>([]); const [accts, setAccts] = useState<Account[]>([]); const [edit, setEdit] = useState<{ t: RTemplate; amount: string } | null>(null);
+  const [f, setF] = useState({ code: '', name: '', supplierId: '', branchId: property!.id, frequency: 'MONTHLY', dayOfMonth: '1', startMonth: property!.businessDate.slice(0, 7), narration: '', account: '', amount: '' });
+  const load = async () => { setRows((await api<{ items: RTemplate[] }>('GET', '/v1/finance/recurring')).items); setDue((await api<{ items: RTemplate[] }>('GET', `/v1/finance/recurring/due?month=${month}`)).items); };
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [month]);
+  useEffect(() => { void api<{ items: Supp[] }>('GET', '/v1/finance/suppliers').then((r) => setSups(r.items.filter((s) => s.status === 'ACTIVE'))); void api<{ items: Account[] }>('GET', '/v1/finance/accounts').then((r) => setAccts(r.items.filter((a) => !a.isGroup && a.active && a.type === 'EXPENSE'))); }, []);
+  if (!rows) return <Spinner />;
+  const prep = can('finance.prepare');
+  return (
+    <section className="stack">
+      <h2>{t('fin.recurring')}</h2><p className="muted">{t('fin.recurringHelp')}</p>
+      <ErrorLine code={problem?.code} detail={problem?.detail} />
+      {msg && <p className="okbox" role="status">{msg}</p>}
+      <div className="card inner stack"><div className="row between"><h3>{t('fin.dueIn')}</h3><input type="month" aria-label={t('fin.month')} value={month} onChange={(e) => { setMsg(null); setMonth(e.target.value); }} dir="ltr" /></div>
+        {due.length === 0 ? <p className="muted">{t('fin.nothingDue')}</p> : <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.code')}</th><th scope="col">{t('fin.accountName')}</th><th scope="col">{t('fin.branch')}</th><th scope="col">{t('fin.total')}</th><th scope="col"><span className="sr-only">{t('fin.actions')}</span></th></tr></thead>
+          <tbody>{due.map((d) => <tr key={d.id}><th scope="row" dir="ltr">{d.code}</th><td>{d.name} · {d.supplier}</td><td>{d.branch}</td><td dir="ltr">{fmt(d.total)}</td><td>{prep && <><button className="link" disabled={busy} onClick={async () => { setMsg(null); if (await run(() => api('POST', `/v1/finance/recurring/${d.id}/prepare`, { month }))) { setMsg(t('fin.prepared', { n: 1 })); void load(); } }}>{t('fin.prepareBill')}</button> <button className="link" onClick={() => setEdit({ t: d, amount: d.lines.length === 1 ? d.lines[0]!.amount : '' })}>{t('fin.otherAmount')}</button></>}</td></tr>)}</tbody></table></div>}
+        {prep && due.length > 0 && <div className="actions"><button className="primary" disabled={busy} onClick={async () => { setMsg(null); const r = await run(() => api<{ prepared: string[]; skipped: Array<{ code: string; reason: string }> }>('POST', '/v1/finance/recurring/prepare-due', { month })); if (r) { setMsg(`${t('fin.prepared', { n: r.prepared.length })}${r.skipped.length ? ` ${r.skipped.map((x) => `${x.code}: ${x.reason}`).join(' · ')}` : ''}`); void load(); } }}>{t('fin.prepareAll')}</button></div>}
+      </div>
+      <div className="tablewrap"><table className="nighttable small"><thead><tr><th scope="col">{t('fin.code')}</th><th scope="col">{t('fin.accountName')}</th><th scope="col">{t('fin.branch')}</th><th scope="col">{t('fin.howOften')}</th><th scope="col">{t('fin.total')}</th><th scope="col">{t('fin.lastBill')}</th><th scope="col"><span className="sr-only">{t('fin.actions')}</span></th></tr></thead>
+        <tbody>{rows.length === 0 && <tr><td colSpan={7} className="muted">{t('fin.none')}</td></tr>}{rows.map((x) => <tr key={x.id}><th scope="row" dir="ltr">{x.code}</th><td>{x.name} · {x.supplier}</td><td>{x.branch}</td><td>{t(`fin.fq.${x.frequency}` as never)} · {x.dayOfMonth}</td><td dir="ltr">{fmt(x.total)}</td><td dir="ltr">{x.lastPrepared ?? '—'}</td><td>{prep && <button className="link" disabled={busy} onClick={async () => { if (await run(() => api('PUT', `/v1/finance/recurring/${x.id}`, { active: !x.active }))) void load(); }}>{x.active ? t('fin.switchOff') : t('fin.switchOn')}</button>}</td></tr>)}</tbody></table></div>
+      {prep && (
+        <form className="card inner stack" onSubmit={async (e) => { e.preventDefault(); if (await run(() => api('POST', '/v1/finance/recurring', { code: f.code, name: f.name, supplierId: f.supplierId, branchId: f.branchId, frequency: f.frequency, dayOfMonth: Number(f.dayOfMonth), startMonth: f.startMonth, narration: f.narration, lines: [{ account: f.account, amount: f.amount }] }))) { setF({ ...f, code: '', name: '', narration: '', amount: '' }); void load(); } }}>
+          <h3>{t('fin.addRecurring')}</h3>
+          <div className="grid2"><label>{t('fin.code')}<input value={f.code} onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase() })} maxLength={24} dir="ltr" /></label><label>{t('fin.accountName')}<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} maxLength={120} /></label></div>
+          <div className="grid2"><label>{t('fin.suppliers')}<select value={f.supplierId} onChange={(e) => setF({ ...f, supplierId: e.target.value })}><option value="">—</option>{sups.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>{t('fin.branch')}<select value={f.branchId} onChange={(e) => setF({ ...f, branchId: e.target.value })}>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label></div>
+          <div className="grid2"><label>{t('fin.howOften')}<select value={f.frequency} onChange={(e) => setF({ ...f, frequency: e.target.value })}>{['MONTHLY', 'QUARTERLY', 'YEARLY'].map((x) => <option key={x} value={x}>{t(`fin.fq.${x}` as never)}</option>)}</select></label><label>{t('fin.dayOfMonth')}<input inputMode="numeric" value={f.dayOfMonth} onChange={(e) => setF({ ...f, dayOfMonth: e.target.value.replace(/\D/g, '').slice(0, 2) })} dir="ltr" /></label></div>
+          <div className="grid2"><label>{t('fin.startsIn')}<input type="month" value={f.startMonth} onChange={(e) => setF({ ...f, startMonth: e.target.value })} dir="ltr" /></label><label>{t('fin.narration')}<input value={f.narration} onChange={(e) => setF({ ...f, narration: e.target.value })} maxLength={300} /></label></div>
+          <div className="grid2"><label>{t('fin.expenseFor')}<select value={f.account} onChange={(e) => setF({ ...f, account: e.target.value })}><option value="">—</option>{accts.map((a) => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}</select></label><label>{t('fin.amount')}<input inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: clean(e.target.value) })} dir="ltr" /></label></div>
+          <div className="actions"><button className="primary" type="submit" disabled={busy || f.code.length < 2 || f.name.trim().length < 2 || !f.supplierId || !f.account || !f.amount || f.narration.trim().length < 3}>{t('fin.addRecurring')}</button></div>
+        </form>)}
+      {edit && (
+        <Sheet title={`${edit.t.code} · ${month}`} onClose={() => setEdit(null)}>
+          <p className="muted small">{t('fin.otherAmountHelp')}</p>
+          {edit.t.lines.length === 1 ? <label>{t('fin.amount')}<input inputMode="decimal" value={edit.amount} onChange={(e) => setEdit({ ...edit, amount: clean(e.target.value) })} dir="ltr" /></label> : <p className="warnbox">{t('fin.oneLineOnly')}</p>}
+          <ErrorLine code={problem?.code} detail={problem?.detail} />
+          <div className="actions"><button onClick={() => setEdit(null)}>{t('common.cancel')}</button><button className="primary" disabled={busy || edit.t.lines.length !== 1 || !edit.amount} onClick={async () => { if (await run(() => api('POST', `/v1/finance/recurring/${edit.t.id}/prepare`, { month, lines: [{ account: edit.t.lines[0]!.account, amount: edit.amount }] }))) { setEdit(null); setMsg(t('fin.prepared', { n: 1 })); void load(); } }}>{t('fin.prepareBill')}</button></div>
+        </Sheet>)}
+    </section>
+  );
+}
