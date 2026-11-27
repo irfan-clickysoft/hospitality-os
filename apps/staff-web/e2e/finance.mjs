@@ -65,6 +65,9 @@ await page.getByRole('heading', { name: 'Financial year' }).waitFor({ timeout: 1
 await page.evaluate(() => { window.location.hash = '/finance?tab=assets'; });
 await page.getByRole('heading', { name: 'Fixed assets' }).waitFor({ timeout: 15000 }); check('the Fixed assets tab opens', true);
 check('the register agrees with the books', await page.getByText('The register and the books agree.').first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false));
+await page.evaluate(() => { window.location.hash = '/finance?tab=recurring'; });
+await page.getByRole('heading', { name: 'Recurring bills' }).waitFor({ timeout: 15000 }); check('the Recurring bills tab opens', true);
+check('it says nothing is due', await page.getByText('Nothing is due for this month.').first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false));
 await page.evaluate(() => { window.location.hash = '/finance?tab=interbranch'; });
 await page.getByRole('heading', { name: 'Inter-branch' }).waitFor({ timeout: 15000 }); check('the Inter-branch tab opens', true);
 check('it says there is nothing yet', await page.getByText('No inter-branch entries yet.').first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false));
